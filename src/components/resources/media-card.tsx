@@ -2,28 +2,30 @@ import { useState } from 'react'
 import { ChevronDown, Clapperboard } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import {
-  MEDIA_QUALITY_OPTIONS,
-  type MediaQuality,
-  type MockMediaItem,
-} from '@/data/mock-media'
+import type { MovieSearchItem } from '@/types/resources'
 
 type MediaCardProps = {
-  item: MockMediaItem
+  item: MovieSearchItem
 }
 
+const MEDIA_QUALITY_OPTIONS = ['4K UHD', '1080P', '4K Restored'] as const
+
+type MediaQuality = (typeof MEDIA_QUALITY_OPTIONS)[number]
+
 export function MediaCard({ item }: MediaCardProps) {
-  const [selectedQuality, setSelectedQuality] = useState<MediaQuality>(
-    item.defaultQuality,
-  )
+  const [selectedQuality, setSelectedQuality] = useState<MediaQuality>('1080P')
   const [hasImageError, setHasImageError] = useState(false)
+  const posterSrc = item.poster?.trim()
+  const originalTitle = item.original_title?.trim()
+  const overview = item.overview?.trim()
+  const showOriginalTitle = Boolean(originalTitle && originalTitle !== item.title)
 
   return (
     <article className="group space-y-3">
       <div className="relative aspect-[2/3] overflow-hidden rounded-[22px] bg-slate-200">
-        {!hasImageError ? (
+        {posterSrc && !hasImageError ? (
           <img
-            src={item.poster}
+            src={posterSrc}
             alt={item.title}
             loading="lazy"
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.015]"
@@ -41,13 +43,25 @@ export function MediaCard({ item }: MediaCardProps) {
 
       <div className="space-y-3">
         <div className="flex items-start justify-between gap-3">
-          <h3 className="truncate text-[15px] font-semibold text-slate-900">
-            {item.title}
-          </h3>
+          <div className="min-w-0">
+            <h3 className="truncate text-[15px] font-semibold text-slate-900">
+              {item.title}
+            </h3>
+            {showOriginalTitle ? (
+              <p className="truncate text-xs text-slate-400">{originalTitle}</p>
+            ) : null}
+          </div>
           <span className="shrink-0 pt-0.5 text-xs font-medium text-slate-400">
-            {item.year}
+            {item.year ?? '待定'}
           </span>
         </div>
+
+        <p
+          className="overflow-hidden text-sm leading-6 text-slate-500 [display:-webkit-box] [-webkit-box-orient:vertical]"
+          style={{ WebkitLineClamp: 3 }}
+        >
+          {overview || '暂无简介'}
+        </p>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative min-w-0 flex-1">
@@ -71,7 +85,8 @@ export function MediaCard({ item }: MediaCardProps) {
 
           <Button
             type="button"
-            onClick={() => console.log('add-to-library', item.id, selectedQuality)}
+            disabled
+            title="暂未实现"
             className="h-9 w-full rounded-xl bg-slate-900 px-4 text-xs font-semibold text-white shadow-none hover:bg-slate-800 sm:w-auto"
           >
             + 入库
