@@ -2,15 +2,24 @@ import { useState } from 'react'
 import { ChevronDown, Clapperboard } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import type { MovieSearchItem } from '@/types/resources'
+import type {
+  SearchableResourceItem,
+  SeriesSearchItem,
+} from '@/types/resources'
 
 type MediaCardProps = {
-  item: MovieSearchItem
+  item: SearchableResourceItem
 }
 
 const MEDIA_QUALITY_OPTIONS = ['4K UHD', '1080P', '4K Restored'] as const
 
 type MediaQuality = (typeof MEDIA_QUALITY_OPTIONS)[number]
+
+function isSeriesSearchItem(
+  item: SearchableResourceItem,
+): item is SeriesSearchItem {
+  return 'tvdb_id' in item
+}
 
 export function MediaCard({ item }: MediaCardProps) {
   const [selectedQuality, setSelectedQuality] = useState<MediaQuality>('1080P')
@@ -19,6 +28,9 @@ export function MediaCard({ item }: MediaCardProps) {
   const originalTitle = item.original_title?.trim()
   const overview = item.overview?.trim()
   const showOriginalTitle = Boolean(originalTitle && originalTitle !== item.title)
+  const network = isSeriesSearchItem(item) ? item.network?.trim() : null
+  const seriesType = isSeriesSearchItem(item) ? item.series_type?.trim() : null
+  const metaLabel = network || seriesType
 
   return (
     <article className="group space-y-3">
@@ -49,6 +61,11 @@ export function MediaCard({ item }: MediaCardProps) {
             </h3>
             {showOriginalTitle ? (
               <p className="truncate text-xs text-slate-400">{originalTitle}</p>
+            ) : null}
+            {metaLabel ? (
+              <p className="mt-1 truncate text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">
+                {metaLabel}
+              </p>
             ) : null}
           </div>
           <span className="shrink-0 pt-0.5 text-xs font-medium text-slate-400">

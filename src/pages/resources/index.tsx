@@ -10,32 +10,77 @@ import { SearchBar } from '@/components/resources/search-bar'
 import {
   isRequestCanceledError,
   searchMovies,
+  searchSeries,
 } from '@/lib/api/resources'
-import type { MovieSearchItem } from '@/types/resources'
+import type { SearchableResourceItem } from '@/types/resources'
 
-type MovieSearchStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
+type SearchableCategory = Extract<ResourceCategoryValue, 'movie' | 'tv'>
 
-type MovieSearchState = {
-  status: MovieSearchStatus
-  items: MovieSearchItem[]
+type ResourceSearchStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
+
+type ResourceSearchState = {
+  status: ResourceSearchStatus
+  items: SearchableResourceItem[]
   errorMessage: string | null
 }
 
-const unsupportedCategoryCopy: Record<
-  Exclude<ResourceCategoryValue, 'movie'>,
-  { title: string; description: string }
+const searchableCategoryCopy: Record<
+  SearchableCategory,
+  {
+    placeholder: string
+    idleTitle: string
+    idleDescription: string
+    loadingTitle: string
+    loadingDescription: string
+    emptyTitle: string
+    emptyDescription: string
+    errorMessage: string
+  }
 > = {
-  tv: {
-    title: '电视剧搜索暂未接入',
-    description: '这一轮只接入电影真实搜索，电视剧分类稍后再接后端接口。',
+  movie: {
+    placeholder: '搜索电影名称…',
+    idleTitle: '输入电影名称开始搜索',
+    idleDescription: '当前分类会调用电影搜索接口。',
+    loadingTitle: '正在搜索电影…',
+    loadingDescription: '已连接后端接口，正在获取最新搜索结果。',
+    emptyTitle: '没有搜索结果',
+    emptyDescription: '换个电影名称试试，或检查关键词是否输入正确。',
+    errorMessage: '电影搜索失败，请稍后重试。',
   },
-  anime: {
-    title: '动漫搜索暂未接入',
-    description: '这一轮只接入电影真实搜索，动漫分类稍后再接后端接口。',
+  tv: {
+    placeholder: '搜索电视剧名称…',
+    idleTitle: '输入电视剧名称开始搜索',
+    idleDescription: '当前分类会调用电视剧搜索接口。',
+    loadingTitle: '正在搜索电视剧…',
+    loadingDescription: '已连接后端接口，正在获取最新搜索结果。',
+    emptyTitle: '没有搜索结果',
+    emptyDescription: '换个电视剧名称试试，或检查关键词是否输入正确。',
+    errorMessage: '电视剧搜索失败，请稍后重试。',
   },
 }
 
-function createInitialSearchState(): MovieSearchState {
+const unsupportedCategoryCopy = {
+  anime: {
+    title: '动漫搜索暂未接入',
+    description: '当前仅保留动漫分类占位提示，本轮不会发起真实搜索请求。',
+  },
+} satisfies Record<'anime', { title: string; description: string }>
+
+const categorySearchHandlers: Record<
+  SearchableCategory,
+  (term: string, signal?: AbortSignal) => Promise<SearchableResourceItem[]>
+> = {
+  movie: async (term, signal) => searchMovies(term, signal),
+  tv: async (term, signal) => searchSeries(term, signal),
+}
+
+function isSearchableCategory(
+  category: ResourceCategoryValue,
+): category is SearchableCategory {
+  return category === 'movie' || category === 'tv'
+}
+
+function createInitialSearchState(): ResourceSearchState {
   return {
     status: 'idle',
     items: [],
@@ -61,7 +106,7 @@ function EmptyState({
 export function ResourceSearchPage() {
   const [category, setCategory] = useState<ResourceCategoryValue>('movie')
   const [searchText, setSearchText] = useState('')
-  const [movieSearchState, setMovieSearchState] = useState<MovieSearchState>(
+  const [searchState, setSearchState] = useState<ResourceSearchState>(
     createInitialSearchState,
   )
   const latestRequestIdRef = useRef(0)
@@ -74,31 +119,28 @@ export function ResourceSearchPage() {
   }, [])
 
   useEffect(() => {
-    if (category === 'movie') {
-      return
-    }
-
     latestRequestIdRef.current += 1
     activeRequestControllerRef.current?.abort()
     activeRequestControllerRef.current = null
-    setMovieSearchState(createInitialSearchState())
+    setSearchState(createInitialSearchState())
   }, [category])
 
-  const isMovieCategory = category === 'movie'
-  const isSearching = isMovieCategory && movieSearchState.status === 'loading'
-  const isSearchSubmitDisabled = !isMovieCategory || isSearching
-  const activeSearchPlaceholder =
-    category === 'movie'
-      ? '搜索电影名称…'
-      : category === 'tv'
-        ? '电视剧搜索暂未接入'
-        : '动漫搜索暂未接入'
+  const isCategorySearchable = isSearchableCategory(category)
+  const activeCategoryCopy = isCategorySearchable
+    ? searchableCategoryCopy[category]
+    : null
+  const isSearching = isCategorySearchable && searchState.status === 'loading'
+  const isSearchSubmitDisabled = !isCategorySearchable || isSearching
+  const activeSearchPlaceholder = activeCategoryCopy?.placeholder ?? '动漫搜索暂未接入'
 
   function handleSearchSubmit() {
-    if (category !== 'movie' || movieSearchState.status === 'loading') {
+    if (!isSearchableCategory(category) || searchState.status === 'loading') {
       return
     }
 
+    const activeCategory = category
+    const activeSearchHandler = categorySearchHandlers[activeCategory]
+    const activeCopy = searchableCategoryCopy[activeCategory]
     const keyword = searchText.trim()
     latestRequestIdRef.current += 1
     const requestId = latestRequestIdRef.current
@@ -107,28 +149,26 @@ export function ResourceSearchPage() {
     activeRequestControllerRef.current = null
 
     if (!keyword) {
-      setMovieSearchState(createInitialSearchState())
+      setSearchState(createInitialSearchState())
       return
     }
 
     const controller = new AbortController()
     activeRequestControllerRef.current = controller
 
-    setMovieSearchState({
+    setSearchState({
       status: 'loading',
       items: [],
       errorMessage: null,
     })
 
-    void searchMovies(keyword, controller.signal)
-      .then((response) => {
+    void activeSearchHandler(keyword, controller.signal)
+      .then((items) => {
         if (latestRequestIdRef.current !== requestId) {
           return
         }
 
-        const items = response.data.data.items
-
-        setMovieSearchState({
+        setSearchState({
           status: items.length > 0 ? 'success' : 'empty',
           items,
           errorMessage: null,
@@ -143,12 +183,12 @@ export function ResourceSearchPage() {
           return
         }
 
-        console.error('movie search failed', error)
+        console.error(`${activeCategory} search failed`, error)
 
-        setMovieSearchState({
+        setSearchState({
           status: 'error',
           items: [],
-          errorMessage: '电影搜索失败，请稍后重试。',
+          errorMessage: activeCopy.errorMessage,
         })
       })
       .finally(() => {
@@ -158,13 +198,22 @@ export function ResourceSearchPage() {
       })
   }
 
-  function renderMovieContent() {
-    switch (movieSearchState.status) {
+  function renderSearchContent() {
+    if (!activeCategoryCopy) {
+      return (
+        <EmptyState
+          title={unsupportedCategoryCopy.anime.title}
+          description={unsupportedCategoryCopy.anime.description}
+        />
+      )
+    }
+
+    switch (searchState.status) {
       case 'loading':
         return (
           <EmptyState
-            title="正在搜索电影…"
-            description="已连接后端接口，正在获取最新搜索结果。"
+            title={activeCategoryCopy.loadingTitle}
+            description={activeCategoryCopy.loadingDescription}
           />
         )
 
@@ -172,22 +221,22 @@ export function ResourceSearchPage() {
         return (
           <EmptyState
             title="搜索失败"
-            description={movieSearchState.errorMessage ?? '请稍后重试。'}
+            description={searchState.errorMessage ?? activeCategoryCopy.errorMessage}
           />
         )
 
       case 'empty':
         return (
           <EmptyState
-            title="没有搜索结果"
-            description="换个电影名称试试，或检查关键词是否输入正确。"
+            title={activeCategoryCopy.emptyTitle}
+            description={activeCategoryCopy.emptyDescription}
           />
         )
 
       case 'success':
         return (
           <div className="mx-auto grid max-w-7xl grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {movieSearchState.items.map((item) => (
+            {searchState.items.map((item) => (
               <MediaCard key={item.id} item={item} />
             ))}
           </div>
@@ -197,8 +246,8 @@ export function ResourceSearchPage() {
       default:
         return (
           <EmptyState
-            title="输入电影名称开始搜索"
-            description="当前仅电影分类已接入后端真实搜索接口。"
+            title={activeCategoryCopy.idleTitle}
+            description={activeCategoryCopy.idleDescription}
           />
         )
     }
@@ -207,7 +256,7 @@ export function ResourceSearchPage() {
   return (
     <PageContainer
       title="资源搜索"
-      description="电影分类支持按回车或点击搜索按钮发起真实搜索，电视剧与动漫分类暂时保留占位提示。"
+      description="电影与电视剧分类支持按回车或点击搜索按钮发起真实搜索，动漫分类暂时保留占位提示。"
     >
       <div className="space-y-10">
         <div className="flex flex-col items-center gap-6">
@@ -222,14 +271,7 @@ export function ResourceSearchPage() {
           <CategorySwitch value={category} onChange={setCategory} />
         </div>
 
-        {isMovieCategory ? (
-          renderMovieContent()
-        ) : (
-          <EmptyState
-            title={unsupportedCategoryCopy[category].title}
-            description={unsupportedCategoryCopy[category].description}
-          />
-        )}
+        {renderSearchContent()}
       </div>
     </PageContainer>
   )
