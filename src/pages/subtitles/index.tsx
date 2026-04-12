@@ -16,10 +16,15 @@ import {
   searchMovies,
   searchSeries,
 } from '@/lib/api/resources'
+import { uploadSubtitleByAssociation } from '@/lib/api/subtitles'
 import { cn } from '@/lib/utils'
 import type { MovieSearchItem, SeriesSearchItem } from '@/types/resources'
+import type {
+  SubtitleUploadResponse,
+  SubtitleUploadStatus,
+} from '@/types/subtitles'
 
-type ProcessStatus = 'mounted' | 'matching' | 'failed'
+type ProcessStatus = 'mounted' | 'uploaded' | 'matching' | 'failed'
 type AssociationStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
 
 type RecentProcessRecord = {
@@ -48,7 +53,14 @@ type SubtitleAssociationItem = {
   subtitle: string
 }
 
+type LastUploadResult = {
+  fileName: string
+  projectTitle: string
+  response: SubtitleUploadResponse
+}
+
 const demoToastMessage = '演示模式：当前仅展示前端搜索与选择交互'
+const supportedSubtitleUploadExtensions = ['srt', 'ass', 'ssa', 'sub', 'zip']
 
 const recentProcesses: RecentProcessRecord[] = [
   {
@@ -127,6 +139,11 @@ const processStatusMeta: Record<
     badgeClassName: 'bg-emerald-50 text-emerald-700',
     dotClassName: 'bg-emerald-500',
   },
+  uploaded: {
+    label: '已上传',
+    badgeClassName: 'bg-emerald-50 text-emerald-700',
+    dotClassName: 'bg-emerald-500',
+  },
   matching: {
     label: '匹配中',
     badgeClassName: 'bg-amber-50 text-amber-700',
@@ -157,6 +174,123 @@ function formatFileSize(size: number) {
   }
 
   return `${size} B`
+}
+
+function getFileExtension(fileName: string) {
+  const segments = fileName.trim().toLowerCase().split('.')
+
+  if (segments.length < 2) {
+    return ''
+  }
+
+  return segments[segments.length - 1] ?? ''
+}
+
+function isSupportedSubtitleUploadFile(file: File) {
+  return supportedSubtitleUploadExtensions.includes(getFileExtension(file.name))
+}
+
+function inferSubtitleLanguageLabel(fileName: string) {
+  const normalizedName = fileName.toLowerCase()
+
+  if (normalizedName.includes('.chs') || normalizedName.includes('.sc')) {
+    return '简体中文'
+  }
+
+  if (normalizedName.includes('.cht') || normalizedName.includes('.tc')) {
+    return '繁体中文'
+  }
+
+  if (normalizedName.includes('.zh') && normalizedName.includes('.en')) {
+    return '双语'
+  }
+
+  if (normalizedName.includes('.zh')) {
+    return '中文字幕'
+  }
+
+  if (normalizedName.includes('.en')) {
+    return '英语'
+  }
+
+  return '待识别'
+}
+
+function getAssociationMediaTypeLabel(type: SubtitleAssociationItem['mediaType']) {
+  return type === 'movie' ? '电影' : '电视剧'
+}
+
+function getAssociationLibraryTitle(item: SubtitleAssociationItem) {
+  const originalTitle = item.originalTitle?.trim()
+
+  if (originalTitle) {
+    return originalTitle
+  }
+
+  const title = item.title.trim()
+
+  return title || null
+}
+
+function getAssociationLibraryYear(item: SubtitleAssociationItem) {
+  if (typeof item.year !== 'number' || !Number.isFinite(item.year)) {
+    return null
+  }
+
+  return item.year
+}
+
+function getAssociationProjectLabel(item: SubtitleAssociationItem) {
+  const year = getAssociationLibraryYear(item)
+
+  if (year) {
+    return `${item.title} (${year})`
+  }
+
+  return item.title
+}
+
+function getCurrentLogTimestamp() {
+  return new Intl.DateTimeFormat('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(new Date())
+}
+
+function buildUploadSuccessLogs(
+  fileName: string,
+  item: SubtitleAssociationItem,
+  response: SubtitleUploadResponse,
+): SystemLogRecord[] {
+  const timestamp = getCurrentLogTimestamp()
+
+  return [
+    {
+      timestamp,
+      message: `SUCCESS: Uploaded ${fileName}`,
+      tone: 'success',
+    },
+    {
+      timestamp,
+      message: `Target: ${response.target_path}`,
+      tone: 'info',
+    },
+    {
+      timestamp,
+      message: `Linked to ${getAssociationMediaTypeLabel(item.mediaType)} · ${getAssociationProjectLabel(item)}`,
+      tone: 'muted',
+    },
+  ]
+}
+
+function buildUploadFailureLog(message: string): SystemLogRecord {
+  return {
+    timestamp: getCurrentLogTimestamp(),
+    message: `ERROR: ${message}`,
+    tone: 'warning',
+  }
 }
 
 function buildAssociationSubtitle({
@@ -547,7 +681,7 @@ function RecentSubtitleTable({
         <div className="space-y-0.5">
           <h3 className="text-sm font-semibold text-slate-950">最近处理</h3>
           <p className="text-xs text-slate-400">
-            静态预览最近挂载、匹配与失败记录。
+            展示最近处理结果与本地上传反馈。
           </p>
         </div>
 
@@ -624,12 +758,66 @@ function RecentSubtitleTable({
   )
 }
 
+type UploadResultSummaryProps = {
+  uploadStatus: SubtitleUploadStatus
+  uploadErrorMessage: string | null
+  lastUploadResult: LastUploadResult | null
+}
+
+function UploadResultSummary({
+  uploadStatus,
+  uploadErrorMessage,
+  lastUploadResult,
+}: UploadResultSummaryProps) {
+  if (uploadStatus === 'error' && uploadErrorMessage) {
+    return (
+      <div className="rounded-[18px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        {uploadErrorMessage}
+      </div>
+    )
+  }
+
+  if (uploadStatus === 'success' && lastUploadResult) {
+    const { fileName, projectTitle, response } = lastUploadResult
+
+    return (
+      <div className="rounded-[18px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+        <p className="font-medium">
+          已上传：{fileName} → {projectTitle}
+        </p>
+        <p className="mt-1 break-all text-xs text-emerald-700/90">
+          目标目录：{response.target_path}
+        </p>
+        <p className="mt-1 text-xs text-emerald-700/90">
+          已保存 {response.saved_files.length} 个文件
+          {response.skipped_files.length > 0
+            ? `，跳过 ${response.skipped_files.length} 个`
+            : ''}
+        </p>
+      </div>
+    )
+  }
+
+  return null
+}
+
 export function SubtitleManagePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const associationRequestControllerRef = useRef<AbortController | null>(null)
   const associationLatestRequestIdRef = useRef(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [uploadStatus, setUploadStatus] =
+    useState<SubtitleUploadStatus>('idle')
+  const [uploadErrorMessage, setUploadErrorMessage] = useState<string | null>(
+    null,
+  )
+  const [lastUploadResult, setLastUploadResult] =
+    useState<LastUploadResult | null>(null)
+  const [recentProcessRecords, setRecentProcessRecords] =
+    useState<RecentProcessRecord[]>(recentProcesses)
+  const [systemLogRecords, setSystemLogRecords] =
+    useState<SystemLogRecord[]>(systemLogs)
   const [associationKeyword, setAssociationKeyword] = useState('')
   const [associationOpen, setAssociationOpen] = useState(false)
   const [associationStatus, setAssociationStatus] =
@@ -663,6 +851,10 @@ export function SubtitleManagePage() {
     }
   }, [])
 
+  function showToast(message: string) {
+    setToastMessage(message)
+  }
+
   function openFilePicker() {
     if (!fileInputRef.current) {
       return
@@ -683,11 +875,30 @@ export function SubtitleManagePage() {
 
   function handleFileSelect(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null
+
+    if (!file) {
+      setSelectedFile(null)
+      return
+    }
+
+    if (!isSupportedSubtitleUploadFile(file)) {
+      event.target.value = ''
+      setSelectedFile(null)
+      setUploadStatus('error')
+      setUploadErrorMessage(
+        '当前仅支持 .srt、.ass、.ssa、.sub、.zip 格式文件',
+      )
+      showToast('当前仅支持 .srt、.ass、.ssa、.sub、.zip 格式文件')
+      return
+    }
+
     setSelectedFile(file)
+    setUploadStatus('idle')
+    setUploadErrorMessage(null)
   }
 
   function showDemoToast() {
-    setToastMessage(demoToastMessage)
+    showToast(demoToastMessage)
   }
 
   function resetAssociationSearchState({
@@ -799,6 +1010,109 @@ export function SubtitleManagePage() {
     setAssociationOpen(false)
   }
 
+  async function handleUploadSubmit() {
+    if (uploadStatus === 'submitting') {
+      return
+    }
+
+    if (!selectedFile) {
+      setUploadStatus('error')
+      setUploadErrorMessage('请先选择字幕文件')
+      showToast('请先选择字幕文件')
+      return
+    }
+
+    if (!selectedAssociationItem) {
+      setUploadStatus('error')
+      setUploadErrorMessage('请先关联库中项目')
+      showToast('请先关联库中项目')
+      return
+    }
+
+    if (selectedAssociationItem.mediaType !== 'movie') {
+      setUploadStatus('error')
+      setUploadErrorMessage('当前只支持电影字幕上传')
+      showToast('当前只支持电影字幕上传')
+      return
+    }
+
+    const libraryTitle = getAssociationLibraryTitle(selectedAssociationItem)
+
+    if (!libraryTitle) {
+      setUploadStatus('error')
+      setUploadErrorMessage('无法获取有效的英文标题')
+      showToast('无法获取有效的英文标题')
+      return
+    }
+
+    const libraryYear = getAssociationLibraryYear(selectedAssociationItem)
+
+    if (!libraryYear) {
+      setUploadStatus('error')
+      setUploadErrorMessage('该项目缺少有效年份，暂时无法上传')
+      showToast('该项目缺少有效年份，暂时无法上传')
+      return
+    }
+
+    setUploadStatus('submitting')
+    setUploadErrorMessage(null)
+
+    try {
+      const response = await uploadSubtitleByAssociation({
+        file: selectedFile,
+        overwrite: false,
+        mediaType: selectedAssociationItem.mediaType,
+        libraryTitle,
+        libraryYear,
+      })
+      const projectTitle = getAssociationProjectLabel(selectedAssociationItem)
+      const uploadedFileName = selectedFile.name
+
+      setUploadStatus('success')
+      setLastUploadResult({
+        fileName: uploadedFileName,
+        projectTitle,
+        response,
+      })
+      setRecentProcessRecords((currentRecords) => [
+        {
+          fileName: uploadedFileName,
+          language: inferSubtitleLanguageLabel(uploadedFileName),
+          project: projectTitle,
+          status: 'uploaded',
+          time: '刚刚',
+        },
+        ...currentRecords,
+      ])
+      setSystemLogRecords((currentLogs) => [
+        ...buildUploadSuccessLogs(uploadedFileName, selectedAssociationItem, response),
+        ...currentLogs,
+      ].slice(0, 12))
+      setSelectedFile(null)
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+
+      showToast('上传成功，已提交处理')
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message.trim()
+          : '上传失败，请稍后重试'
+
+      console.error('subtitle upload failed', error)
+
+      setUploadStatus('error')
+      setUploadErrorMessage(message)
+      setSystemLogRecords((currentLogs) => [
+        buildUploadFailureLog(message),
+        ...currentLogs,
+      ].slice(0, 12))
+      showToast(message)
+    }
+  }
+
   return (
     <PageContainer
       title="资源编目"
@@ -824,7 +1138,7 @@ export function SubtitleManagePage() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".zip,.rar,.srt,.ass,.ssa"
+                  accept=".zip,.srt,.ass,.ssa,.sub"
                   className="hidden"
                   onChange={handleFileSelect}
                 />
@@ -837,7 +1151,7 @@ export function SubtitleManagePage() {
                   拖拽或点击上传字幕压缩包
                 </h2>
                 <p className="mt-1.5 text-xs text-slate-500">
-                  支持 ZIP / RAR · 最大 100MB
+                  支持 ZIP / SRT / ASS / SSA / SUB · 最大 100MB
                 </p>
 
                 <span className="mt-4 inline-flex h-9 items-center justify-center rounded-2xl border border-slate-900 px-4 text-sm font-medium text-slate-950 transition-colors group-hover:bg-slate-950 group-hover:text-white">
@@ -856,7 +1170,7 @@ export function SubtitleManagePage() {
                   </div>
                 ) : (
                   <p className="mt-4 text-xs text-slate-400">
-                    当前仅展示本地选择反馈，不执行真实上传。
+                    请选择字幕文件后，再关联库中项目并提交上传。
                   </p>
                 )}
               </div>
@@ -879,20 +1193,30 @@ export function SubtitleManagePage() {
 
             <Button
               type="button"
-              disabled={!selectedAssociationItem}
-              title={
-                selectedAssociationItem
-                  ? '暂未接入真实上传提交'
-                  : '请先搜索并选择要关联的库中项目'
-              }
+              disabled={uploadStatus === 'submitting'}
               className="h-11 w-full rounded-[18px] bg-slate-950 text-sm font-medium text-white hover:bg-black disabled:bg-slate-200 disabled:text-slate-500"
-              onClick={showDemoToast}
+              onClick={() => {
+                void handleUploadSubmit()
+              }}
             >
-              上传并处理
+              {uploadStatus === 'submitting' ? (
+                <>
+                  <RefreshCcw className="h-4 w-4 animate-spin" />
+                  上传中...
+                </>
+              ) : (
+                '上传并处理'
+              )}
             </Button>
 
+            <UploadResultSummary
+              uploadStatus={uploadStatus}
+              uploadErrorMessage={uploadErrorMessage}
+              lastUploadResult={lastUploadResult}
+            />
+
             <RecentSubtitleTable
-              records={recentProcesses}
+              records={recentProcessRecords}
               onViewAll={showDemoToast}
             />
           </div>
@@ -911,7 +1235,7 @@ export function SubtitleManagePage() {
               </div>
 
               <div className="space-y-2 px-4 py-4 font-mono text-[12px] leading-5 text-zinc-300">
-                {systemLogs.map((record) => (
+                {systemLogRecords.map((record) => (
                   <p
                     key={`${record.timestamp}-${record.message}`}
                     className={logToneClassName[record.tone ?? 'default']}
