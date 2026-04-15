@@ -1,33 +1,128 @@
-import { CheckCircle2, Clapperboard, Loader2, Search, X } from 'lucide-react'
+import {
+  CheckCircle2,
+  Clapperboard,
+  Loader2,
+  Search,
+  Tv,
+  X,
+} from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { MovieSearchItem } from '@/types/resources'
+import type { IngestMode } from '@/types/magnet-ingest'
+import type {
+  SearchableResourceItem,
+  SeriesSearchItem,
+} from '@/types/resources'
 
-type MovieSearchStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
+export type ResourceSearchStatus =
+  | 'idle'
+  | 'loading'
+  | 'success'
+  | 'empty'
+  | 'error'
 
 type LibraryLinkPickerProps = {
+  mode: IngestMode
   keyword: string
-  items: MovieSearchItem[]
-  selectedItem: MovieSearchItem | null
-  searchStatus: MovieSearchStatus
+  items: SearchableResourceItem[]
+  selectedItem: SearchableResourceItem | null
+  searchStatus: ResourceSearchStatus
   searchError: string | null
   searchDisabled?: boolean
   onKeywordChange: (value: string) => void
   onSearchSubmit: () => void
-  onSelectItem: (item: MovieSearchItem) => void
+  onSelectItem: (item: SearchableResourceItem) => void
   onClearSelection: () => void
+}
+
+const pickerCopy: Record<
+  IngestMode,
+  {
+    searchPlaceholder: string
+    searchAriaLabel: string
+    idleTitle: string
+    idleDescription: string
+    loadingTitle: string
+    loadingDescription: string
+    errorFallback: string
+    emptyTitle: string
+    emptyDescription: string
+    emptyBindingMessage: string
+    resultsLabel: string
+  }
+> = {
+  movie: {
+    searchPlaceholder: '搜索电影标题或年份...',
+    searchAriaLabel: '搜索媒体库电影',
+    idleTitle: '搜索并选择电影',
+    idleDescription: '输入关键词后，点击搜索按钮或按回车发起查询。',
+    loadingTitle: '正在搜索电影',
+    loadingDescription: '已连接媒体库电影搜索接口，请稍候。',
+    errorFallback: '电影搜索失败，请稍后重试。',
+    emptyTitle: '未找到匹配电影',
+    emptyDescription: '试试中文名、英文名或年份关键词。',
+    emptyBindingMessage: '尚未绑定电影项目，请从下方搜索结果中选择一个目标条目。',
+    resultsLabel: 'movie only',
+  },
+  series: {
+    searchPlaceholder: '搜索剧集标题、原名或年份...',
+    searchAriaLabel: '搜索媒体库剧集',
+    idleTitle: '搜索并选择剧集',
+    idleDescription: '输入关键词后，点击搜索按钮或按回车发起查询。',
+    loadingTitle: '正在搜索剧集',
+    loadingDescription: '已连接媒体库剧集搜索接口，请稍候。',
+    errorFallback: '剧集搜索失败，请稍后重试。',
+    emptyTitle: '未找到匹配剧集',
+    emptyDescription: '试试中文名、英文名、播出平台或年份关键词。',
+    emptyBindingMessage: '尚未绑定剧集项目，请从下方搜索结果中选择一个目标条目。',
+    resultsLabel: 'tv show',
+  },
+}
+
+function isSeriesSearchItem(
+  item: SearchableResourceItem,
+): item is SeriesSearchItem {
+  return 'tvdb_id' in item
+}
+
+function getItemIcon(mode: IngestMode) {
+  return mode === 'series' ? Tv : Clapperboard
+}
+
+function getItemMeta(item: SearchableResourceItem) {
+  if (isSeriesSearchItem(item)) {
+    const parts = [
+      item.original_title?.trim() || null,
+      item.year ? String(item.year) : null,
+      item.series_type?.trim() || null,
+      item.network?.trim() || null,
+    ].filter(Boolean)
+
+    return parts.length > 0 ? parts.join(' · ') : '电视剧'
+  }
+
+  const parts = [
+    item.original_title?.trim() || null,
+    item.year ? String(item.year) : null,
+  ].filter(Boolean)
+
+  return parts.length > 0 ? parts.join(' · ') : '电影'
 }
 
 function PosterThumbnail({
   poster,
   title,
+  mode,
   inverted = false,
 }: {
   poster: string | null
   title: string
+  mode: IngestMode
   inverted?: boolean
 }) {
+  const Icon = getItemIcon(mode)
+
   return (
     <div
       className={cn(
@@ -38,7 +133,7 @@ function PosterThumbnail({
       {poster ? (
         <img src={poster} alt={title} className="h-full w-full object-cover" />
       ) : (
-        <Clapperboard
+        <Icon
           className={cn(
             'h-4 w-4',
             inverted ? 'text-white/60' : 'text-slate-400',
@@ -49,15 +144,8 @@ function PosterThumbnail({
   )
 }
 
-function getMovieMeta(item: MovieSearchItem) {
-  const parts = [item.original_title, item.year ? String(item.year) : null].filter(
-    Boolean,
-  )
-
-  return parts.length > 0 ? parts.join(' · ') : '电影'
-}
-
 export function LibraryLinkPicker({
+  mode,
   keyword,
   items,
   selectedItem,
@@ -69,6 +157,9 @@ export function LibraryLinkPicker({
   onSelectItem,
   onClearSelection,
 }: LibraryLinkPickerProps) {
+  const copy = pickerCopy[mode]
+  const EmptyIcon = getItemIcon(mode)
+
   function renderSearchResults() {
     switch (searchStatus) {
       case 'loading':
@@ -76,10 +167,10 @@ export function LibraryLinkPicker({
           <div className="px-6 py-16 text-center">
             <Loader2 className="mx-auto h-5 w-5 animate-spin text-slate-400" />
             <p className="mt-3 text-base font-semibold text-slate-900">
-              正在搜索电影
+              {copy.loadingTitle}
             </p>
             <p className="mt-2 text-sm text-slate-500">
-              已连接媒体库电影搜索接口，请稍候。
+              {copy.loadingDescription}
             </p>
           </div>
         )
@@ -89,7 +180,7 @@ export function LibraryLinkPicker({
           <div className="px-6 py-16 text-center">
             <p className="text-base font-semibold text-slate-900">搜索失败</p>
             <p className="mt-2 text-sm text-slate-500">
-              {searchError ?? '电影搜索失败，请稍后重试。'}
+              {searchError ?? copy.errorFallback}
             </p>
           </div>
         )
@@ -97,9 +188,11 @@ export function LibraryLinkPicker({
       case 'empty':
         return (
           <div className="px-6 py-16 text-center">
-            <p className="text-base font-semibold text-slate-900">未找到匹配电影</p>
+            <p className="text-base font-semibold text-slate-900">
+              {copy.emptyTitle}
+            </p>
             <p className="mt-2 text-sm text-slate-500">
-              试试中文名、英文名或年份关键词。
+              {copy.emptyDescription}
             </p>
           </div>
         )
@@ -126,6 +219,7 @@ export function LibraryLinkPicker({
                   <PosterThumbnail
                     poster={item.poster}
                     title={item.title}
+                    mode={mode}
                     inverted={isSelected}
                   />
 
@@ -152,17 +246,17 @@ export function LibraryLinkPicker({
                         isSelected ? 'text-white/70' : 'text-slate-500',
                       )}
                     >
-                      {item.original_title || '暂无原始标题'}
+                      {getItemMeta(item)}
                     </p>
 
-                    {item.overview ? (
+                    {item.overview?.trim() ? (
                       <p
                         className={cn(
                           'mt-1 truncate text-xs',
                           isSelected ? 'text-white/60' : 'text-slate-400',
                         )}
                       >
-                        {item.overview}
+                        {item.overview.trim()}
                       </p>
                     ) : null}
                   </div>
@@ -184,9 +278,11 @@ export function LibraryLinkPicker({
       default:
         return (
           <div className="px-6 py-16 text-center">
-            <p className="text-base font-semibold text-slate-900">搜索并选择电影</p>
+            <p className="text-base font-semibold text-slate-900">
+              {copy.idleTitle}
+            </p>
             <p className="mt-2 text-sm text-slate-500">
-              输入关键词后，点击搜索按钮或按回车发起查询。
+              {copy.idleDescription}
             </p>
           </div>
         )
@@ -217,6 +313,7 @@ export function LibraryLinkPicker({
             <PosterThumbnail
               poster={selectedItem.poster}
               title={selectedItem.title}
+              mode={mode}
               inverted
             />
 
@@ -225,7 +322,7 @@ export function LibraryLinkPicker({
                 {selectedItem.title}
               </p>
               <p className="truncate text-sm text-white/70">
-                {getMovieMeta(selectedItem)}
+                {getItemMeta(selectedItem)}
               </p>
             </div>
 
@@ -245,8 +342,8 @@ export function LibraryLinkPicker({
           </div>
         ) : (
           <div className="mt-3 flex items-center gap-3 text-sm">
-            <Clapperboard className="h-4 w-4 shrink-0 text-slate-400" />
-            <span>尚未绑定电影项目，请从下方搜索结果中选择一个目标条目。</span>
+            <EmptyIcon className="h-4 w-4 shrink-0 text-slate-400" />
+            <span>{copy.emptyBindingMessage}</span>
           </div>
         )}
       </div>
@@ -269,8 +366,8 @@ export function LibraryLinkPicker({
           type="search"
           value={keyword}
           autoComplete="off"
-          placeholder="搜索电影标题或年份..."
-          aria-label="搜索媒体库电影"
+          placeholder={copy.searchPlaceholder}
+          aria-label={copy.searchAriaLabel}
           onChange={(event) => onKeywordChange(event.target.value)}
           className="h-12 w-full rounded-[20px] border border-slate-200 bg-white pl-11 pr-28 text-sm text-slate-900 shadow-shell outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200/60"
         />
@@ -291,7 +388,7 @@ export function LibraryLinkPicker({
             Search Results
           </p>
           <p className="text-xs text-slate-400">
-            {searchStatus === 'success' ? `${items.length} items` : 'movie only'}
+            {searchStatus === 'success' ? `${items.length} items` : copy.resultsLabel}
           </p>
         </div>
 

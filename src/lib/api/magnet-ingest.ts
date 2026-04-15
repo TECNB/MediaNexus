@@ -2,6 +2,9 @@ import axios from 'axios'
 
 import apiClient from '@/lib/axios'
 import type {
+  CreateSeriesMagnetIngestApiResponse,
+  CreateSeriesMagnetIngestPayload,
+  CreateSeriesMagnetIngestResponse,
   CreateMovieMagnetIngestApiResponse,
   CreateMovieMagnetIngestPayload,
   CreateMovieMagnetIngestResponse,
@@ -34,6 +37,25 @@ export async function createMovieMagnetIngest(
 
     if (!response.data.success) {
       throw new Error(response.data.message || 'movie magnet ingest failed')
+    }
+
+    return response.data.data
+  } catch (error) {
+    throw new Error(getAxiosErrorMessage(error) || '推送失败，请稍后重试')
+  }
+}
+
+export async function createSeriesMagnetIngest(
+  payload: CreateSeriesMagnetIngestPayload,
+): Promise<CreateSeriesMagnetIngestResponse> {
+  try {
+    const response = await apiClient.post<CreateSeriesMagnetIngestApiResponse>(
+      '/api/v1/magnet-ingest/series',
+      payload,
+    )
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'series magnet ingest failed')
     }
 
     return response.data.data

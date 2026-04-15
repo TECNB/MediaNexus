@@ -1,14 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  CheckCircle2,
-  ChevronDown,
-  CloudUpload,
-  Loader2,
-  Tv,
-  X,
-} from 'lucide-react'
+import { ChevronDown, CloudUpload, Loader2 } from 'lucide-react'
 
-import { LibraryLinkPicker } from '@/components/magnet-ingest/library-link-picker'
+import {
+  LibraryLinkPicker,
+  type ResourceSearchStatus,
+} from '@/components/magnet-ingest/library-link-picker'
 import { RecentTasksTable } from '@/components/magnet-ingest/recent-tasks-table'
 import {
   NodeStatusCard,
@@ -17,13 +13,16 @@ import {
 } from '@/components/magnet-ingest/status-cards'
 import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
-import { createMovieMagnetIngest } from '@/lib/api/magnet-ingest'
+import {
+  createMovieMagnetIngest,
+  createSeriesMagnetIngest,
+} from '@/lib/api/magnet-ingest'
 import {
   isRequestCanceledError,
   searchMovies,
+  searchSeries,
 } from '@/lib/api/resources'
 import {
-  defaultSelectedSeries,
   defaultMagnetText,
   initialRecentTasks,
   systemLogEntries,
@@ -32,12 +31,11 @@ import {
 import { cn } from '@/lib/utils'
 import type {
   CreateMovieMagnetIngestPayload,
+  CreateSeriesMagnetIngestPayload,
   IngestMode,
-  MockSeriesSelection,
 } from '@/types/magnet-ingest'
-import type { MovieSearchItem } from '@/types/resources'
+import type { MovieSearchItem, SeriesSearchItem } from '@/types/resources'
 
-type MovieSearchStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
 type SubmitStatus = 'idle' | 'loading' | 'success' | 'error'
 
 function SectionHeading({
@@ -91,91 +89,6 @@ function MediaTypeToggle({
           </button>
         )
       })}
-    </div>
-  )
-}
-
-function SeriesPoster({
-  poster,
-  title,
-}: {
-  poster: string
-  title: string
-}) {
-  return (
-    <div className="flex h-16 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-slate-100">
-      {poster ? (
-        <img src={poster} alt={title} className="h-full w-full object-cover" />
-      ) : (
-        <Tv className="h-4 w-4 text-slate-400" />
-      )}
-    </div>
-  )
-}
-
-function SelectedSeriesCard({
-  selectedSeries,
-  onClear,
-  onRestore,
-}: {
-  selectedSeries: MockSeriesSelection | null
-  onClear: () => void
-  onRestore: () => void
-}) {
-  return (
-    <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-shell">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-        Current Binding
-      </p>
-
-      {selectedSeries ? (
-        <div className="mt-3 flex items-center gap-4">
-          <SeriesPoster
-            poster={selectedSeries.poster}
-            title={selectedSeries.title}
-          />
-
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-base font-semibold text-slate-950">
-              {selectedSeries.title}
-            </p>
-            <p className="truncate text-sm text-slate-500">
-              {selectedSeries.subtitle}
-            </p>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-slate-950" />
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              onClick={onClear}
-              className="h-10 w-10 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-900"
-              aria-label="清除剧集绑定"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-3 rounded-[18px] border border-dashed border-slate-200 bg-slate-50/80 px-4 py-5">
-          <div className="flex items-center gap-3 text-sm text-slate-500">
-            <Tv className="h-4 w-4 shrink-0 text-slate-400" />
-            <span>当前阶段剧集模式先展示前端 mock 已选条目，不接真实剧集搜索接口。</span>
-          </div>
-
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={onRestore}
-            className="mt-4 h-9 rounded-full border border-slate-200 px-4 text-xs font-semibold text-slate-700 hover:bg-white"
-          >
-            恢复示例剧集
-          </Button>
-        </div>
-      )}
     </div>
   )
 }
@@ -263,21 +176,47 @@ function getMovieMagnetIngestPayload(
   }
 }
 
+function getSeriesMagnetIngestPayload(
+  magnet: string,
+  selectedSeries: SeriesSearchItem,
+  seasonNumber: number,
+): CreateSeriesMagnetIngestPayload | null {
+  const title = selectedSeries.title.trim()
+  const originalTitle = selectedSeries.original_title?.trim() || title
+
+  if (!title || !Number.isInteger(seasonNumber)) {
+    return null
+  }
+
+  return {
+    magnet,
+    title,
+    original_title: originalTitle,
+    season_number: seasonNumber,
+  }
+}
+
 export function MagnetIngestPage() {
   const [mode, setMode] = useState<IngestMode>('movie')
   const [magnetInput, setMagnetInput] = useState(getInitialMagnetText)
-  const [mediaKeyword, setMediaKeyword] = useState('')
+  const [movieKeyword, setMovieKeyword] = useState('')
+  const [seriesKeyword, setSeriesKeyword] = useState('')
   const [movieSearchStatus, setMovieSearchStatus] =
-    useState<MovieSearchStatus>('idle')
+    useState<ResourceSearchStatus>('idle')
+  const [seriesSearchStatus, setSeriesSearchStatus] =
+    useState<ResourceSearchStatus>('idle')
   const [movieResults, setMovieResults] = useState<MovieSearchItem[]>([])
+  const [seriesResults, setSeriesResults] = useState<SeriesSearchItem[]>([])
   const [selectedMovie, setSelectedMovie] = useState<MovieSearchItem | null>(
     null,
   )
-  const [selectedSeries, setSelectedSeries] =
-    useState<MockSeriesSelection | null>(defaultSelectedSeries)
-  const [targetSeason, setTargetSeason] = useState(4)
+  const [selectedSeries, setSelectedSeries] = useState<SeriesSearchItem | null>(
+    null,
+  )
+  const [targetSeason, setTargetSeason] = useState(1)
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle')
-  const [searchError, setSearchError] = useState<string | null>(null)
+  const [movieSearchError, setMovieSearchError] = useState<string | null>(null)
+  const [seriesSearchError, setSeriesSearchError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitSuccessMessage, setSubmitSuccessMessage] = useState<string | null>(
     null,
@@ -313,10 +252,33 @@ export function MagnetIngestPage() {
     submitStatus === 'loading' ||
     (mode === 'movie' ? !selectedMovie : !selectedSeries)
 
+  function abortActiveSearch() {
+    latestSearchRequestIdRef.current += 1
+    activeSearchControllerRef.current?.abort()
+    activeSearchControllerRef.current = null
+  }
+
   function resetSubmitFeedback() {
     setSubmitStatus('idle')
     setSubmitError(null)
     setSubmitSuccessMessage(null)
+  }
+
+  function resetMovieModeState() {
+    setMovieKeyword('')
+    setMovieSearchStatus('idle')
+    setMovieResults([])
+    setSelectedMovie(null)
+    setMovieSearchError(null)
+  }
+
+  function resetSeriesModeState() {
+    setSeriesKeyword('')
+    setSeriesSearchStatus('idle')
+    setSeriesResults([])
+    setSelectedSeries(null)
+    setSeriesSearchError(null)
+    setTargetSeason(1)
   }
 
   function handleModeChange(nextMode: IngestMode) {
@@ -324,26 +286,32 @@ export function MagnetIngestPage() {
       return
     }
 
-    if (nextMode === 'series') {
-      activeSearchControllerRef.current?.abort()
-      activeSearchControllerRef.current = null
-      setMovieSearchStatus((currentStatus) =>
-        currentStatus === 'loading' ? 'idle' : currentStatus,
-      )
+    abortActiveSearch()
+
+    if (mode === 'movie') {
+      resetMovieModeState()
+    } else {
+      resetSeriesModeState()
     }
 
     setMode(nextMode)
     resetSubmitFeedback()
   }
 
-  function handleMediaKeywordChange(value: string) {
-    latestSearchRequestIdRef.current += 1
-    activeSearchControllerRef.current?.abort()
-    activeSearchControllerRef.current = null
-    setMediaKeyword(value)
+  function handleMovieKeywordChange(value: string) {
+    abortActiveSearch()
+    setMovieKeyword(value)
     setMovieSearchStatus('idle')
     setMovieResults([])
-    setSearchError(null)
+    setMovieSearchError(null)
+  }
+
+  function handleSeriesKeywordChange(value: string) {
+    abortActiveSearch()
+    setSeriesKeyword(value)
+    setSeriesSearchStatus('idle')
+    setSeriesResults([])
+    setSeriesSearchError(null)
   }
 
   function handleMovieSearchSubmit() {
@@ -351,17 +319,14 @@ export function MagnetIngestPage() {
       return
     }
 
-    const keyword = mediaKeyword.trim()
-    latestSearchRequestIdRef.current += 1
+    const keyword = movieKeyword.trim()
+    abortActiveSearch()
     const requestId = latestSearchRequestIdRef.current
-
-    activeSearchControllerRef.current?.abort()
-    activeSearchControllerRef.current = null
 
     if (!keyword) {
       setMovieSearchStatus('idle')
       setMovieResults([])
-      setSearchError(null)
+      setMovieSearchError(null)
       return
     }
 
@@ -370,7 +335,7 @@ export function MagnetIngestPage() {
 
     setMovieSearchStatus('loading')
     setMovieResults([])
-    setSearchError(null)
+    setMovieSearchError(null)
 
     void searchMovies(keyword, controller.signal)
       .then((items) => {
@@ -380,7 +345,7 @@ export function MagnetIngestPage() {
 
         setMovieSearchStatus(items.length > 0 ? 'success' : 'empty')
         setMovieResults(items)
-        setSearchError(null)
+        setMovieSearchError(null)
       })
       .catch((error) => {
         if (controller.signal.aborted || isRequestCanceledError(error)) {
@@ -395,10 +360,69 @@ export function MagnetIngestPage() {
 
         setMovieSearchStatus('error')
         setMovieResults([])
-        setSearchError(
+        setMovieSearchError(
           error instanceof Error && error.message.trim()
             ? error.message.trim()
             : '电影搜索失败，请稍后重试。',
+        )
+      })
+      .finally(() => {
+        if (activeSearchControllerRef.current === controller) {
+          activeSearchControllerRef.current = null
+        }
+      })
+  }
+
+  function handleSeriesSearchSubmit() {
+    if (seriesSearchStatus === 'loading') {
+      return
+    }
+
+    const keyword = seriesKeyword.trim()
+    abortActiveSearch()
+    const requestId = latestSearchRequestIdRef.current
+
+    if (!keyword) {
+      setSeriesSearchStatus('idle')
+      setSeriesResults([])
+      setSeriesSearchError(null)
+      return
+    }
+
+    const controller = new AbortController()
+    activeSearchControllerRef.current = controller
+
+    setSeriesSearchStatus('loading')
+    setSeriesResults([])
+    setSeriesSearchError(null)
+
+    void searchSeries(keyword, controller.signal)
+      .then((items) => {
+        if (latestSearchRequestIdRef.current !== requestId) {
+          return
+        }
+
+        setSeriesSearchStatus(items.length > 0 ? 'success' : 'empty')
+        setSeriesResults(items)
+        setSeriesSearchError(null)
+      })
+      .catch((error) => {
+        if (controller.signal.aborted || isRequestCanceledError(error)) {
+          return
+        }
+
+        if (latestSearchRequestIdRef.current !== requestId) {
+          return
+        }
+
+        console.error('series search failed', error)
+
+        setSeriesSearchStatus('error')
+        setSeriesResults([])
+        setSeriesSearchError(
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : '剧集搜索失败，请稍后重试。',
         )
       })
       .finally(() => {
@@ -426,7 +450,7 @@ export function MagnetIngestPage() {
 
     if (mode === 'series') {
       if (!selectedSeries) {
-        const message = '请先保留一个剧集 mock 项目'
+        const message = '请先选择一个剧集项目'
         setSubmitStatus('error')
         setSubmitError(message)
         setSubmitSuccessMessage(null)
@@ -434,11 +458,58 @@ export function MagnetIngestPage() {
         return
       }
 
-      const message = `剧集离线直收接口暂未接入（${selectedSeries.title} · Season ${targetSeason}）`
-      setSubmitStatus('idle')
+      if (!Number.isInteger(targetSeason) || targetSeason < 1) {
+        const message = '请先选择目标季数'
+        setSubmitStatus('error')
+        setSubmitError(message)
+        setSubmitSuccessMessage(null)
+        setToastMessage(message)
+        return
+      }
+
+      const payload = getSeriesMagnetIngestPayload(
+        normalizedMagnet,
+        selectedSeries,
+        targetSeason,
+      )
+
+      if (!payload) {
+        const message = '所选剧集缺少标题、原始标题或目标季数，暂时无法提交'
+        setSubmitStatus('error')
+        setSubmitError(message)
+        setSubmitSuccessMessage(null)
+        setToastMessage(message)
+        return
+      }
+
+      setSubmitStatus('loading')
       setSubmitError(null)
       setSubmitSuccessMessage(null)
-      setToastMessage(message)
+
+      try {
+        const response = await createSeriesMagnetIngest(payload)
+        const successMessage = response.save_path
+          ? `离线任务已创建：${response.save_path}`
+          : '已成功推送至离线下载'
+
+        setSubmitStatus('success')
+        setSubmitSuccessMessage(successMessage)
+        setMagnetInput('')
+        setToastMessage(successMessage)
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : '推送失败，请稍后重试'
+
+        console.error('series magnet ingest failed', error)
+
+        setSubmitStatus('error')
+        setSubmitError(message)
+        setSubmitSuccessMessage(null)
+        setToastMessage(message)
+      }
+
       return
     }
 
@@ -535,7 +606,7 @@ export function MagnetIngestPage() {
                 title={
                   mode === 'movie'
                     ? '使用电影搜索接口查询媒体库项目，并从结果中单选一个电影进行绑定。'
-                    : '当前为剧集模式前端 mock 展示，暂不接入真实剧集搜索接口。'
+                    : '使用剧集搜索接口查询媒体库项目，并从结果中单选一个剧集进行绑定。'
                 }
               />
 
@@ -544,16 +615,17 @@ export function MagnetIngestPage() {
 
             {mode === 'movie' ? (
               <LibraryLinkPicker
-                keyword={mediaKeyword}
+                mode="movie"
+                keyword={movieKeyword}
                 items={movieResults}
                 selectedItem={selectedMovie}
                 searchStatus={movieSearchStatus}
-                searchError={searchError}
+                searchError={movieSearchError}
                 searchDisabled={movieSearchStatus === 'loading'}
-                onKeywordChange={handleMediaKeywordChange}
+                onKeywordChange={handleMovieKeywordChange}
                 onSearchSubmit={handleMovieSearchSubmit}
                 onSelectItem={(item) => {
-                  setSelectedMovie(item)
+                  setSelectedMovie(item as MovieSearchItem)
                   resetSubmitFeedback()
                 }}
                 onClearSelection={() => {
@@ -562,14 +634,22 @@ export function MagnetIngestPage() {
                 }}
               />
             ) : (
-              <SelectedSeriesCard
-                selectedSeries={selectedSeries}
-                onClear={() => {
-                  setSelectedSeries(null)
+              <LibraryLinkPicker
+                mode="series"
+                keyword={seriesKeyword}
+                items={seriesResults}
+                selectedItem={selectedSeries}
+                searchStatus={seriesSearchStatus}
+                searchError={seriesSearchError}
+                searchDisabled={seriesSearchStatus === 'loading'}
+                onKeywordChange={handleSeriesKeywordChange}
+                onSearchSubmit={handleSeriesSearchSubmit}
+                onSelectItem={(item) => {
+                  setSelectedSeries(item as SeriesSearchItem)
                   resetSubmitFeedback()
                 }}
-                onRestore={() => {
-                  setSelectedSeries(defaultSelectedSeries)
+                onClearSelection={() => {
+                  setSelectedSeries(null)
                   resetSubmitFeedback()
                 }}
               />
@@ -580,7 +660,7 @@ export function MagnetIngestPage() {
             <section className="space-y-3">
               <SectionHeading
                 label="目标季数 (Target Season)"
-                title="当前使用本地 mock 季数选项，为后续剧集接口接入预留状态位置。"
+                title="当前使用本地静态季数列表，可为剧集离线直收指定目标季数。"
               />
 
               <TargetSeasonSelect

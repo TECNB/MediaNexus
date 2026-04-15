@@ -5,14 +5,14 @@ export type CreateMovieMagnetIngestPayload = {
   year: number
 }
 
-export type IngestMode = 'movie' | 'series'
-
-export type MockSeriesSelection = {
-  id: string
+export type CreateSeriesMagnetIngestPayload = {
+  magnet: string
   title: string
-  subtitle: string
-  poster: string
+  original_title: string
+  season_number: number
 }
+
+export type IngestMode = 'movie' | 'series'
 
 export type TargetSeasonOption = {
   label: string
@@ -23,8 +23,18 @@ export type CreateMovieMagnetIngestResponse = {
   save_path?: string
 }
 
+export type CreateSeriesMagnetIngestResponse = {
+  save_path?: string
+}
+
 export type CreateMovieMagnetIngestApiResponse = {
   success: boolean
   message: string
   data: CreateMovieMagnetIngestResponse
+}
+
+export type CreateSeriesMagnetIngestApiResponse = {
+  success: boolean
+  message: string
+  data: CreateSeriesMagnetIngestResponse
 }
