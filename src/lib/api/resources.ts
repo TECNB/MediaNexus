@@ -4,9 +4,27 @@ import apiClient from '@/lib/axios'
 import type {
   MovieSearchItem,
   MovieSearchResponse,
+  SeriesSeasonsData,
+  SeriesSeasonsResponse,
   SeriesSearchItem,
   SeriesSearchResponse,
 } from '@/types/resources'
+
+function getAxiosErrorMessage(error: unknown) {
+  if (axios.isAxiosError(error)) {
+    const message = error.response?.data?.message
+
+    if (typeof message === 'string' && message.trim()) {
+      return message.trim()
+    }
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim()
+  }
+
+  return null
+}
 
 async function searchResources<TResponse extends { success: boolean; message: string }>(
   path: string,
@@ -49,6 +67,35 @@ export async function searchSeries(
   )
 
   return response.data.items
+}
+
+export async function getSeriesSeasons(
+  tvdbId: number,
+  signal?: AbortSignal,
+): Promise<SeriesSeasonsData> {
+  try {
+    const response = await apiClient.get<SeriesSeasonsResponse>(
+      '/api/v1/resources/series/seasons',
+      {
+        params: { tvdb_id: tvdbId },
+        signal,
+      },
+    )
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'series seasons fetch failed')
+    }
+
+    return response.data.data
+  } catch (error) {
+    if (isRequestCanceledError(error)) {
+      throw error
+    }
+
+    throw new Error(
+      getAxiosErrorMessage(error) || '剧集季数加载失败，请稍后重试。',
+    )
+  }
 }
 
 export function isRequestCanceledError(error: unknown) {

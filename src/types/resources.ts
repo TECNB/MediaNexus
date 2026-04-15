@@ -38,3 +38,16 @@ export type ResourceSearchResponse<TItem> = {
 export type MovieSearchResponse = ResourceSearchResponse<MovieSearchItem>
 
 export type SeriesSearchResponse = ResourceSearchResponse<SeriesSearchItem>
+
+export type SeriesSeasonsData = {
+  tvdb_id: number
+  title: string
+  season_count: number
+  season_numbers: number[]
+}
+
+export type SeriesSeasonsResponse = {
+  success: boolean
+  message: string
+  data: SeriesSeasonsData
+}

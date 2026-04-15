@@ -14,11 +14,6 @@ export type CreateSeriesMagnetIngestPayload = {
 
 export type IngestMode = 'movie' | 'series'
 
-export type TargetSeasonOption = {
-  label: string
-  value: number
-}
-
 export type CreateMovieMagnetIngestResponse = {
   save_path?: string
 }

@@ -1,5 +1,3 @@
-import type { TargetSeasonOption } from '@/types/magnet-ingest'
-
 export type MagnetLibraryCategory = 'movie' | 'tv' | 'anime'
 
 export type MagnetLibraryItem = {
@@ -224,16 +222,3 @@ export const systemLogEntries: SystemLogEntry[] = [
     tone: 'muted',
   },
 ]
-
-export const targetSeasonOptions: TargetSeasonOption[] = Array.from(
-  { length: 20 },
-  (_, index) => {
-    const value = index + 1
-    const seasonLabel = String(value).padStart(2, '0')
-
-    return {
-      label: `第 ${value} 季 (Season ${seasonLabel})`,
-      value,
-    }
-  },
-)

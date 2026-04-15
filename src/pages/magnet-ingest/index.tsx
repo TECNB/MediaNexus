@@ -18,6 +18,7 @@ import {
   createSeriesMagnetIngest,
 } from '@/lib/api/magnet-ingest'
 import {
+  getSeriesSeasons,
   isRequestCanceledError,
   searchMovies,
   searchSeries,
@@ -26,7 +27,6 @@ import {
   defaultMagnetText,
   initialRecentTasks,
   systemLogEntries,
-  targetSeasonOptions,
 } from '@/data/mock-magnet-ingest'
 import { cn } from '@/lib/utils'
 import type {
@@ -37,6 +37,7 @@ import type {
 import type { MovieSearchItem, SeriesSearchItem } from '@/types/resources'
 
 type SubmitStatus = 'idle' | 'loading' | 'success' | 'error'
+type SeriesSeasonStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
 
 function SectionHeading({
   label,
@@ -95,29 +96,128 @@ function MediaTypeToggle({
 
 function TargetSeasonSelect({
   value,
+  options,
+  status,
+  error,
   onChange,
 }: {
-  value: number
+  value: number | null
+  options: number[]
+  status: SeriesSeasonStatus
+  error: string | null
   onChange: (value: number) => void
 }) {
-  return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-        aria-label="选择目标季数"
-        className="h-14 w-full appearance-none rounded-[20px] border border-slate-200 bg-white px-5 pr-14 text-base font-medium text-slate-950 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200/60"
-      >
-        {targetSeasonOptions.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+  const isDisabled = status !== 'success'
+  const placeholder =
+    status === 'loading'
+      ? 'Loading seasons...'
+      : status === 'empty'
+        ? 'No seasons available'
+        : status === 'error'
+          ? 'Failed to load seasons'
+          : '请选择目标季数'
 
-      <ChevronDown className="pointer-events-none absolute right-5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        <select
+          value={value ?? ''}
+          onChange={(event) => onChange(Number(event.target.value))}
+          aria-label="选择目标季数"
+          disabled={isDisabled}
+          className="h-14 w-full appearance-none rounded-[20px] border border-slate-200 bg-white px-5 pr-14 text-base font-medium text-slate-950 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200/60 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+        >
+          <option value="" disabled>
+            {placeholder}
+          </option>
+          {options.map((seasonNumber) => {
+            const seasonLabel = String(seasonNumber).padStart(2, '0')
+
+            return (
+              <option key={seasonNumber} value={seasonNumber}>
+                {`第 ${seasonNumber} 季 (Season ${seasonLabel})`}
+              </option>
+            )
+          })}
+        </select>
+
+        <ChevronDown className="pointer-events-none absolute right-5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+      </div>
+
+      {status === 'loading' ? (
+        <p className="text-sm text-slate-500">正在拉取当前剧集的可用季数...</p>
+      ) : null}
+
+      {status === 'empty' ? (
+        <p className="text-sm text-slate-500">当前剧集暂无可用季数，暂时无法提交。</p>
+      ) : null}
+
+      {status === 'error' && error ? (
+        <p className="text-sm text-rose-500">{error}</p>
+      ) : null}
     </div>
   )
+}
+
+function hasValidTvdbId(series: SeriesSearchItem | null) {
+  return typeof series?.tvdb_id === 'number' && series.tvdb_id > 0
+}
+
+function isValidSeasonNumber(value: number | null, options: number[]) {
+  return typeof value === 'number' && options.includes(value)
+}
+
+function normalizeSeasonNumbers(seasonNumbers: number[]) {
+  return Array.from(
+    new Set(
+      seasonNumbers.filter(
+        (seasonNumber) => Number.isInteger(seasonNumber) && seasonNumber > 0,
+      ),
+    ),
+  )
+}
+
+function getSeasonLoadValidationMessage({
+  selectedSeries,
+  seriesSeasonStatus,
+  selectedSeasonNumber,
+  seriesSeasonOptions,
+  seriesSeasonError,
+}: {
+  selectedSeries: SeriesSearchItem | null
+  seriesSeasonStatus: SeriesSeasonStatus
+  selectedSeasonNumber: number | null
+  seriesSeasonOptions: number[]
+  seriesSeasonError: string | null
+}) {
+  if (!selectedSeries) {
+    return '请先选择一个剧集项目'
+  }
+
+  if (!hasValidTvdbId(selectedSeries)) {
+    return '当前剧集缺少有效的 TVDB ID，无法加载季数。'
+  }
+
+  if (seriesSeasonStatus === 'loading') {
+    return '季数仍在加载中，请稍候。'
+  }
+
+  if (seriesSeasonStatus === 'error') {
+    return seriesSeasonError || '剧集季数加载失败，请稍后重试。'
+  }
+
+  if (seriesSeasonStatus === 'empty') {
+    return '当前剧集暂无可用季数，暂时无法提交。'
+  }
+
+  if (
+    seriesSeasonStatus !== 'success' ||
+    !isValidSeasonNumber(selectedSeasonNumber, seriesSeasonOptions)
+  ) {
+    return '请先选择有效的目标季数'
+  }
+
+  return null
 }
 
 function getInitialMagnetText() {
@@ -179,12 +279,12 @@ function getMovieMagnetIngestPayload(
 function getSeriesMagnetIngestPayload(
   magnet: string,
   selectedSeries: SeriesSearchItem,
-  seasonNumber: number,
+  seasonNumber: number | null,
 ): CreateSeriesMagnetIngestPayload | null {
   const title = selectedSeries.title.trim()
   const originalTitle = selectedSeries.original_title?.trim() || title
 
-  if (!title || !Number.isInteger(seasonNumber)) {
+  if (!title || seasonNumber === null || !Number.isInteger(seasonNumber)) {
     return null
   }
 
@@ -213,7 +313,13 @@ export function MagnetIngestPage() {
   const [selectedSeries, setSelectedSeries] = useState<SeriesSearchItem | null>(
     null,
   )
-  const [targetSeason, setTargetSeason] = useState(1)
+  const [seriesSeasonStatus, setSeriesSeasonStatus] =
+    useState<SeriesSeasonStatus>('idle')
+  const [seriesSeasonOptions, setSeriesSeasonOptions] = useState<number[]>([])
+  const [selectedSeasonNumber, setSelectedSeasonNumber] = useState<number | null>(
+    null,
+  )
+  const [seriesSeasonError, setSeriesSeasonError] = useState<string | null>(null)
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle')
   const [movieSearchError, setMovieSearchError] = useState<string | null>(null)
   const [seriesSearchError, setSeriesSearchError] = useState<string | null>(null)
@@ -224,6 +330,8 @@ export function MagnetIngestPage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const latestSearchRequestIdRef = useRef(0)
   const activeSearchControllerRef = useRef<AbortController | null>(null)
+  const latestSeriesSeasonRequestIdRef = useRef(0)
+  const activeSeriesSeasonControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (!toastMessage) {
@@ -242,15 +350,106 @@ export function MagnetIngestPage() {
   useEffect(() => {
     return () => {
       activeSearchControllerRef.current?.abort()
+      activeSeriesSeasonControllerRef.current?.abort()
     }
   }, [])
 
+  useEffect(() => {
+    if (mode !== 'series' || !selectedSeries) {
+      return
+    }
+
+    const tvdbId = selectedSeries.tvdb_id
+
+    if (typeof tvdbId !== 'number' || tvdbId <= 0) {
+      setSeriesSeasonStatus('error')
+      setSeriesSeasonOptions([])
+      setSelectedSeasonNumber(null)
+      setSeriesSeasonError('当前剧集缺少有效的 TVDB ID，无法加载季数。')
+      return
+    }
+
+    latestSeriesSeasonRequestIdRef.current += 1
+    const requestId = latestSeriesSeasonRequestIdRef.current
+    activeSeriesSeasonControllerRef.current?.abort()
+
+    const controller = new AbortController()
+    activeSeriesSeasonControllerRef.current = controller
+
+    setSeriesSeasonStatus('loading')
+    setSeriesSeasonOptions([])
+    setSelectedSeasonNumber(null)
+    setSeriesSeasonError(null)
+
+    void getSeriesSeasons(tvdbId, controller.signal)
+      .then((data) => {
+        if (latestSeriesSeasonRequestIdRef.current !== requestId) {
+          return
+        }
+
+        const nextSeasonOptions = normalizeSeasonNumbers(data.season_numbers)
+
+        if (nextSeasonOptions.length === 0) {
+          setSeriesSeasonStatus('empty')
+          setSeriesSeasonOptions([])
+          setSelectedSeasonNumber(null)
+          setSeriesSeasonError(null)
+          return
+        }
+
+        setSeriesSeasonStatus('success')
+        setSeriesSeasonOptions(nextSeasonOptions)
+        setSelectedSeasonNumber(nextSeasonOptions[0])
+        setSeriesSeasonError(null)
+      })
+      .catch((error) => {
+        if (controller.signal.aborted || isRequestCanceledError(error)) {
+          return
+        }
+
+        if (latestSeriesSeasonRequestIdRef.current !== requestId) {
+          return
+        }
+
+        console.error('series seasons fetch failed', error)
+
+        setSeriesSeasonStatus('error')
+        setSeriesSeasonOptions([])
+        setSelectedSeasonNumber(null)
+        setSeriesSeasonError(
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : '剧集季数加载失败，请稍后重试。',
+        )
+      })
+      .finally(() => {
+        if (activeSeriesSeasonControllerRef.current === controller) {
+          activeSeriesSeasonControllerRef.current = null
+        }
+      })
+
+    return () => {
+      controller.abort()
+
+      if (activeSeriesSeasonControllerRef.current === controller) {
+        activeSeriesSeasonControllerRef.current = null
+      }
+    }
+  }, [mode, selectedSeries])
+
   const magnetValidationMessage = getMagnetValidationMessage(magnetInput)
+  const seriesSeasonValidationMessage = getSeasonLoadValidationMessage({
+    selectedSeries,
+    seriesSeasonStatus,
+    selectedSeasonNumber,
+    seriesSeasonOptions,
+    seriesSeasonError,
+  })
   const isPushDisabled =
     !magnetInput.trim() ||
     Boolean(magnetValidationMessage) ||
     submitStatus === 'loading' ||
-    (mode === 'movie' ? !selectedMovie : !selectedSeries)
+    (mode === 'movie' ? !selectedMovie : Boolean(seriesSeasonValidationMessage))
 
   function abortActiveSearch() {
     latestSearchRequestIdRef.current += 1
@@ -272,13 +471,23 @@ export function MagnetIngestPage() {
     setMovieSearchError(null)
   }
 
+  function resetSeriesSeasonState() {
+    latestSeriesSeasonRequestIdRef.current += 1
+    activeSeriesSeasonControllerRef.current?.abort()
+    activeSeriesSeasonControllerRef.current = null
+    setSeriesSeasonStatus('idle')
+    setSeriesSeasonOptions([])
+    setSelectedSeasonNumber(null)
+    setSeriesSeasonError(null)
+  }
+
   function resetSeriesModeState() {
     setSeriesKeyword('')
     setSeriesSearchStatus('idle')
     setSeriesResults([])
     setSelectedSeries(null)
     setSeriesSearchError(null)
-    setTargetSeason(1)
+    resetSeriesSeasonState()
   }
 
   function handleModeChange(nextMode: IngestMode) {
@@ -449,17 +658,24 @@ export function MagnetIngestPage() {
     }
 
     if (mode === 'series') {
-      if (!selectedSeries) {
-        const message = '请先选择一个剧集项目'
+      const seasonValidationMessage = getSeasonLoadValidationMessage({
+        selectedSeries,
+        seriesSeasonStatus,
+        selectedSeasonNumber,
+        seriesSeasonOptions,
+        seriesSeasonError,
+      })
+
+      if (seasonValidationMessage) {
         setSubmitStatus('error')
-        setSubmitError(message)
+        setSubmitError(seasonValidationMessage)
         setSubmitSuccessMessage(null)
-        setToastMessage(message)
+        setToastMessage(seasonValidationMessage)
         return
       }
 
-      if (!Number.isInteger(targetSeason) || targetSeason < 1) {
-        const message = '请先选择目标季数'
+      if (!selectedSeries || selectedSeasonNumber === null) {
+        const message = '请先选择有效的目标季数'
         setSubmitStatus('error')
         setSubmitError(message)
         setSubmitSuccessMessage(null)
@@ -470,7 +686,7 @@ export function MagnetIngestPage() {
       const payload = getSeriesMagnetIngestPayload(
         normalizedMagnet,
         selectedSeries,
-        targetSeason,
+        selectedSeasonNumber,
       )
 
       if (!payload) {
@@ -650,6 +866,7 @@ export function MagnetIngestPage() {
                 }}
                 onClearSelection={() => {
                   setSelectedSeries(null)
+                  resetSeriesSeasonState()
                   resetSubmitFeedback()
                 }}
               />
@@ -660,13 +877,16 @@ export function MagnetIngestPage() {
             <section className="space-y-3">
               <SectionHeading
                 label="目标季数 (Target Season)"
-                title="当前使用本地静态季数列表，可为剧集离线直收指定目标季数。"
+                title="选中剧集后会动态拉取真实可用季数，并用于电视剧离线直收提交。"
               />
 
               <TargetSeasonSelect
-                value={targetSeason}
+                value={selectedSeasonNumber}
+                options={seriesSeasonOptions}
+                status={seriesSeasonStatus}
+                error={seriesSeasonError}
                 onChange={(value) => {
-                  setTargetSeason(value)
+                  setSelectedSeasonNumber(value)
                   resetSubmitFeedback()
                 }}
               />
