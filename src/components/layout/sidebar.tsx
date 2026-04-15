@@ -6,6 +6,7 @@ import {
   Search,
   Settings,
   SquareCheckBig,
+  Zap,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
@@ -24,6 +25,7 @@ type NavigationItem = {
 const primaryItems: NavigationItem[] = [
   { icon: LayoutGrid, label: '控制台', to: '/dashboard' },
   { icon: Search, label: '资源搜索', to: '/resources' },
+  { icon: Zap, label: 'Magnet Ingest', to: '/magnet-ingest' },
   { icon: SquareCheckBig, label: '任务中心', to: '/tasks' },
   { icon: Captions, label: '字幕管理', to: '/subtitles' },
 ]
