@@ -1,3 +1,8 @@
+import type {
+  MockSeriesSelection,
+  TargetSeasonOption,
+} from '@/types/magnet-ingest'
+
 export type MagnetLibraryCategory = 'movie' | 'tv' | 'anime'
 
 export type MagnetLibraryItem = {
@@ -221,4 +226,19 @@ export const systemLogEntries: SystemLogEntry[] = [
     message: 'Request ID: PKP-8829-XJ-901',
     tone: 'muted',
   },
+]
+
+export const defaultSelectedSeries: MockSeriesSelection = {
+  id: 'mock-succession',
+  title: '继承之战 (Succession)',
+  subtitle: '第四季 · 电视剧',
+  poster: createPoster('#161922', '#5f697d', '#e4ebff'),
+}
+
+export const targetSeasonOptions: TargetSeasonOption[] = [
+  { label: '第 1 季 (Season 1)', value: 1 },
+  { label: '第 2 季 (Season 2)', value: 2 },
+  { label: '第 3 季 (Season 3)', value: 3 },
+  { label: '第 4 季 (Season 4)', value: 4 },
+  { label: '第 5 季 (Season 5)', value: 5 },
 ]
