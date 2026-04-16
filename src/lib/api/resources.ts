@@ -2,6 +2,10 @@ import axios from 'axios'
 
 import apiClient from '@/lib/axios'
 import type {
+  AddMovieResourceRequest,
+  AddMovieResourceResponse,
+  MovieQualityProfile,
+  MovieQualityProfilesResponse,
   MovieSearchItem,
   MovieSearchResponse,
   SeriesSeasonsData,
@@ -54,6 +58,64 @@ export async function searchMovies(
   )
 
   return response.data.items
+}
+
+export async function getMovieQualityProfiles(
+  signal?: AbortSignal,
+): Promise<MovieQualityProfile[]> {
+  try {
+    const response = await apiClient.get<MovieQualityProfilesResponse>(
+      '/api/v1/resources/movies/quality-profiles',
+      {
+        signal,
+        timeout: 60000,
+      },
+    )
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'quality profiles fetch failed')
+    }
+
+    const items = response.data.data?.items
+
+    if (!Array.isArray(items)) {
+      throw new Error(response.data.message || 'quality profiles fetch failed')
+    }
+
+    return items
+  } catch (error) {
+    if (isRequestCanceledError(error)) {
+      throw error
+    }
+
+    throw new Error(
+      getAxiosErrorMessage(error) || '质量档位加载失败，请稍后重试。',
+    )
+  }
+}
+
+export async function addMovieResource(
+  payload: AddMovieResourceRequest,
+): Promise<AddMovieResourceResponse['data']> {
+  try {
+    const response = await apiClient.post<AddMovieResourceResponse>(
+      '/api/v1/resources/movies/add',
+      payload,
+    )
+
+    if (
+      !response.data.success ||
+      response.data.data?.status !== 'search_started'
+    ) {
+      throw new Error(response.data.message || 'failed to start movie search')
+    }
+
+    return response.data.data
+  } catch (error) {
+    throw new Error(
+      getAxiosErrorMessage(error) || '搜索发起失败，请稍后重试。',
+    )
+  }
 }
 
 export async function searchSeries(

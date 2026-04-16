@@ -39,6 +39,43 @@ export type MovieSearchResponse = ResourceSearchResponse<MovieSearchItem>
 
 export type SeriesSearchResponse = ResourceSearchResponse<SeriesSearchItem>
 
+export type MovieQualityProfile = {
+  id: number
+  name: string
+  is_default: boolean
+}
+
+export type MovieQualityProfilesResponse = {
+  success: boolean
+  message: string
+  data: {
+    items: MovieQualityProfile[]
+  }
+}
+
+export type AddMovieResourceRequest = {
+  tmdb_id: number
+  title: string
+  year: number | null
+  qualityProfileId: number
+}
+
+export type AddMovieResourceResponse = {
+  success: boolean
+  message: string
+  data: {
+    status: 'search_started' | string
+    action: 'added_then_searched' | 'updated_existing_then_searched' | string
+    movie: {
+      id: number
+      tmdb_id: number
+      title: string
+      year: number | null
+      qualityProfileId: number
+    }
+  } | null
+}
+
 export type SeriesSeasonsData = {
   tvdb_id: number
   title: string

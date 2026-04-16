@@ -3,17 +3,26 @@ import { ChevronDown, Clapperboard } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import type {
+  MovieQualityProfile,
+  MovieSearchItem,
   SearchableResourceItem,
   SeriesSearchItem,
 } from '@/types/resources'
 
+export type MediaCardAddStatus = 'idle' | 'loading' | 'success' | 'error'
+
 type MediaCardProps = {
   item: SearchableResourceItem
+  addStatus?: MediaCardAddStatus
+  addMessage?: string | null
+  qualityProfiles?: MovieQualityProfile[]
+  selectedQualityProfileId?: number
+  onQualityProfileChange?: (
+    item: MovieSearchItem,
+    qualityProfileId: number,
+  ) => void
+  onAddMovie?: (item: MovieSearchItem, qualityProfileId: number) => void
 }
-
-const MEDIA_QUALITY_OPTIONS = ['4K UHD', '1080P', '4K Restored'] as const
-
-type MediaQuality = (typeof MEDIA_QUALITY_OPTIONS)[number]
 
 function isSeriesSearchItem(
   item: SearchableResourceItem,
@@ -21,16 +30,46 @@ function isSeriesSearchItem(
   return 'tvdb_id' in item
 }
 
-export function MediaCard({ item }: MediaCardProps) {
-  const [selectedQuality, setSelectedQuality] = useState<MediaQuality>('1080P')
+export function MediaCard({
+  item,
+  addStatus = 'idle',
+  addMessage = null,
+  qualityProfiles = [],
+  selectedQualityProfileId,
+  onQualityProfileChange,
+  onAddMovie,
+}: MediaCardProps) {
   const [hasImageError, setHasImageError] = useState(false)
+  const isSeriesItem = isSeriesSearchItem(item)
+  const canAddMovie = !isSeriesItem && Boolean(onAddMovie)
+  const isAddLoading = addStatus === 'loading'
+  const isAddSuccess = addStatus === 'success'
+  const hasQualityProfiles = qualityProfiles.length > 0
+  const hasSelectedQualityProfile =
+    typeof selectedQualityProfileId === 'number'
+  const isQualitySelectDisabled =
+    !canAddMovie || isAddLoading || isAddSuccess || !hasQualityProfiles
+  const isAddDisabled =
+    !canAddMovie ||
+    isAddLoading ||
+    isAddSuccess ||
+    !hasQualityProfiles ||
+    !hasSelectedQualityProfile
   const posterSrc = item.poster?.trim()
   const originalTitle = item.original_title?.trim()
   const overview = item.overview?.trim()
   const showOriginalTitle = Boolean(originalTitle && originalTitle !== item.title)
-  const network = isSeriesSearchItem(item) ? item.network?.trim() : null
-  const seriesType = isSeriesSearchItem(item) ? item.series_type?.trim() : null
+  const network = isSeriesItem ? item.network?.trim() : null
+  const seriesType = isSeriesItem ? item.series_type?.trim() : null
   const metaLabel = network || seriesType
+
+  const addFeedbackTone =
+    addStatus === 'error' ? 'text-rose-500' : 'text-emerald-600'
+  const addButtonTitle = !canAddMovie
+    ? '暂未实现'
+    : !hasQualityProfiles
+      ? '质量档位未加载'
+      : undefined
 
   return (
     <article className="group space-y-3">
@@ -83,18 +122,35 @@ export function MediaCard({ item }: MediaCardProps) {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative min-w-0 flex-1">
             <select
-              value={selectedQuality}
-              onChange={(event) =>
-                setSelectedQuality(event.target.value as MediaQuality)
-              }
-              aria-label={`${item.title} 清晰度`}
-              className="h-9 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-8 text-xs font-medium text-slate-600 outline-none transition hover:border-slate-300 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/60"
+              value={selectedQualityProfileId ?? ''}
+              onChange={(event) => {
+                if (isSeriesItem) {
+                  return
+                }
+
+                if (!event.target.value) {
+                  return
+                }
+
+                const nextQualityProfileId = Number(event.target.value)
+
+                if (Number.isFinite(nextQualityProfileId)) {
+                  onQualityProfileChange?.(item, nextQualityProfileId)
+                }
+              }}
+              disabled={isQualitySelectDisabled}
+              aria-label={`${item.title} 质量档位`}
+              className="h-9 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-8 text-xs font-medium text-slate-600 outline-none transition hover:border-slate-300 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/60 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
             >
-              {MEDIA_QUALITY_OPTIONS.map((quality) => (
-                <option key={quality} value={quality}>
-                  {quality}
-                </option>
-              ))}
+              {hasQualityProfiles ? (
+                qualityProfiles.map((qualityProfile) => (
+                  <option key={qualityProfile.id} value={qualityProfile.id}>
+                    {qualityProfile.name}
+                  </option>
+                ))
+              ) : (
+                <option value="">质量档位</option>
+              )}
             </select>
 
             <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
@@ -102,13 +158,27 @@ export function MediaCard({ item }: MediaCardProps) {
 
           <Button
             type="button"
-            disabled
-            title="暂未实现"
+            disabled={isAddDisabled}
+            title={addButtonTitle}
+            onClick={() => {
+              if (
+                !isSeriesItem &&
+                typeof selectedQualityProfileId === 'number'
+              ) {
+                onAddMovie?.(item, selectedQualityProfileId)
+              }
+            }}
             className="h-9 w-full rounded-xl bg-slate-900 px-4 text-xs font-semibold text-white shadow-none hover:bg-slate-800 sm:w-auto"
           >
-            + 入库
+            添加
           </Button>
         </div>
+
+        {addMessage ? (
+          <p className={`text-xs font-medium ${addFeedbackTone}`}>
+            {addMessage}
+          </p>
+        ) : null}
       </div>
     </article>
   )
