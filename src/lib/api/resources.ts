@@ -66,10 +66,7 @@ export async function getMovieQualityProfiles(
   try {
     const response = await apiClient.get<MovieQualityProfilesResponse>(
       '/api/v1/resources/movies/quality-profiles',
-      {
-        signal,
-        timeout: 60000,
-      },
+      { signal },
     )
 
     if (!response.data.success) {
