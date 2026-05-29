@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { PageContainer } from '@/components/layout/page-container'
+import { AnimeCard } from '@/components/resources/anime-card'
 import {
   CategorySwitch,
   type ResourceCategoryValue,
@@ -10,6 +11,7 @@ import {
   type MediaCardAddStatus,
 } from '@/components/resources/media-card'
 import { SearchBar } from '@/components/resources/search-bar'
+import { searchAnime } from '@/lib/api/anime'
 import {
   addMovieResource,
   getMovieQualityProfiles,
@@ -17,20 +19,22 @@ import {
   searchMovies,
   searchSeries,
 } from '@/lib/api/resources'
+import type { AnimeSearchItem } from '@/types/anime'
 import type {
   MovieQualityProfile,
   MovieSearchItem,
   SearchableResourceItem,
 } from '@/types/resources'
 
-type SearchableCategory = Extract<ResourceCategoryValue, 'movie' | 'tv'>
+type SearchableCategory = ResourceCategoryValue
+type ResourceSearchResultItem = SearchableResourceItem | AnimeSearchItem
 
 type ResourceSearchStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
 type MovieQualityProfilesStatus = 'idle' | 'loading' | 'success' | 'error'
 
 type ResourceSearchState = {
   status: ResourceSearchStatus
-  items: SearchableResourceItem[]
+  items: ResourceSearchResultItem[]
   errorMessage: string | null
 }
 
@@ -72,33 +76,43 @@ const searchableCategoryCopy: Record<
     emptyDescription: '换个电视剧名称试试，或检查关键词是否输入正确。',
     errorMessage: '电视剧搜索失败，请稍后重试。',
   },
-}
-
-const unsupportedCategoryCopy = {
   anime: {
-    title: '动漫搜索暂未接入',
-    description: '当前仅保留动漫分类占位提示，本轮不会发起真实搜索请求。',
+    placeholder: '搜索动漫名称…',
+    idleTitle: '输入动漫名称开始搜索',
+    idleDescription: '当前分类会调用动漫搜索接口。',
+    loadingTitle: '正在搜索动漫…',
+    loadingDescription: '正在获取 Mikan 搜索结果。',
+    emptyTitle: '没有搜索结果',
+    emptyDescription: '换个动漫名称试试，或检查关键词是否输入正确。',
+    errorMessage: '动漫搜索失败，请稍后重试。',
   },
-} satisfies Record<'anime', { title: string; description: string }>
+}
 
 const categorySearchHandlers: Record<
   SearchableCategory,
-  (term: string, signal?: AbortSignal) => Promise<SearchableResourceItem[]>
+  (term: string, signal?: AbortSignal) => Promise<ResourceSearchResultItem[]>
 > = {
   movie: async (term, signal) => searchMovies(term, signal),
   tv: async (term, signal) => searchSeries(term, signal),
+  anime: async (term, signal) => searchAnime(term, signal),
 }
 
 function isSearchableCategory(
   category: ResourceCategoryValue,
 ): category is SearchableCategory {
-  return category === 'movie' || category === 'tv'
+  return category in categorySearchHandlers
+}
+
+function isAnimeSearchItem(
+  item: ResourceSearchResultItem,
+): item is AnimeSearchItem {
+  return 'source_url' in item
 }
 
 function isMovieSearchItem(
-  item: SearchableResourceItem,
+  item: ResourceSearchResultItem,
 ): item is MovieSearchItem {
-  return !('tvdb_id' in item)
+  return !isAnimeSearchItem(item) && !('tvdb_id' in item)
 }
 
 function getMovieAddKey(item: MovieSearchItem) {
@@ -284,7 +298,7 @@ export function ResourceSearchPage() {
     : null
   const isSearching = isCategorySearchable && searchState.status === 'loading'
   const isSearchSubmitDisabled = !isCategorySearchable || isSearching
-  const activeSearchPlaceholder = activeCategoryCopy?.placeholder ?? '动漫搜索暂未接入'
+  const activeSearchPlaceholder = activeCategoryCopy?.placeholder ?? '搜索资源…'
   const defaultMovieQualityProfileId =
     getDefaultMovieQualityProfileId(movieQualityProfiles)
 
@@ -514,12 +528,7 @@ export function ResourceSearchPage() {
 
   function renderSearchContent() {
     if (!activeCategoryCopy) {
-      return (
-        <EmptyState
-          title={unsupportedCategoryCopy.anime.title}
-          description={unsupportedCategoryCopy.anime.description}
-        />
-      )
+      return null
     }
 
     switch (searchState.status) {
@@ -551,6 +560,10 @@ export function ResourceSearchPage() {
         return (
           <div className="mx-auto grid max-w-7xl grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {searchState.items.map((item) => {
+              if (isAnimeSearchItem(item)) {
+                return <AnimeCard key={item.id} item={item} />
+              }
+
               const movieAddState = isMovieSearchItem(item)
                 ? movieAddStates[getMovieAddKey(item)]
                 : null
@@ -596,7 +609,7 @@ export function ResourceSearchPage() {
   return (
     <PageContainer
       title="资源搜索"
-      description="电影与电视剧分类支持按回车或点击搜索按钮发起真实搜索，动漫分类暂时保留占位提示。"
+      description="电影、电视剧与动漫分类支持按回车或点击搜索按钮发起真实搜索。"
     >
       <div className="space-y-10">
         <div className="flex flex-col items-center gap-6">
