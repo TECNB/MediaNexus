@@ -32,6 +32,18 @@ Quality in this project means preserving existing working flows while adding sma
 - Prefer the smallest scoped verification available when verification is necessary and allowed.
 - For reviews, prioritize requirement fit, API contract consistency, obvious correctness, and missing states.
 
+## Commit Requirements
+
+- Every commit in this repository must use the author identity `TECNB <3489044730@qq.com>`.
+- Commit messages must follow the basic Conventional Commit shape while keeping the description in Chinese.
+- Valid examples:
+  - `feat: 接入动漫 Mikan 搜索`
+  - `fix: 修复资源搜索取消请求状态`
+  - `chore: 归档 Trellis 任务`
+- Keep prefixes such as `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, and `test:` in English.
+- Do not use English descriptions after the prefix.
+- Before committing, verify the local git author when recent commits or environment state suggest it may be wrong.
+
 ---
 
 ## Testing Requirements

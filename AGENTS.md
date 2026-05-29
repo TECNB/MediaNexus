@@ -19,3 +19,14 @@ If you're using Codex or another agent-capable tool, additional project-scoped h
 Managed by Trellis. Edits outside this block are preserved; edits inside may be overwritten by a future `trellis update`.
 
 <!-- TRELLIS:END -->
+
+## Commit Rules
+
+- Use the repository git identity for every commit: `TECNB <3489044730@qq.com>`.
+- Commit messages must use Conventional Commit prefixes and Chinese descriptions.
+- Keep the prefix in English, followed by a Chinese summary, for example:
+  - `feat: 接入动漫 Mikan 搜索`
+  - `fix: 修复动漫搜索错误态`
+  - `chore: 归档 Trellis 任务`
+- Do not write English commit summaries such as `feat: connect anime mikan search`.
+- Before committing, check `git config user.name` and `git config user.email` if there is any uncertainty about the active author.
