@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/api-integration.md", "reason": "Check Java/Python API boundary"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Check validation boundaries and scope control"}
+{"file": ".trellis/tasks/05-29-anime-mikan-search/research/anime-mikan-decisions.md", "reason": "Check against agreed Grill Me decisions"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Check DTO separation and nullability"}
+{"file": ".trellis/spec/frontend/anime-module.md", "reason": "Check Anime scope and non-goals"}

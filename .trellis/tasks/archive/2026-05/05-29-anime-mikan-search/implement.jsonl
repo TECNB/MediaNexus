@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Resource card/component changes"}
+{"file": ".trellis/spec/frontend/anime-module.md", "reason": "Anime module rules and Java API direction"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Anime DTO and envelope typing guidance"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend entrypoint and required guide index"}
+{"file": ".trellis/spec/frontend/api-integration.md", "reason": "Python vs Java API routing and client rules"}
+{"file": ".trellis/tasks/05-29-anime-mikan-search/research/anime-mikan-decisions.md", "reason": "Grill Me decisions for Anime search scope"}
