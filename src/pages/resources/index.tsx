@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { PageContainer } from '@/components/layout/page-container'
-import { AnimeCard } from '@/components/resources/anime-card'
+import {
+  AnimeCard,
+  type AnimeCardLoadStatus,
+  type AnimeCardSubscribeStatus,
+} from '@/components/resources/anime-card'
 import {
   CategorySwitch,
   type ResourceCategoryValue,
@@ -11,7 +15,12 @@ import {
   type MediaCardAddStatus,
 } from '@/components/resources/media-card'
 import { SearchBar } from '@/components/resources/search-bar'
-import { searchAnime } from '@/lib/api/anime'
+import {
+  getAnimeSubtitleGroups,
+  previewAnimeSubscription,
+  searchAnime,
+  subscribeAnime,
+} from '@/lib/api/anime'
 import {
   addMovieResource,
   getMovieQualityProfiles,
@@ -19,7 +28,11 @@ import {
   searchMovies,
   searchSeries,
 } from '@/lib/api/resources'
-import type { AnimeSearchItem } from '@/types/anime'
+import type {
+  AnimeSearchItem,
+  AnimeSubtitleGroup,
+  AnimeSubscriptionPreview,
+} from '@/types/anime'
 import type {
   MovieQualityProfile,
   MovieSearchItem,
@@ -40,6 +53,23 @@ type ResourceSearchState = {
 
 type MovieAddState = {
   status: MediaCardAddStatus
+  message: string | null
+}
+
+type AnimeGroupsState = {
+  status: AnimeCardLoadStatus
+  groups: AnimeSubtitleGroup[]
+  message: string | null
+}
+
+type AnimePreviewState = {
+  status: AnimeCardLoadStatus
+  preview: AnimeSubscriptionPreview | null
+  message: string | null
+}
+
+type AnimeSubscribeState = {
+  status: AnimeCardSubscribeStatus
   message: string | null
 }
 
@@ -121,6 +151,10 @@ function getMovieAddKey(item: MovieSearchItem) {
     : `id:${item.id}`
 }
 
+function getAnimeCardKey(item: AnimeSearchItem) {
+  return item.id
+}
+
 function getDefaultMovieQualityProfileId(profiles: MovieQualityProfile[]) {
   return profiles.find((profile) => profile.is_default)?.id ?? profiles[0]?.id
 }
@@ -167,10 +201,25 @@ export function ResourceSearchPage() {
   const [movieQualitySelections, setMovieQualitySelections] = useState<
     Record<string, number>
   >({})
+  const [animeGroupsStates, setAnimeGroupsStates] = useState<
+    Record<string, AnimeGroupsState>
+  >({})
+  const [animePreviewStates, setAnimePreviewStates] = useState<
+    Record<string, AnimePreviewState>
+  >({})
+  const [animeGroupSelections, setAnimeGroupSelections] = useState<
+    Record<string, string>
+  >({})
+  const [animeSubscribeStates, setAnimeSubscribeStates] = useState<
+    Record<string, AnimeSubscribeState>
+  >({})
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const latestRequestIdRef = useRef(0)
   const activeRequestControllerRef = useRef<AbortController | null>(null)
   const activeMovieAddKeysRef = useRef<Set<string>>(new Set())
+  const activeAnimeSubscribeKeysRef = useRef<Set<string>>(new Set())
+  const animeCardsControllerRef = useRef<AbortController | null>(null)
+  const animePreviewRequestIdsRef = useRef<Record<string, number>>({})
   const movieQualityProfilesStatusRef =
     useRef<MovieQualityProfilesStatus>('idle')
   const movieQualityProfilesRequestIdRef = useRef(0)
@@ -259,6 +308,8 @@ export function ResourceSearchPage() {
   useEffect(() => {
     return () => {
       activeRequestControllerRef.current?.abort()
+      animeCardsControllerRef.current?.abort()
+      animeCardsControllerRef.current = null
       movieQualityProfilesControllerRef.current?.abort()
       movieQualityProfilesControllerRef.current = null
 
@@ -272,10 +323,18 @@ export function ResourceSearchPage() {
     latestRequestIdRef.current += 1
     activeRequestControllerRef.current?.abort()
     activeRequestControllerRef.current = null
+    animeCardsControllerRef.current?.abort()
+    animeCardsControllerRef.current = null
     activeMovieAddKeysRef.current.clear()
+    activeAnimeSubscribeKeysRef.current.clear()
     setSearchState(createInitialSearchState())
     setMovieAddStates({})
     setMovieQualitySelections({})
+    setAnimeGroupsStates({})
+    setAnimePreviewStates({})
+    setAnimeGroupSelections({})
+    setAnimeSubscribeStates({})
+    animePreviewRequestIdsRef.current = {}
   }, [category])
 
   useEffect(() => {
@@ -316,12 +375,20 @@ export function ResourceSearchPage() {
 
     activeRequestControllerRef.current?.abort()
     activeRequestControllerRef.current = null
+    animeCardsControllerRef.current?.abort()
+    animeCardsControllerRef.current = null
 
     if (!keyword) {
       activeMovieAddKeysRef.current.clear()
+      activeAnimeSubscribeKeysRef.current.clear()
       setSearchState(createInitialSearchState())
       setMovieAddStates({})
       setMovieQualitySelections({})
+      setAnimeGroupsStates({})
+      setAnimePreviewStates({})
+      setAnimeGroupSelections({})
+      setAnimeSubscribeStates({})
+      animePreviewRequestIdsRef.current = {}
       return
     }
 
@@ -329,8 +396,14 @@ export function ResourceSearchPage() {
     activeRequestControllerRef.current = controller
 
     activeMovieAddKeysRef.current.clear()
+    activeAnimeSubscribeKeysRef.current.clear()
     setMovieAddStates({})
     setMovieQualitySelections({})
+    setAnimeGroupsStates({})
+    setAnimePreviewStates({})
+    setAnimeGroupSelections({})
+    setAnimeSubscribeStates({})
+    animePreviewRequestIdsRef.current = {}
     setSearchState({
       status: 'loading',
       items: [],
@@ -348,6 +421,10 @@ export function ResourceSearchPage() {
           items,
           errorMessage: null,
         })
+
+        if (activeCategory === 'anime' && items.length > 0) {
+          startAnimeCardSetup(items.filter(isAnimeSearchItem), requestId)
+        }
       })
       .catch((error) => {
         if (controller.signal.aborted || isRequestCanceledError(error)) {
@@ -490,6 +567,280 @@ export function ResourceSearchPage() {
       })
   }
 
+  function startAnimeCardSetup(items: AnimeSearchItem[], searchRequestId: number) {
+    animeCardsControllerRef.current?.abort()
+    const controller = new AbortController()
+    animeCardsControllerRef.current = controller
+
+    const loadingStates = items.reduce<Record<string, AnimeGroupsState>>(
+      (states, item) => {
+        states[getAnimeCardKey(item)] = {
+          status: 'loading',
+          groups: [],
+          message: null,
+        }
+        return states
+      },
+      {},
+    )
+
+    setAnimeGroupsStates(loadingStates)
+    setAnimePreviewStates({})
+    setAnimeGroupSelections({})
+    setAnimeSubscribeStates({})
+    animePreviewRequestIdsRef.current = {}
+
+    items.forEach((item) => {
+      void loadAnimeGroups(item, controller.signal, searchRequestId)
+    })
+  }
+
+  async function loadAnimeGroups(
+    item: AnimeSearchItem,
+    signal: AbortSignal,
+    searchRequestId: number,
+  ) {
+    const itemKey = getAnimeCardKey(item)
+    const sourceUrl = item.source_url?.trim()
+
+    if (!sourceUrl) {
+      setAnimeGroupsStates((currentStates) => ({
+        ...currentStates,
+        [itemKey]: {
+          status: 'error',
+          groups: [],
+          message: '该结果缺少来源地址。',
+        },
+      }))
+      return
+    }
+
+    try {
+      const groups = await getAnimeSubtitleGroups(item.id, sourceUrl, signal)
+
+      if (signal.aborted || latestRequestIdRef.current !== searchRequestId) {
+        return
+      }
+
+      setAnimeGroupsStates((currentStates) => ({
+        ...currentStates,
+        [itemKey]: {
+          status: 'success',
+          groups,
+          message: groups.length > 0 ? null : '未找到中文字幕组',
+        },
+      }))
+
+      const defaultGroup = groups[0]
+      if (defaultGroup) {
+        setAnimeGroupSelections((currentSelections) => ({
+          ...currentSelections,
+          [itemKey]: defaultGroup.id,
+        }))
+        void loadAnimePreview(item, defaultGroup, signal, searchRequestId)
+      }
+    } catch (error) {
+      if (signal.aborted || isRequestCanceledError(error)) {
+        return
+      }
+
+      if (latestRequestIdRef.current !== searchRequestId) {
+        return
+      }
+
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message.trim()
+          : '字幕组加载失败，请稍后重试。'
+
+      setAnimeGroupsStates((currentStates) => ({
+        ...currentStates,
+        [itemKey]: {
+          status: 'error',
+          groups: [],
+          message,
+        },
+      }))
+    }
+  }
+
+  async function loadAnimePreview(
+    item: AnimeSearchItem,
+    group: AnimeSubtitleGroup,
+    signal: AbortSignal | undefined,
+    searchRequestId: number,
+  ) {
+    const itemKey = getAnimeCardKey(item)
+    const previewRequestId =
+      (animePreviewRequestIdsRef.current[itemKey] ?? 0) + 1
+    animePreviewRequestIdsRef.current[itemKey] = previewRequestId
+
+    setAnimePreviewStates((currentStates) => ({
+      ...currentStates,
+      [itemKey]: {
+        status: 'loading',
+        preview: null,
+        message: null,
+      },
+    }))
+
+    try {
+      const preview = await previewAnimeSubscription(
+        {
+          rss: group.rss,
+          bgm_url: group.bgm_url,
+          subgroup: group.label,
+        },
+        signal,
+      )
+
+      if (
+        signal?.aborted ||
+        latestRequestIdRef.current !== searchRequestId ||
+        animePreviewRequestIdsRef.current[itemKey] !== previewRequestId
+      ) {
+        return
+      }
+
+      setAnimePreviewStates((currentStates) => ({
+        ...currentStates,
+        [itemKey]: {
+          status: 'success',
+          preview,
+          message: null,
+        },
+      }))
+    } catch (error) {
+      if (signal?.aborted || isRequestCanceledError(error)) {
+        return
+      }
+
+      if (
+        latestRequestIdRef.current !== searchRequestId ||
+        animePreviewRequestIdsRef.current[itemKey] !== previewRequestId
+      ) {
+        return
+      }
+
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message.trim()
+          : '字幕组预览失败，请稍后重试。'
+
+      setAnimePreviewStates((currentStates) => ({
+        ...currentStates,
+        [itemKey]: {
+          status: 'error',
+          preview: null,
+          message,
+        },
+      }))
+    }
+  }
+
+  function handleAnimeGroupChange(item: AnimeSearchItem, groupId: string) {
+    const itemKey = getAnimeCardKey(item)
+    const group = animeGroupsStates[itemKey]?.groups.find(
+      (candidate) => candidate.id === groupId,
+    )
+
+    setAnimeGroupSelections((currentSelections) => ({
+      ...currentSelections,
+      [itemKey]: groupId,
+    }))
+    setAnimeSubscribeStates((currentStates) => {
+      const currentState = currentStates[itemKey]
+      if (!currentState || currentState.status === 'success') {
+        return currentStates
+      }
+      return {
+        ...currentStates,
+        [itemKey]: {
+          status: 'idle',
+          message: null,
+        },
+      }
+    })
+
+    if (group) {
+      void loadAnimePreview(
+        item,
+        group,
+        animeCardsControllerRef.current?.signal,
+        latestRequestIdRef.current,
+      )
+    }
+  }
+
+  function handleAnimeSubscribe(item: AnimeSearchItem) {
+    const itemKey = getAnimeCardKey(item)
+    const selectedGroupId = animeGroupSelections[itemKey]
+    const group = animeGroupsStates[itemKey]?.groups.find(
+      (candidate) => candidate.id === selectedGroupId,
+    )
+    const previewState = animePreviewStates[itemKey]
+
+    if (
+      !group ||
+      previewState?.status !== 'success' ||
+      !previewState.preview ||
+      previewState.preview.preview_count <= 0 ||
+      activeAnimeSubscribeKeysRef.current.has(itemKey) ||
+      animeSubscribeStates[itemKey]?.status === 'success'
+    ) {
+      return
+    }
+
+    activeAnimeSubscribeKeysRef.current.add(itemKey)
+    setAnimeSubscribeStates((currentStates) => ({
+      ...currentStates,
+      [itemKey]: {
+        status: 'loading',
+        message: '正在订阅…',
+      },
+    }))
+
+    void subscribeAnime({
+      rss: group.rss,
+      bgm_url: group.bgm_url,
+      subgroup: group.label,
+    })
+      .then((result) => {
+        setAnimePreviewStates((currentStates) => ({
+          ...currentStates,
+          [itemKey]: {
+            status: 'success',
+            preview: result.preview,
+            message: null,
+          },
+        }))
+        setAnimeSubscribeStates((currentStates) => ({
+          ...currentStates,
+          [itemKey]: {
+            status: 'success',
+            message: result.message,
+          },
+        }))
+        setToastMessage(result.message)
+      })
+      .catch((error) => {
+        activeAnimeSubscribeKeysRef.current.delete(itemKey)
+        const message =
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : '订阅失败，请稍后重试。'
+
+        setAnimeSubscribeStates((currentStates) => ({
+          ...currentStates,
+          [itemKey]: {
+            status: 'error',
+            message,
+          },
+        }))
+        setToastMessage(message)
+      })
+  }
+
   function renderMovieQualityProfilesNotice() {
     if (category !== 'movie') {
       return null
@@ -561,7 +912,28 @@ export function ResourceSearchPage() {
           <div className="mx-auto grid max-w-7xl grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {searchState.items.map((item) => {
               if (isAnimeSearchItem(item)) {
-                return <AnimeCard key={item.id} item={item} />
+                const itemKey = getAnimeCardKey(item)
+                const groupsState = animeGroupsStates[itemKey]
+                const previewState = animePreviewStates[itemKey]
+                const subscribeState = animeSubscribeStates[itemKey]
+
+                return (
+                  <AnimeCard
+                    key={item.id}
+                    item={item}
+                    groups={groupsState?.groups}
+                    groupsStatus={groupsState?.status}
+                    groupsMessage={groupsState?.message}
+                    selectedGroupId={animeGroupSelections[itemKey]}
+                    preview={previewState?.preview}
+                    previewStatus={previewState?.status}
+                    previewMessage={previewState?.message}
+                    subscribeStatus={subscribeState?.status}
+                    subscribeMessage={subscribeState?.message}
+                    onGroupChange={handleAnimeGroupChange}
+                    onSubscribe={handleAnimeSubscribe}
+                  />
+                )
               }
 
               const movieAddState = isMovieSearchItem(item)

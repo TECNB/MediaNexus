@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/anime-module.md", "reason": "Anime-specific UX and scope rules for extending the resource search page."}
+{"file": ".trellis/spec/frontend/api-integration.md", "reason": "Rules for Java-backed frontend API modules and response mapping."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Component composition guidance for localized card changes."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "State ownership guidance for per-card loading, preview, and add states."}
