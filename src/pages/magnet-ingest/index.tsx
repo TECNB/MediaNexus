@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import {
   createMovieMagnetIngest,
   createSeriesMagnetIngest,
+  searchAnimeMagnetItems,
 } from '@/lib/api/magnet-ingest'
 import {
   getSeriesSeasons,
@@ -30,6 +31,7 @@ import {
 } from '@/data/mock-magnet-ingest'
 import { cn } from '@/lib/utils'
 import type {
+  AnimeMagnetSearchItem,
   CreateMovieMagnetIngestPayload,
   CreateSeriesMagnetIngestPayload,
   IngestMode,
@@ -65,11 +67,12 @@ function MediaTypeToggle({
 }) {
   const options: Array<{ label: string; value: IngestMode }> = [
     { label: '电影(Movie)', value: 'movie' },
-    { label: '电视剧 (TV Show)', value: 'series' },
+    { label: '电视剧(TV)', value: 'series' },
+    { label: '动漫(Anime)', value: 'anime' },
   ]
 
   return (
-    <div className="inline-flex rounded-2xl border border-slate-200 bg-slate-100/80 p-1">
+    <div className="flex w-full rounded-2xl border border-slate-200 bg-slate-100/80 p-1 md:w-auto">
       {options.map((option) => {
         const isActive = option.value === mode
 
@@ -80,7 +83,7 @@ function MediaTypeToggle({
             aria-pressed={isActive}
             onClick={() => onChange(option.value)}
             className={cn(
-              'rounded-[14px] px-4 py-2 text-sm font-semibold transition-all',
+              'min-w-0 flex-1 whitespace-nowrap rounded-[14px] px-3 py-2 text-sm font-semibold transition-all md:flex-none md:px-4',
               isActive
                 ? 'bg-white text-slate-950 shadow-[0_1px_2px_rgba(15,23,42,0.08)]'
                 : 'text-slate-500 hover:text-slate-900',
@@ -296,23 +299,47 @@ function getSeriesMagnetIngestPayload(
   }
 }
 
+function isMovieSearchItem(item: unknown): item is MovieSearchItem {
+  return (
+    typeof item === 'object' &&
+    item !== null &&
+    'tmdb_id' in item &&
+    !('tvdb_id' in item) &&
+    !('bgm_id' in item)
+  )
+}
+
+function isSeriesSearchItem(item: unknown): item is SeriesSearchItem {
+  return typeof item === 'object' && item !== null && 'tvdb_id' in item
+}
+
+function isAnimeMagnetSearchItem(item: unknown): item is AnimeMagnetSearchItem {
+  return typeof item === 'object' && item !== null && 'bgm_id' in item
+}
+
 export function MagnetIngestPage() {
   const [mode, setMode] = useState<IngestMode>('movie')
   const [magnetInput, setMagnetInput] = useState(getInitialMagnetText)
   const [movieKeyword, setMovieKeyword] = useState('')
   const [seriesKeyword, setSeriesKeyword] = useState('')
+  const [animeKeyword, setAnimeKeyword] = useState('')
   const [movieSearchStatus, setMovieSearchStatus] =
     useState<ResourceSearchStatus>('idle')
   const [seriesSearchStatus, setSeriesSearchStatus] =
     useState<ResourceSearchStatus>('idle')
+  const [animeSearchStatus, setAnimeSearchStatus] =
+    useState<ResourceSearchStatus>('idle')
   const [movieResults, setMovieResults] = useState<MovieSearchItem[]>([])
   const [seriesResults, setSeriesResults] = useState<SeriesSearchItem[]>([])
+  const [animeResults, setAnimeResults] = useState<AnimeMagnetSearchItem[]>([])
   const [selectedMovie, setSelectedMovie] = useState<MovieSearchItem | null>(
     null,
   )
   const [selectedSeries, setSelectedSeries] = useState<SeriesSearchItem | null>(
     null,
   )
+  const [selectedAnime, setSelectedAnime] =
+    useState<AnimeMagnetSearchItem | null>(null)
   const [seriesSeasonStatus, setSeriesSeasonStatus] =
     useState<SeriesSeasonStatus>('idle')
   const [seriesSeasonOptions, setSeriesSeasonOptions] = useState<number[]>([])
@@ -323,6 +350,7 @@ export function MagnetIngestPage() {
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle')
   const [movieSearchError, setMovieSearchError] = useState<string | null>(null)
   const [seriesSearchError, setSeriesSearchError] = useState<string | null>(null)
+  const [animeSearchError, setAnimeSearchError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitSuccessMessage, setSubmitSuccessMessage] = useState<string | null>(
     null,
@@ -449,7 +477,11 @@ export function MagnetIngestPage() {
     !magnetInput.trim() ||
     Boolean(magnetValidationMessage) ||
     submitStatus === 'loading' ||
-    (mode === 'movie' ? !selectedMovie : Boolean(seriesSeasonValidationMessage))
+    (mode === 'movie'
+      ? !selectedMovie
+      : mode === 'series'
+        ? Boolean(seriesSeasonValidationMessage)
+        : true)
 
   function abortActiveSearch() {
     latestSearchRequestIdRef.current += 1
@@ -490,6 +522,14 @@ export function MagnetIngestPage() {
     resetSeriesSeasonState()
   }
 
+  function resetAnimeModeState() {
+    setAnimeKeyword('')
+    setAnimeSearchStatus('idle')
+    setAnimeResults([])
+    setSelectedAnime(null)
+    setAnimeSearchError(null)
+  }
+
   function handleModeChange(nextMode: IngestMode) {
     if (nextMode === mode) {
       return
@@ -499,8 +539,10 @@ export function MagnetIngestPage() {
 
     if (mode === 'movie') {
       resetMovieModeState()
-    } else {
+    } else if (mode === 'series') {
       resetSeriesModeState()
+    } else {
+      resetAnimeModeState()
     }
 
     setMode(nextMode)
@@ -521,6 +563,15 @@ export function MagnetIngestPage() {
     setSeriesSearchStatus('idle')
     setSeriesResults([])
     setSeriesSearchError(null)
+  }
+
+  function handleAnimeKeywordChange(value: string) {
+    abortActiveSearch()
+    setAnimeKeyword(value)
+    setAnimeSearchStatus('idle')
+    setAnimeResults([])
+    setSelectedAnime(null)
+    setAnimeSearchError(null)
   }
 
   function handleMovieSearchSubmit() {
@@ -641,6 +692,65 @@ export function MagnetIngestPage() {
       })
   }
 
+  function handleAnimeSearchSubmit() {
+    if (animeSearchStatus === 'loading') {
+      return
+    }
+
+    const keyword = animeKeyword.trim()
+    abortActiveSearch()
+    const requestId = latestSearchRequestIdRef.current
+
+    if (!keyword) {
+      setAnimeSearchStatus('idle')
+      setAnimeResults([])
+      setAnimeSearchError(null)
+      return
+    }
+
+    const controller = new AbortController()
+    activeSearchControllerRef.current = controller
+
+    setAnimeSearchStatus('loading')
+    setAnimeResults([])
+    setAnimeSearchError(null)
+
+    void searchAnimeMagnetItems(keyword, controller.signal)
+      .then((items) => {
+        if (latestSearchRequestIdRef.current !== requestId) {
+          return
+        }
+
+        setAnimeSearchStatus(items.length > 0 ? 'success' : 'empty')
+        setAnimeResults(items)
+        setAnimeSearchError(null)
+      })
+      .catch((error) => {
+        if (controller.signal.aborted || isRequestCanceledError(error)) {
+          return
+        }
+
+        if (latestSearchRequestIdRef.current !== requestId) {
+          return
+        }
+
+        console.error('anime magnet search failed', error)
+
+        setAnimeSearchStatus('error')
+        setAnimeResults([])
+        setAnimeSearchError(
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : '动漫搜索失败，请稍后重试。',
+        )
+      })
+      .finally(() => {
+        if (activeSearchControllerRef.current === controller) {
+          activeSearchControllerRef.current = null
+        }
+      })
+  }
+
   async function handleSubmit() {
     if (submitStatus === 'loading') {
       return
@@ -726,6 +836,17 @@ export function MagnetIngestPage() {
         setToastMessage(message)
       }
 
+      return
+    }
+
+    if (mode === 'anime') {
+      const message = selectedAnime
+        ? '动漫手动磁力解析暂未开放，请先完成搜索选择。'
+        : '请先选择一个动漫项目'
+      setSubmitStatus('error')
+      setSubmitError(message)
+      setSubmitSuccessMessage(null)
+      setToastMessage(message)
       return
     }
 
@@ -822,7 +943,9 @@ export function MagnetIngestPage() {
                 title={
                   mode === 'movie'
                     ? '使用电影搜索接口查询媒体库项目，并从结果中单选一个电影进行绑定。'
-                    : '使用剧集搜索接口查询媒体库项目，并从结果中单选一个剧集进行绑定。'
+                    : mode === 'series'
+                      ? '使用剧集搜索接口查询媒体库项目，并从结果中单选一个剧集进行绑定。'
+                      : '使用 Bangumi 搜索接口查询动漫条目，并从结果中单选一个动漫进行绑定。'
                 }
               />
 
@@ -841,7 +964,9 @@ export function MagnetIngestPage() {
                 onKeywordChange={handleMovieKeywordChange}
                 onSearchSubmit={handleMovieSearchSubmit}
                 onSelectItem={(item) => {
-                  setSelectedMovie(item as MovieSearchItem)
+                  if (isMovieSearchItem(item)) {
+                    setSelectedMovie(item)
+                  }
                   resetSubmitFeedback()
                 }}
                 onClearSelection={() => {
@@ -849,7 +974,7 @@ export function MagnetIngestPage() {
                   resetSubmitFeedback()
                 }}
               />
-            ) : (
+            ) : mode === 'series' ? (
               <LibraryLinkPicker
                 mode="series"
                 keyword={seriesKeyword}
@@ -861,12 +986,36 @@ export function MagnetIngestPage() {
                 onKeywordChange={handleSeriesKeywordChange}
                 onSearchSubmit={handleSeriesSearchSubmit}
                 onSelectItem={(item) => {
-                  setSelectedSeries(item as SeriesSearchItem)
+                  if (isSeriesSearchItem(item)) {
+                    setSelectedSeries(item)
+                  }
                   resetSubmitFeedback()
                 }}
                 onClearSelection={() => {
                   setSelectedSeries(null)
                   resetSeriesSeasonState()
+                  resetSubmitFeedback()
+                }}
+              />
+            ) : (
+              <LibraryLinkPicker
+                mode="anime"
+                keyword={animeKeyword}
+                items={animeResults}
+                selectedItem={selectedAnime}
+                searchStatus={animeSearchStatus}
+                searchError={animeSearchError}
+                searchDisabled={animeSearchStatus === 'loading'}
+                onKeywordChange={handleAnimeKeywordChange}
+                onSearchSubmit={handleAnimeSearchSubmit}
+                onSelectItem={(item) => {
+                  if (isAnimeMagnetSearchItem(item)) {
+                    setSelectedAnime(item)
+                  }
+                  resetSubmitFeedback()
+                }}
+                onClearSelection={() => {
+                  setSelectedAnime(null)
                   resetSubmitFeedback()
                 }}
               />
@@ -910,7 +1059,9 @@ export function MagnetIngestPage() {
             ) : (
               <>
                 <CloudUpload className="h-4 w-4" />
-                推送至离线下载 (Push to Offline)
+                {mode === 'anime'
+                  ? '动漫解析与推送待接入'
+                  : '推送至离线下载 (Push to Offline)'}
               </>
             )}
           </Button>

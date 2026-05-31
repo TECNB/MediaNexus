@@ -1,14 +1,27 @@
 import axios from 'axios'
 
-import apiClient from '@/lib/axios'
+import apiClient, { API_REQUEST_TIMEOUT_MS } from '@/lib/axios'
 import type {
+  AnimeMagnetSearchItem,
+  AnimeMagnetSearchResponseData,
   CreateSeriesMagnetIngestApiResponse,
   CreateSeriesMagnetIngestPayload,
   CreateSeriesMagnetIngestResponse,
   CreateMovieMagnetIngestApiResponse,
   CreateMovieMagnetIngestPayload,
   CreateMovieMagnetIngestResponse,
+  JavaApiResponse,
 } from '@/types/magnet-ingest'
+
+const JAVA_ANIME_MAGNET_SEARCH_ERROR_MESSAGE = '动漫搜索失败，请稍后重试。'
+
+const javaApiBaseUrl =
+  import.meta.env.VITE_JAVA_API_BASE_URL?.trim().replace(/\/+$/, '') ?? ''
+
+const javaApiClient = axios.create({
+  baseURL: javaApiBaseUrl || undefined,
+  timeout: API_REQUEST_TIMEOUT_MS,
+})
 
 function getAxiosErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
@@ -24,6 +37,41 @@ function getAxiosErrorMessage(error: unknown) {
   }
 
   return null
+}
+
+export async function searchAnimeMagnetItems(
+  term: string,
+  signal?: AbortSignal,
+): Promise<AnimeMagnetSearchItem[]> {
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<AnimeMagnetSearchResponseData>
+    >('/api/v1/magnet-ingest/anime/search', {
+      params: { term: term.trim() },
+      signal,
+    })
+
+    if (
+      response.data.code !== 200 ||
+      !response.data.data ||
+      !Array.isArray(response.data.data.items)
+    ) {
+      throw new Error(response.data.message || 'anime magnet search failed')
+    }
+
+    return response.data.data.items
+  } catch (error) {
+    if (
+      axios.isCancel(error) ||
+      (axios.isAxiosError(error) && error.code === 'ERR_CANCELED')
+    ) {
+      throw error
+    }
+
+    throw new Error(
+      getAxiosErrorMessage(error) || JAVA_ANIME_MAGNET_SEARCH_ERROR_MESSAGE,
+    )
+  }
 }
 
 export async function createMovieMagnetIngest(

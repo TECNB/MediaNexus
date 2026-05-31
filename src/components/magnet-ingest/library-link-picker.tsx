@@ -9,7 +9,10 @@ import {
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { IngestMode } from '@/types/magnet-ingest'
+import type {
+  AnimeMagnetSearchItem,
+  IngestMode,
+} from '@/types/magnet-ingest'
 import type {
   SearchableResourceItem,
   SeriesSearchItem,
@@ -25,16 +28,18 @@ export type ResourceSearchStatus =
 type LibraryLinkPickerProps = {
   mode: IngestMode
   keyword: string
-  items: SearchableResourceItem[]
-  selectedItem: SearchableResourceItem | null
+  items: LibraryLinkItem[]
+  selectedItem: LibraryLinkItem | null
   searchStatus: ResourceSearchStatus
   searchError: string | null
   searchDisabled?: boolean
   onKeywordChange: (value: string) => void
   onSearchSubmit: () => void
-  onSelectItem: (item: SearchableResourceItem) => void
+  onSelectItem: (item: LibraryLinkItem) => void
   onClearSelection: () => void
 }
+
+export type LibraryLinkItem = SearchableResourceItem | AnimeMagnetSearchItem
 
 const pickerCopy: Record<
   IngestMode,
@@ -78,19 +83,54 @@ const pickerCopy: Record<
     emptyBindingMessage: '尚未绑定剧集项目，请从下方搜索结果中选择一个目标条目。',
     resultsLabel: 'tv show',
   },
+  anime: {
+    searchPlaceholder: '搜索动漫中文名或原名...',
+    searchAriaLabel: '搜索 Bangumi 动漫条目',
+    idleTitle: '搜索并选择动漫',
+    idleDescription: '输入关键词后，点击搜索按钮或按回车发起查询。',
+    loadingTitle: '正在搜索动漫',
+    loadingDescription: '已连接 Bangumi 搜索接口，请稍候。',
+    errorFallback: '动漫搜索失败，请稍后重试。',
+    emptyTitle: '未找到匹配动漫',
+    emptyDescription: '试试中文名、原名或常用简称。',
+    emptyBindingMessage: '尚未绑定动漫项目，请从下方搜索结果中选择一个目标条目。',
+    resultsLabel: 'anime',
+  },
 }
 
 function isSeriesSearchItem(
-  item: SearchableResourceItem,
+  item: LibraryLinkItem,
 ): item is SeriesSearchItem {
   return 'tvdb_id' in item
+}
+
+function isAnimeMagnetSearchItem(
+  item: LibraryLinkItem,
+): item is AnimeMagnetSearchItem {
+  return 'bgm_id' in item
 }
 
 function getItemIcon(mode: IngestMode) {
   return mode === 'series' ? Tv : Clapperboard
 }
 
-function getItemMeta(item: SearchableResourceItem) {
+function getItemPoster(item: LibraryLinkItem) {
+  return isAnimeMagnetSearchItem(item) ? item.cover : item.poster
+}
+
+function getItemMeta(item: LibraryLinkItem) {
+  if (isAnimeMagnetSearchItem(item)) {
+    const parts = [
+      `BGM #${item.bgm_id}`,
+      item.eps ? `${item.eps} 集` : null,
+      item.platform?.trim() || null,
+      item.air_date?.trim() || null,
+      typeof item.score === 'number' ? `评分 ${item.score.toFixed(1)}` : null,
+    ].filter(Boolean)
+
+    return parts.length > 0 ? parts.join(' · ') : '动漫'
+  }
+
   if (isSeriesSearchItem(item)) {
     const parts = [
       item.original_title?.trim() || null,
@@ -217,7 +257,7 @@ export function LibraryLinkPicker({
                   )}
                 >
                   <PosterThumbnail
-                    poster={item.poster}
+                    poster={getItemPoster(item)}
                     title={item.title}
                     mode={mode}
                     inverted={isSelected}
@@ -226,7 +266,7 @@ export function LibraryLinkPicker({
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="truncate text-sm font-semibold">{item.title}</p>
-                      {item.year ? (
+                      {!isAnimeMagnetSearchItem(item) && item.year ? (
                         <span
                           className={cn(
                             'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]',
@@ -249,7 +289,7 @@ export function LibraryLinkPicker({
                       {getItemMeta(item)}
                     </p>
 
-                    {item.overview?.trim() ? (
+                    {!isAnimeMagnetSearchItem(item) && item.overview?.trim() ? (
                       <p
                         className={cn(
                           'mt-1 truncate text-xs',
@@ -311,7 +351,7 @@ export function LibraryLinkPicker({
         {selectedItem ? (
           <div className="mt-3 flex items-center gap-4">
             <PosterThumbnail
-              poster={selectedItem.poster}
+              poster={getItemPoster(selectedItem)}
               title={selectedItem.title}
               mode={mode}
               inverted
