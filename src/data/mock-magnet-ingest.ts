@@ -15,6 +15,8 @@ export type RecentIngestTaskStatus =
   | 'downloading'
   | 'submitted'
   | 'completed'
+  | 'partial'
+  | 'interrupted'
   | 'failed'
 
 export type RecentIngestTask = {

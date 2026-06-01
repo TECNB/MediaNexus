@@ -14,6 +14,16 @@ export type CreateSeriesMagnetIngestPayload = {
 
 export type IngestMode = 'movie' | 'series' | 'anime'
 
+export type CreateAnimeMagnetIngestTaskPayload = {
+  magnet: string
+  bgm_id: string
+  bgm_url: string
+  title: string
+  name_cn: string | null
+  name: string | null
+  season_number: number
+}
+
 export type AnimeMagnetSearchItem = {
   id: string
   bgm_id: string
@@ -37,6 +47,54 @@ export type JavaApiResponse<TData> = {
 
 export type AnimeMagnetSearchResponseData = {
   items: AnimeMagnetSearchItem[]
+  total: number
+}
+
+export type AnimeMagnetIngestTaskStatus =
+  | 'PENDING'
+  | 'SUBMITTED'
+  | 'DOWNLOADING'
+  | 'ORGANIZING'
+  | 'SUCCEEDED'
+  | 'PARTIAL_SUCCESS'
+  | 'FAILED'
+  | 'INTERRUPTED'
+
+export type AnimeMagnetIngestTask = {
+  id: string
+  status: AnimeMagnetIngestTaskStatus
+  stage: string
+  bgm_id: string
+  title: string
+  season_number: number
+  magnet_hash: string
+  save_path: string
+  temp_path: string
+  organized_count: number
+  skipped_count: number
+  error_message: string | null
+  created_at: string | null
+  updated_at: string | null
+  finished_at: string | null
+}
+
+export type AnimeMagnetIngestTaskLog = {
+  id: number
+  task_id: string
+  level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | string
+  stage: string
+  message: string
+  detail: string | null
+  created_at: string | null
+}
+
+export type AnimeMagnetIngestTaskListData = {
+  items: AnimeMagnetIngestTask[]
+  total: number
+}
+
+export type AnimeMagnetIngestTaskLogListData = {
+  items: AnimeMagnetIngestTaskLog[]
   total: number
 }
 

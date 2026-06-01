@@ -14,8 +14,11 @@ import {
 import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
 import {
+  createAnimeMagnetIngestTask,
   createMovieMagnetIngest,
   createSeriesMagnetIngest,
+  listAnimeMagnetIngestTaskLogs,
+  listAnimeMagnetIngestTasks,
   searchAnimeMagnetItems,
 } from '@/lib/api/magnet-ingest'
 import {
@@ -28,10 +31,16 @@ import {
   defaultMagnetText,
   initialRecentTasks,
   systemLogEntries,
+  type RecentIngestTask,
+  type RecentIngestTaskStatus,
 } from '@/data/mock-magnet-ingest'
 import { cn } from '@/lib/utils'
 import type {
   AnimeMagnetSearchItem,
+  AnimeMagnetIngestTask,
+  AnimeMagnetIngestTaskLog,
+  AnimeMagnetIngestTaskStatus,
+  CreateAnimeMagnetIngestTaskPayload,
   CreateMovieMagnetIngestPayload,
   CreateSeriesMagnetIngestPayload,
   IngestMode,
@@ -299,6 +308,79 @@ function getSeriesMagnetIngestPayload(
   }
 }
 
+function getAnimeMagnetIngestPayload(
+  magnet: string,
+  selectedAnime: AnimeMagnetSearchItem,
+): CreateAnimeMagnetIngestTaskPayload | null {
+  const title = selectedAnime.title.trim()
+  const seasonNumber = selectedAnime.season ?? 1
+
+  if (!title || !Number.isInteger(seasonNumber) || seasonNumber < 0) {
+    return null
+  }
+
+  return {
+    magnet,
+    bgm_id: selectedAnime.bgm_id,
+    bgm_url: selectedAnime.bgm_url,
+    title,
+    name_cn: selectedAnime.name_cn,
+    name: selectedAnime.name,
+    season_number: seasonNumber,
+  }
+}
+
+function toRecentTaskStatus(
+  status: AnimeMagnetIngestTaskStatus,
+): RecentIngestTaskStatus {
+  switch (status) {
+    case 'PENDING':
+      return 'parsing'
+    case 'SUBMITTED':
+      return 'submitted'
+    case 'DOWNLOADING':
+    case 'ORGANIZING':
+      return 'downloading'
+    case 'SUCCEEDED':
+      return 'completed'
+    case 'PARTIAL_SUCCESS':
+      return 'partial'
+    case 'INTERRUPTED':
+      return 'interrupted'
+    case 'FAILED':
+    default:
+      return 'failed'
+  }
+}
+
+function formatTaskTime(value: string | null) {
+  if (!value) {
+    return '-'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return '-'
+  }
+
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function toRecentIngestTask(task: AnimeMagnetIngestTask): RecentIngestTask {
+  return {
+    id: task.id,
+    name: task.magnet_hash,
+    libraryTitle: `${task.title} Season ${task.season_number}`,
+    status: toRecentTaskStatus(task.status),
+    time: formatTaskTime(task.updated_at ?? task.created_at),
+  }
+}
+
 function isMovieSearchItem(item: unknown): item is MovieSearchItem {
   return (
     typeof item === 'object' &&
@@ -356,6 +438,21 @@ export function MagnetIngestPage() {
     null,
   )
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [animeTasks, setAnimeTasks] = useState<AnimeMagnetIngestTask[]>([])
+  const [animeTasksStatus, setAnimeTasksStatus] =
+    useState<ResourceSearchStatus>('idle')
+  const [animeTasksError, setAnimeTasksError] = useState<string | null>(null)
+  const [selectedAnimeTaskId, setSelectedAnimeTaskId] = useState<string | null>(
+    null,
+  )
+  const [animeTaskLogs, setAnimeTaskLogs] = useState<AnimeMagnetIngestTaskLog[]>(
+    [],
+  )
+  const [animeTaskLogsStatus, setAnimeTaskLogsStatus] =
+    useState<ResourceSearchStatus>('idle')
+  const [animeTaskLogsError, setAnimeTaskLogsError] = useState<string | null>(
+    null,
+  )
   const latestSearchRequestIdRef = useRef(0)
   const activeSearchControllerRef = useRef<AbortController | null>(null)
   const latestSeriesSeasonRequestIdRef = useRef(0)
@@ -465,6 +562,42 @@ export function MagnetIngestPage() {
     }
   }, [mode, selectedSeries])
 
+  useEffect(() => {
+    if (mode !== 'anime') {
+      return
+    }
+
+    void loadAnimeTasks()
+  }, [mode])
+
+  useEffect(() => {
+    if (mode !== 'anime' || !selectedAnimeTaskId) {
+      setAnimeTaskLogs([])
+      setAnimeTaskLogsStatus('idle')
+      setAnimeTaskLogsError(null)
+      return
+    }
+
+    setAnimeTaskLogsStatus('loading')
+    setAnimeTaskLogsError(null)
+
+    void listAnimeMagnetIngestTaskLogs(selectedAnimeTaskId)
+      .then((logs) => {
+        setAnimeTaskLogs(logs)
+        setAnimeTaskLogsStatus(logs.length > 0 ? 'success' : 'empty')
+        setAnimeTaskLogsError(null)
+      })
+      .catch((error) => {
+        setAnimeTaskLogs([])
+        setAnimeTaskLogsStatus('error')
+        setAnimeTaskLogsError(
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : '任务日志加载失败，请稍后重试。',
+        )
+      })
+  }, [mode, selectedAnimeTaskId])
+
   const magnetValidationMessage = getMagnetValidationMessage(magnetInput)
   const seriesSeasonValidationMessage = getSeasonLoadValidationMessage({
     selectedSeries,
@@ -481,7 +614,7 @@ export function MagnetIngestPage() {
       ? !selectedMovie
       : mode === 'series'
         ? Boolean(seriesSeasonValidationMessage)
-        : true)
+        : !selectedAnime)
 
   function abortActiveSearch() {
     latestSearchRequestIdRef.current += 1
@@ -528,6 +661,28 @@ export function MagnetIngestPage() {
     setAnimeResults([])
     setSelectedAnime(null)
     setAnimeSearchError(null)
+  }
+
+  async function loadAnimeTasks() {
+    setAnimeTasksStatus('loading')
+    setAnimeTasksError(null)
+
+    try {
+      const tasks = await listAnimeMagnetIngestTasks()
+      setAnimeTasks(tasks)
+      setAnimeTasksStatus(tasks.length > 0 ? 'success' : 'empty')
+      if (!selectedAnimeTaskId && tasks.length > 0) {
+        setSelectedAnimeTaskId(tasks[0].id)
+      }
+    } catch (error) {
+      setAnimeTasks([])
+      setAnimeTasksStatus('error')
+      setAnimeTasksError(
+        error instanceof Error && error.message.trim()
+          ? error.message.trim()
+          : '动漫任务加载失败，请稍后重试。',
+      )
+    }
   }
 
   function handleModeChange(nextMode: IngestMode) {
@@ -840,13 +995,57 @@ export function MagnetIngestPage() {
     }
 
     if (mode === 'anime') {
-      const message = selectedAnime
-        ? '动漫手动磁力解析暂未开放，请先完成搜索选择。'
-        : '请先选择一个动漫项目'
-      setSubmitStatus('error')
-      setSubmitError(message)
+      if (!selectedAnime) {
+        const message = '请先选择一个动漫项目'
+        setSubmitStatus('error')
+        setSubmitError(message)
+        setSubmitSuccessMessage(null)
+        setToastMessage(message)
+        return
+      }
+
+      const payload = getAnimeMagnetIngestPayload(
+        normalizedMagnet,
+        selectedAnime,
+      )
+
+      if (!payload) {
+        const message = '所选动漫缺少标题或季数，暂时无法提交'
+        setSubmitStatus('error')
+        setSubmitError(message)
+        setSubmitSuccessMessage(null)
+        setToastMessage(message)
+        return
+      }
+
+      setSubmitStatus('loading')
+      setSubmitError(null)
       setSubmitSuccessMessage(null)
-      setToastMessage(message)
+
+      try {
+        const task = await createAnimeMagnetIngestTask(payload)
+        const successMessage = `动漫整季任务已创建：${task.id}`
+
+        setSubmitStatus('success')
+        setSubmitSuccessMessage(successMessage)
+        setSelectedAnimeTaskId(task.id)
+        setMagnetInput('')
+        setToastMessage(successMessage)
+        await loadAnimeTasks()
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : '推送失败，请稍后重试'
+
+        console.error('anime magnet ingest failed', error)
+
+        setSubmitStatus('error')
+        setSubmitError(message)
+        setSubmitSuccessMessage(null)
+        setToastMessage(message)
+      }
+
       return
     }
 
@@ -1060,7 +1259,7 @@ export function MagnetIngestPage() {
               <>
                 <CloudUpload className="h-4 w-4" />
                 {mode === 'anime'
-                  ? '动漫解析与推送待接入'
+                  ? '创建动漫整季任务'
                   : '推送至离线下载 (Push to Offline)'}
               </>
             )}
@@ -1075,9 +1274,100 @@ export function MagnetIngestPage() {
           ) : null}
 
           <RecentTasksTable
-            tasks={initialRecentTasks}
-            onViewAll={() => setToastMessage('Recent Tasks 暂保持静态 mock')}
+            tasks={
+              mode === 'anime'
+                ? animeTasks.map(toRecentIngestTask)
+                : initialRecentTasks
+            }
+            description={
+              mode === 'anime'
+                ? '展示最近的动漫整季磁力任务，可点击任务查看日志。'
+                : undefined
+            }
+            actionLabel={mode === 'anime' ? '刷新' : 'VIEW ALL'}
+            emptyMessage={
+              animeTasksStatus === 'loading' ? '正在加载任务...' : '暂无动漫任务'
+            }
+            selectedTaskId={mode === 'anime' ? selectedAnimeTaskId : null}
+            onSelectTask={
+              mode === 'anime'
+                ? (task) => {
+                    setSelectedAnimeTaskId(task.id)
+                  }
+                : undefined
+            }
+            onViewAll={() => {
+              if (mode === 'anime') {
+                void loadAnimeTasks()
+                return
+              }
+
+              setToastMessage('Recent Tasks 暂保持静态 mock')
+            }}
           />
+
+          {mode === 'anime' && animeTasksError ? (
+            <p className="text-sm text-rose-500">{animeTasksError}</p>
+          ) : null}
+
+          {mode === 'anime' && selectedAnimeTaskId ? (
+            <section className="space-y-3">
+              <SectionHeading
+                label="Task Logs"
+                title="展示所选动漫磁力任务的后端执行日志。"
+              />
+
+              <div className="rounded-[20px] border border-slate-200 bg-slate-950 p-4 text-sm text-slate-100">
+                {animeTaskLogsStatus === 'loading' ? (
+                  <div className="flex items-center gap-2 text-slate-300">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    正在加载日志...
+                  </div>
+                ) : null}
+
+                {animeTaskLogsStatus === 'error' ? (
+                  <p className="text-rose-200">
+                    {animeTaskLogsError ?? '任务日志加载失败'}
+                  </p>
+                ) : null}
+
+                {animeTaskLogsStatus === 'empty' ? (
+                  <p className="text-slate-400">暂无日志</p>
+                ) : null}
+
+                {animeTaskLogsStatus === 'success' ? (
+                  <div className="max-h-[320px] space-y-2 overflow-y-auto font-mono text-xs leading-6">
+                    {animeTaskLogs.map((entry) => (
+                      <div key={entry.id} className="text-slate-300">
+                        <span className="text-slate-500">
+                          {formatTaskTime(entry.created_at)}
+                        </span>{' '}
+                        <span
+                          className={cn(
+                            'font-semibold',
+                            entry.level === 'ERROR'
+                              ? 'text-rose-300'
+                              : entry.level === 'WARN'
+                                ? 'text-amber-300'
+                                : 'text-emerald-300',
+                          )}
+                        >
+                          {entry.level}
+                        </span>{' '}
+                        <span className="text-slate-500">[{entry.stage}]</span>{' '}
+                        <span>{entry.message}</span>
+                        {entry.detail ? (
+                          <span className="block break-all pl-4 text-slate-500">
+                            {entry.detail}
+                          </span>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
         </div>
 
         <aside className="space-y-5">

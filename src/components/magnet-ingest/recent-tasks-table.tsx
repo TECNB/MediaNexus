@@ -6,7 +6,12 @@ import { cn } from '@/lib/utils'
 
 type RecentTasksTableProps = {
   tasks: RecentIngestTask[]
+  description?: string
+  actionLabel?: string
+  emptyMessage?: string
+  selectedTaskId?: string | null
   onViewAll: () => void
+  onSelectTask?: (task: RecentIngestTask) => void
 }
 
 const statusMeta: Record<
@@ -29,6 +34,14 @@ const statusMeta: Record<
     label: '已完成',
     dotClassName: 'bg-emerald-500',
   },
+  partial: {
+    label: '部分完成',
+    dotClassName: 'bg-violet-500',
+  },
+  interrupted: {
+    label: '已中断',
+    dotClassName: 'bg-slate-400',
+  },
   failed: {
     label: '失败',
     dotClassName: 'bg-rose-500',
@@ -37,7 +50,12 @@ const statusMeta: Record<
 
 export function RecentTasksTable({
   tasks,
+  description = '纯前端 mock 任务流，仅用于展示提交后的任务状态骨架。',
+  actionLabel = 'VIEW ALL',
+  emptyMessage = '暂无任务记录',
+  selectedTaskId,
   onViewAll,
+  onSelectTask,
 }: RecentTasksTableProps) {
   return (
     <section className="rounded-[28px] border border-slate-200 bg-white/95 shadow-shell">
@@ -47,7 +65,7 @@ export function RecentTasksTable({
             Recent Tasks
           </p>
           <p className="mt-2 text-sm text-slate-500">
-            纯前端 mock 任务流，仅用于展示提交后的任务状态骨架。
+            {description}
           </p>
         </div>
 
@@ -56,7 +74,7 @@ export function RecentTasksTable({
           onClick={onViewAll}
           className="text-sm font-semibold text-slate-900 transition-colors hover:text-slate-600"
         >
-          VIEW ALL
+          {actionLabel}
         </button>
       </div>
 
@@ -73,13 +91,30 @@ export function RecentTasksTable({
             </thead>
 
             <tbody className="divide-y divide-slate-100 bg-white">
+              {tasks.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={4}
+                    className="px-5 py-8 text-center text-sm text-slate-400"
+                  >
+                    {emptyMessage}
+                  </td>
+                </tr>
+              ) : null}
+
               {tasks.map((task) => {
                 const meta = statusMeta[task.status]
+                const isSelected = task.id === selectedTaskId
 
                 return (
                   <tr
                     key={task.id}
-                    className="transition-colors hover:bg-slate-50/80"
+                    onClick={() => onSelectTask?.(task)}
+                    className={cn(
+                      'transition-colors hover:bg-slate-50/80',
+                      onSelectTask ? 'cursor-pointer' : '',
+                      isSelected ? 'bg-slate-50' : '',
+                    )}
                   >
                     <td className="max-w-[320px] px-5 py-4 text-sm font-medium text-slate-900">
                       <span className="block truncate">{task.name}</span>

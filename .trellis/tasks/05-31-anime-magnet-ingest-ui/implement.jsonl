@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/anime-module.md", "reason": "Follow Anime UI scope, Java API direction, and user-facing copy rules."}
+{"file": ".trellis/spec/frontend/api-integration.md", "reason": "Add Java API calls with explicit envelope mapping."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Keep changes in the existing magnet ingest page/API/type structure."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Add narrowly scoped Anime task request/response types."}
+{"file": ".trellis/tasks/05-31-anime-magnet-ingest-ui/prd.md", "reason": "Task-specific UI scope and non-goals."}

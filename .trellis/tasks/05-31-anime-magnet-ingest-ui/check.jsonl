@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/anime-module.md", "reason": "Check UI remains simple and Anime-scoped."}
+{"file": ".trellis/spec/frontend/api-integration.md", "reason": "Check Java API envelope handling and endpoint placement."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Check added types are explicit and do not blur movie/series contracts."}
+{"file": ".trellis/tasks/05-31-anime-magnet-ingest-ui/prd.md", "reason": "Verify the UI matches the agreed first-slice scope."}
