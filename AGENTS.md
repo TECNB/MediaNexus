@@ -22,11 +22,12 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 
 ## Commit Rules
 
-- Use the repository git identity for every commit: `TECNB <3489044730@qq.com>`.
+- This is a hard requirement, not a preference: every commit in this repository must use `TECNB <3489044730@qq.com>`.
+- Before creating, amending, rebasing, cherry-picking, or force-pushing commits, run or otherwise verify `git config user.name` and `git config user.email`.
 - Commit messages must use Conventional Commit prefixes and Chinese descriptions.
-- Keep the prefix in English, followed by a Chinese summary, for example:
+- Keep the prefix in English and the summary in Chinese, for example:
   - `feat: 接入动漫 Mikan 搜索`
   - `fix: 修复动漫搜索错误态`
   - `chore: 归档 Trellis 任务`
-- Do not write English commit summaries such as `feat: connect anime mikan search`.
-- Before committing, check `git config user.name` and `git config user.email` if there is any uncertainty about the active author.
+- Forbidden: English summaries after the prefix, such as `feat: connect anime mikan search` or `chore: ignore codex workspace notes`.
+- If a recent commit violates these rules, fix it before pushing; if it has already been pushed, ask for approval and repair it with `git push --force-with-lease`.
