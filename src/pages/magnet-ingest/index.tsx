@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronDown, CloudUpload, Loader2 } from 'lucide-react'
 
 import {
@@ -10,6 +10,7 @@ import {
   NodeStatusCard,
   ProTipCard,
   SystemLogsCard,
+  TaskLogsCard,
 } from '@/components/magnet-ingest/status-cards'
 import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
@@ -49,6 +50,15 @@ import type { MovieSearchItem, SeriesSearchItem } from '@/types/resources'
 
 type SubmitStatus = 'idle' | 'loading' | 'success' | 'error'
 type SeriesSeasonStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
+
+const ANIME_TASK_LOG_POLL_INTERVAL_MS = 2000
+const ANIME_TASK_LIST_POLL_INTERVAL_MS = 5000
+const FINISHED_ANIME_TASK_STATUSES = new Set<AnimeMagnetIngestTaskStatus>([
+  'SUCCEEDED',
+  'PARTIAL_SUCCESS',
+  'FAILED',
+  'INTERRUPTED',
+])
 
 function SectionHeading({
   label,
@@ -353,6 +363,10 @@ function toRecentTaskStatus(
   }
 }
 
+function isFinishedAnimeTaskStatus(status: AnimeMagnetIngestTaskStatus) {
+  return FINISHED_ANIME_TASK_STATUSES.has(status)
+}
+
 function formatTaskTime(value: string | null) {
   if (!value) {
     return '-'
@@ -457,6 +471,57 @@ export function MagnetIngestPage() {
   const activeSearchControllerRef = useRef<AbortController | null>(null)
   const latestSeriesSeasonRequestIdRef = useRef(0)
   const activeSeriesSeasonControllerRef = useRef<AbortController | null>(null)
+  const latestAnimeTaskLogsRequestIdRef = useRef(0)
+  const selectedAnimeTaskIdRef = useRef<string | null>(null)
+  const selectedAnimeTask =
+    animeTasks.find((task) => task.id === selectedAnimeTaskId) ?? null
+  const isSelectedAnimeTaskFinished = selectedAnimeTask
+    ? isFinishedAnimeTaskStatus(selectedAnimeTask.status)
+    : false
+
+  useEffect(() => {
+    selectedAnimeTaskIdRef.current = selectedAnimeTaskId
+  }, [selectedAnimeTaskId])
+
+  const loadAnimeTasks = useCallback(
+    async (options: { showLoading?: boolean } = {}) => {
+      const showLoading = options.showLoading ?? true
+
+      if (showLoading) {
+        setAnimeTasksStatus('loading')
+      }
+      setAnimeTasksError(null)
+
+      try {
+        const tasks = await listAnimeMagnetIngestTasks()
+        setAnimeTasks(tasks)
+        setAnimeTasksStatus(tasks.length > 0 ? 'success' : 'empty')
+
+        const currentTaskId = selectedAnimeTaskIdRef.current
+        if (tasks.length === 0) {
+          selectedAnimeTaskIdRef.current = null
+          setSelectedAnimeTaskId(null)
+        } else if (
+          !currentTaskId ||
+          !tasks.some((task) => task.id === currentTaskId)
+        ) {
+          selectedAnimeTaskIdRef.current = tasks[0].id
+          setSelectedAnimeTaskId(tasks[0].id)
+        }
+      } catch (error) {
+        if (showLoading) {
+          setAnimeTasks([])
+        }
+        setAnimeTasksStatus('error')
+        setAnimeTasksError(
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : '动漫任务加载失败，请稍后重试。',
+        )
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
     if (!toastMessage) {
@@ -567,36 +632,103 @@ export function MagnetIngestPage() {
       return
     }
 
-    void loadAnimeTasks()
-  }, [mode])
+    let isDisposed = false
+    let timeoutId: number | null = null
+
+    const refreshTasks = (showLoading: boolean) => {
+      void loadAnimeTasks({ showLoading }).finally(() => {
+        if (isDisposed) {
+          return
+        }
+
+        timeoutId = window.setTimeout(() => {
+          refreshTasks(false)
+        }, ANIME_TASK_LIST_POLL_INTERVAL_MS)
+      })
+    }
+
+    refreshTasks(true)
+
+    return () => {
+      isDisposed = true
+
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
+    }
+  }, [mode, loadAnimeTasks])
 
   useEffect(() => {
     if (mode !== 'anime' || !selectedAnimeTaskId) {
+      latestAnimeTaskLogsRequestIdRef.current += 1
       setAnimeTaskLogs([])
       setAnimeTaskLogsStatus('idle')
       setAnimeTaskLogsError(null)
       return
     }
 
-    setAnimeTaskLogsStatus('loading')
-    setAnimeTaskLogsError(null)
+    let isDisposed = false
+    let timeoutId: number | null = null
 
-    void listAnimeMagnetIngestTaskLogs(selectedAnimeTaskId)
-      .then((logs) => {
-        setAnimeTaskLogs(logs)
-        setAnimeTaskLogsStatus(logs.length > 0 ? 'success' : 'empty')
-        setAnimeTaskLogsError(null)
-      })
-      .catch((error) => {
-        setAnimeTaskLogs([])
-        setAnimeTaskLogsStatus('error')
-        setAnimeTaskLogsError(
-          error instanceof Error && error.message.trim()
-            ? error.message.trim()
-            : '任务日志加载失败，请稍后重试。',
-        )
-      })
-  }, [mode, selectedAnimeTaskId])
+    const refreshLogs = (showLoading: boolean) => {
+      const requestId = latestAnimeTaskLogsRequestIdRef.current + 1
+      latestAnimeTaskLogsRequestIdRef.current = requestId
+
+      if (showLoading) {
+        setAnimeTaskLogsStatus('loading')
+      }
+      setAnimeTaskLogsError(null)
+
+      void listAnimeMagnetIngestTaskLogs(selectedAnimeTaskId)
+        .then((logs) => {
+          if (
+            isDisposed ||
+            latestAnimeTaskLogsRequestIdRef.current !== requestId
+          ) {
+            return
+          }
+
+          setAnimeTaskLogs(logs)
+          setAnimeTaskLogsStatus(logs.length > 0 ? 'success' : 'empty')
+          setAnimeTaskLogsError(null)
+        })
+        .catch((error) => {
+          if (
+            isDisposed ||
+            latestAnimeTaskLogsRequestIdRef.current !== requestId
+          ) {
+            return
+          }
+
+          setAnimeTaskLogs([])
+          setAnimeTaskLogsStatus('error')
+          setAnimeTaskLogsError(
+            error instanceof Error && error.message.trim()
+              ? error.message.trim()
+              : '任务日志加载失败，请稍后重试。',
+          )
+        })
+        .finally(() => {
+          if (isDisposed || isSelectedAnimeTaskFinished) {
+            return
+          }
+
+          timeoutId = window.setTimeout(() => {
+            refreshLogs(false)
+          }, ANIME_TASK_LOG_POLL_INTERVAL_MS)
+        })
+    }
+
+    refreshLogs(true)
+
+    return () => {
+      isDisposed = true
+
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
+    }
+  }, [mode, selectedAnimeTaskId, isSelectedAnimeTaskFinished])
 
   const magnetValidationMessage = getMagnetValidationMessage(magnetInput)
   const seriesSeasonValidationMessage = getSeasonLoadValidationMessage({
@@ -661,28 +793,6 @@ export function MagnetIngestPage() {
     setAnimeResults([])
     setSelectedAnime(null)
     setAnimeSearchError(null)
-  }
-
-  async function loadAnimeTasks() {
-    setAnimeTasksStatus('loading')
-    setAnimeTasksError(null)
-
-    try {
-      const tasks = await listAnimeMagnetIngestTasks()
-      setAnimeTasks(tasks)
-      setAnimeTasksStatus(tasks.length > 0 ? 'success' : 'empty')
-      if (!selectedAnimeTaskId && tasks.length > 0) {
-        setSelectedAnimeTaskId(tasks[0].id)
-      }
-    } catch (error) {
-      setAnimeTasks([])
-      setAnimeTasksStatus('error')
-      setAnimeTasksError(
-        error instanceof Error && error.message.trim()
-          ? error.message.trim()
-          : '动漫任务加载失败，请稍后重试。',
-      )
-    }
   }
 
   function handleModeChange(nextMode: IngestMode) {
@@ -1028,6 +1138,7 @@ export function MagnetIngestPage() {
 
         setSubmitStatus('success')
         setSubmitSuccessMessage(successMessage)
+        selectedAnimeTaskIdRef.current = task.id
         setSelectedAnimeTaskId(task.id)
         setMagnetInput('')
         setToastMessage(successMessage)
@@ -1292,6 +1403,7 @@ export function MagnetIngestPage() {
             onSelectTask={
               mode === 'anime'
                 ? (task) => {
+                    selectedAnimeTaskIdRef.current = task.id
                     setSelectedAnimeTaskId(task.id)
                   }
                 : undefined
@@ -1310,68 +1422,19 @@ export function MagnetIngestPage() {
             <p className="text-sm text-rose-500">{animeTasksError}</p>
           ) : null}
 
-          {mode === 'anime' && selectedAnimeTaskId ? (
-            <section className="space-y-3">
-              <SectionHeading
-                label="Task Logs"
-                title="展示所选动漫磁力任务的后端执行日志。"
-              />
-
-              <div className="rounded-[20px] border border-slate-200 bg-slate-950 p-4 text-sm text-slate-100">
-                {animeTaskLogsStatus === 'loading' ? (
-                  <div className="flex items-center gap-2 text-slate-300">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    正在加载日志...
-                  </div>
-                ) : null}
-
-                {animeTaskLogsStatus === 'error' ? (
-                  <p className="text-rose-200">
-                    {animeTaskLogsError ?? '任务日志加载失败'}
-                  </p>
-                ) : null}
-
-                {animeTaskLogsStatus === 'empty' ? (
-                  <p className="text-slate-400">暂无日志</p>
-                ) : null}
-
-                {animeTaskLogsStatus === 'success' ? (
-                  <div className="max-h-[320px] space-y-2 overflow-y-auto font-mono text-xs leading-6">
-                    {animeTaskLogs.map((entry) => (
-                      <div key={entry.id} className="text-slate-300">
-                        <span className="text-slate-500">
-                          {formatTaskTime(entry.created_at)}
-                        </span>{' '}
-                        <span
-                          className={cn(
-                            'font-semibold',
-                            entry.level === 'ERROR'
-                              ? 'text-rose-300'
-                              : entry.level === 'WARN'
-                                ? 'text-amber-300'
-                                : 'text-emerald-300',
-                          )}
-                        >
-                          {entry.level}
-                        </span>{' '}
-                        <span className="text-slate-500">[{entry.stage}]</span>{' '}
-                        <span>{entry.message}</span>
-                        {entry.detail ? (
-                          <span className="block break-all pl-4 text-slate-500">
-                            {entry.detail}
-                          </span>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </section>
-          ) : null}
         </div>
 
         <aside className="space-y-5">
-          <SystemLogsCard logs={systemLogEntries} />
+          {mode === 'anime' ? (
+            <TaskLogsCard
+              logs={animeTaskLogs}
+              status={animeTaskLogsStatus}
+              error={animeTaskLogsError}
+              selectedTaskId={selectedAnimeTaskId}
+            />
+          ) : (
+            <SystemLogsCard logs={systemLogEntries} />
+          )}
           <NodeStatusCard />
           <ProTipCard />
         </aside>

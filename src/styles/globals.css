@@ -47,4 +47,29 @@
   .text-balance {
     text-wrap: balance;
   }
+
+  .task-log-scrollbar {
+    scrollbar-color: rgb(82 82 91 / 0.42) transparent;
+    scrollbar-width: thin;
+  }
+
+  .task-log-scrollbar::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .task-log-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .task-log-scrollbar::-webkit-scrollbar-thumb {
+    background: rgb(82 82 91 / 0.32);
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+  }
+
+  .task-log-scrollbar:hover::-webkit-scrollbar-thumb {
+    background: rgb(113 113 122 / 0.58);
+    background-clip: content-box;
+  }
 }
