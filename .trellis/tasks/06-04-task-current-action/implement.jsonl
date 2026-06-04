@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Task Logs UI should follow local component and Tailwind patterns"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Current action should be derived locally without new global state"}

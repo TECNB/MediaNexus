@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify component change is scoped and accessible"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify no unnecessary global or server-state abstraction is introduced"}

@@ -35,12 +35,42 @@ type TaskLogsContentProps = TaskLogsCardProps & {
   className?: string
 }
 
+type TaskCurrentActionTone = 'idle' | 'active' | 'success' | 'warning' | 'error'
+
 const logToneClassName = {
   default: 'text-zinc-300',
   success: 'text-emerald-400',
   accent: 'text-sky-400',
   muted: 'text-zinc-500',
 } satisfies Record<NonNullable<SystemLogEntry['tone']>, string>
+
+const taskStageLabel: Record<string, string> = {
+  created: '已创建',
+  submitted: '已提交',
+  downloading: '下载中',
+  organizing: '整理中',
+  succeeded: '已完成',
+  failed: '失败',
+  interrupted: '已中断',
+}
+
+const terminalTaskLogStages = new Set(['succeeded', 'failed', 'interrupted'])
+
+const currentActionToneClassName = {
+  idle: 'text-zinc-400',
+  active: 'text-sky-200',
+  success: 'text-emerald-200',
+  warning: 'text-amber-200',
+  error: 'text-rose-200',
+} satisfies Record<TaskCurrentActionTone, string>
+
+const currentActionDotClassName = {
+  idle: 'bg-zinc-500',
+  active: 'bg-sky-400',
+  success: 'bg-emerald-400',
+  warning: 'bg-amber-400',
+  error: 'bg-rose-400',
+} satisfies Record<TaskCurrentActionTone, string>
 
 function formatLogTime(value: string | null) {
   if (!value) {
@@ -59,6 +89,72 @@ function formatLogTime(value: string | null) {
     minute: '2-digit',
     second: '2-digit',
   })
+}
+
+function formatTaskStage(stage: string) {
+  return taskStageLabel[stage] ?? stage
+}
+
+function getCurrentAction(props: TaskLogsCardProps) {
+  const { logs, status, error, selectedTaskId } = props
+
+  if (!selectedTaskId) {
+    return {
+      stage: '未选择',
+      message: '选择动漫任务后查看当前动作。',
+      detail: null,
+      tone: 'idle' as TaskCurrentActionTone,
+      active: false,
+    }
+  }
+
+  if (status === 'loading') {
+    return {
+      stage: '加载中',
+      message: '正在加载任务日志...',
+      detail: null,
+      tone: 'active' as TaskCurrentActionTone,
+      active: true,
+    }
+  }
+
+  if (status === 'error') {
+    return {
+      stage: '加载失败',
+      message: error ?? '任务日志加载失败',
+      detail: null,
+      tone: 'error' as TaskCurrentActionTone,
+      active: false,
+    }
+  }
+
+  if (logs.length === 0) {
+    return {
+      stage: '等待日志',
+      message: '任务尚未写入日志。',
+      detail: null,
+      tone: 'idle' as TaskCurrentActionTone,
+      active: false,
+    }
+  }
+
+  const latestLog = logs[logs.length - 1]
+  const tone: TaskCurrentActionTone =
+    latestLog.level === 'ERROR'
+      ? 'error'
+      : latestLog.level === 'WARN'
+        ? 'warning'
+        : terminalTaskLogStages.has(latestLog.stage)
+          ? 'success'
+          : 'active'
+
+  return {
+    stage: formatTaskStage(latestLog.stage),
+    message: latestLog.message,
+    detail: latestLog.detail,
+    tone,
+    active: tone === 'active',
+  }
 }
 
 export function SystemLogsCard({ logs }: SystemLogsCardProps) {
@@ -100,6 +196,58 @@ export function SystemLogsCard({ logs }: SystemLogsCardProps) {
         </div>
       </div>
     </section>
+  )
+}
+
+function TaskCurrentAction(props: TaskLogsCardProps) {
+  const action = getCurrentAction(props)
+
+  return (
+    <div className="border-b border-white/5 px-4 py-3" aria-live="polite">
+      <div className="flex items-start gap-3">
+        <div
+          className={cn(
+            'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5',
+            currentActionToneClassName[action.tone],
+          )}
+        >
+          {action.active ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <span
+              className={cn(
+                'h-2.5 w-2.5 rounded-full',
+                currentActionDotClassName[action.tone],
+              )}
+            />
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-[11px] font-medium text-zinc-500">
+              当前动作
+            </span>
+            <span className="rounded-md bg-white/5 px-2 py-0.5 text-[11px] font-medium text-zinc-400">
+              {action.stage}
+            </span>
+          </div>
+          <p
+            className={cn(
+              'mt-1 break-words text-sm font-medium',
+              currentActionToneClassName[action.tone],
+            )}
+          >
+            {action.message}
+          </p>
+          {action.detail ? (
+            <p className="mt-1 break-all font-mono text-[11px] leading-5 text-zinc-500">
+              {action.detail}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -268,6 +416,7 @@ export function TaskLogsCard(props: TaskLogsCardProps) {
           </div>
         </div>
 
+        <TaskCurrentAction {...props} />
         <TaskLogsContent {...props} />
       </div>
 
@@ -311,6 +460,7 @@ export function TaskLogsCard(props: TaskLogsCardProps) {
               </TooltipProvider>
             </div>
 
+            <TaskCurrentAction {...props} />
             <TaskLogsContent
               {...props}
               className="h-full max-h-none min-h-0 flex-1 px-5 py-5 text-[13px]"
