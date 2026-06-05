@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 
 import { AdminLayout } from '@/layouts/admin-layout'
+import { LoginPage, RegisterPage } from '@/pages/auth'
 import { DashboardPage } from '@/pages/dashboard'
 import { HelpPage } from '@/pages/help'
 import { MagnetIngestPage } from '@/pages/magnet-ingest'
@@ -10,6 +11,8 @@ import { SubtitleManagePage } from '@/pages/subtitles'
 import { TaskCenterPage } from '@/pages/tasks'
 
 export const router = createBrowserRouter([
+  { path: '/login', element: <LoginPage /> },
+  { path: '/register', element: <RegisterPage /> },
   {
     path: '/',
     element: <AdminLayout />,

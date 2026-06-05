@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend stack and required guideline entry point."}
+{"file": ".trellis/spec/frontend/project-context.md", "reason": "Product boundaries and non-goals for MediaNexus frontend work."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Route/page/component placement conventions."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Tailwind, lucide, local component, accessibility, and styling patterns."}
