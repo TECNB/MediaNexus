@@ -1,12 +1,12 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Check, Eye, EyeOff } from 'lucide-react'
 
 import {
   login as loginWithPassword,
   register as registerWithCode,
 } from '@/lib/api/auth'
-import { setAuthToken } from '@/lib/auth-token'
+import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
 
 type AuthShellProps = {
@@ -65,6 +65,23 @@ function getErrorMessage(error: unknown, fallback: string) {
   }
 
   return fallback
+}
+
+function getAuthRedirectPath(state: unknown) {
+  if (!state || typeof state !== 'object') {
+    return '/resources'
+  }
+
+  const from = (state as { from?: { pathname?: string; search?: string; hash?: string } }).from
+  if (!from || typeof from.pathname !== 'string') {
+    return '/resources'
+  }
+
+  if (from.pathname === '/login' || from.pathname === '/register') {
+    return '/resources'
+  }
+
+  return `${from.pathname}${from.search ?? ''}${from.hash ?? ''}`
 }
 
 function AuthLogo() {
@@ -268,12 +285,21 @@ function AuthErrorNotice({ message }: { message: string | null }) {
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const { signIn, status: authStatus } = useAuth()
   const [account, setAccount] = useState('')
   const [password, setPassword] = useState('')
   const [status, setStatus] = useState<AuthFormStatus>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const isSubmitting = status === 'submitting'
+  const redirectPath = getAuthRedirectPath(location.state)
+
+  useEffect(() => {
+    if (authStatus === 'authenticated') {
+      navigate(redirectPath, { replace: true })
+    }
+  }, [authStatus, navigate, redirectPath])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -302,8 +328,8 @@ export function LoginPage() {
         account: normalizedAccount,
         password: normalizedPassword,
       })
-      setAuthToken(session.token)
-      navigate('/resources', { replace: true })
+      signIn(session)
+      navigate(redirectPath, { replace: true })
     } catch (error) {
       setErrorMessage(getErrorMessage(error, '登录失败，请稍后重试。'))
     } finally {
@@ -365,6 +391,8 @@ export function LoginPage() {
 
 export function RegisterPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const { signIn, status: authStatus } = useAuth()
   const [email, setEmail] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -374,6 +402,13 @@ export function RegisterPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const isSubmitting = status === 'submitting'
+  const redirectPath = getAuthRedirectPath(location.state)
+
+  useEffect(() => {
+    if (authStatus === 'authenticated') {
+      navigate(redirectPath, { replace: true })
+    }
+  }, [authStatus, navigate, redirectPath])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -423,8 +458,8 @@ export function RegisterPage() {
         confirm_password: normalizedConfirmPassword,
         registration_code: normalizedRegistrationCode,
       })
-      setAuthToken(session.token)
-      navigate('/resources', { replace: true })
+      signIn(session)
+      navigate(redirectPath, { replace: true })
     } catch (error) {
       setErrorMessage(getErrorMessage(error, '注册失败，请稍后重试。'))
     } finally {

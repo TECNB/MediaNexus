@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Auth session is the first explicit shared frontend state."}
+{"file": ".trellis/spec/frontend/api-integration.md", "reason": "Java auth API and 401 behavior."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Header controls and route loading state styling."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Route, layout, component, and lib placement."}
+{"file": "src/lib/auth-session.tsx", "reason": "Added auth session provider that restores current user from token and exposes sign in/out."}
+{"file": "src/components/auth/protected-route.tsx", "reason": "Added protected route wrapper for business layout."}
+{"file": "src/components/layout/app-header.tsx", "reason": "Added current user display and logout action."}
+{"file": "src/pages/auth/index.tsx", "reason": "Login/register now write auth session and return to originally requested route."}

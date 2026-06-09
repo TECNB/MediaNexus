@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verification scope and no full-project command discipline."}
+{"command": "./node_modules/.bin/eslint src/App.tsx src/router/index.tsx src/lib/auth-token.ts src/lib/auth-session.tsx src/lib/auth-session-context.ts src/lib/use-auth.ts src/components/auth/protected-route.tsx src/components/layout/app-header.tsx src/pages/auth/index.tsx src/lib/api/auth.ts src/lib/java-api.ts", "result": "passed", "reason": "Targeted lint for changed auth session, route, header, and auth page files."}
+{"command": "git diff --check", "result": "passed", "reason": "Whitespace/conflict marker check."}
+{"command": "curl -I http://[::1]:5173/login and related route/module URLs", "result": "not run", "reason": "Sandbox escalation was rejected by the usage limit; no workaround attempted."}

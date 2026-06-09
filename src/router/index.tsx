@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 
+import { ProtectedRoute } from '@/components/auth/protected-route'
 import { AdminLayout } from '@/layouts/admin-layout'
 import { LoginPage, RegisterPage } from '@/pages/auth'
 import { DashboardPage } from '@/pages/dashboard'
@@ -15,7 +16,11 @@ export const router = createBrowserRouter([
   { path: '/register', element: <RegisterPage /> },
   {
     path: '/',
-    element: <AdminLayout />,
+    element: (
+      <ProtectedRoute>
+        <AdminLayout />
+      </ProtectedRoute>
+    ),
     children: [
       { index: true, element: <Navigate to="/resources" replace /> },
       { path: 'dashboard', element: <DashboardPage /> },
