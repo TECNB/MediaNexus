@@ -1,6 +1,8 @@
-import axios from 'axios'
-
-import { API_REQUEST_TIMEOUT_MS } from '@/lib/axios'
+import {
+  getJavaErrorMessage,
+  isJavaRequestCanceledError,
+  javaApiClient,
+} from '@/lib/java-api'
 import type {
   AnimeSearchItem,
   AnimeSearchResponseData,
@@ -16,14 +18,6 @@ const JAVA_ANIME_SEARCH_ERROR_MESSAGE = '动漫搜索失败，请稍后重试。
 const JAVA_ANIME_GROUPS_ERROR_MESSAGE = '字幕组加载失败，请稍后重试。'
 const JAVA_ANIME_PREVIEW_ERROR_MESSAGE = '字幕组预览失败，请稍后重试。'
 const JAVA_ANIME_SUBSCRIBE_ERROR_MESSAGE = '订阅失败，请稍后重试。'
-
-const javaApiBaseUrl =
-  import.meta.env.VITE_JAVA_API_BASE_URL?.trim().replace(/\/+$/, '') ?? ''
-
-const javaApiClient = axios.create({
-  baseURL: javaApiBaseUrl || undefined,
-  timeout: API_REQUEST_TIMEOUT_MS,
-})
 
 export async function searchAnime(
   term: string,
@@ -47,10 +41,7 @@ export async function searchAnime(
 
     return response.data.data.items
   } catch (error) {
-    if (
-      axios.isCancel(error) ||
-      (axios.isAxiosError(error) && error.code === 'ERR_CANCELED')
-    ) {
+    if (isJavaRequestCanceledError(error)) {
       throw error
     }
 
@@ -134,27 +125,4 @@ export async function subscribeAnime(
       getJavaErrorMessage(error) ?? JAVA_ANIME_SUBSCRIBE_ERROR_MESSAGE,
     )
   }
-}
-
-function getJavaErrorMessage(error: unknown) {
-  if (axios.isAxiosError(error)) {
-    const message = error.response?.data?.message
-
-    if (typeof message === 'string' && message.trim()) {
-      return message.trim()
-    }
-  }
-
-  if (error instanceof Error && error.message.trim()) {
-    return error.message.trim()
-  }
-
-  return null
-}
-
-function isJavaRequestCanceledError(error: unknown) {
-  return (
-    axios.isCancel(error) ||
-    (axios.isAxiosError(error) && error.code === 'ERR_CANCELED')
-  )
 }

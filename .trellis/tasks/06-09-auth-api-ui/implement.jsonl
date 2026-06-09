@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend stack and required guideline entry point."}
+{"file": ".trellis/spec/frontend/project-context.md", "reason": "Product boundaries and Java backend introduction constraints."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "API, page, type, and helper placement conventions."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Form, accessibility, Tailwind, and interaction patterns."}
+{"file": ".trellis/spec/frontend/api-integration.md", "reason": "Python and Java API client separation rules."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Local state and no global store guidance."}

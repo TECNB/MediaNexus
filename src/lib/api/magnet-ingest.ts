@@ -1,6 +1,7 @@
 import axios from 'axios'
 
-import apiClient, { API_REQUEST_TIMEOUT_MS } from '@/lib/axios'
+import apiClient from '@/lib/axios'
+import { getJavaErrorMessage, javaApiClient } from '@/lib/java-api'
 import type {
   AnimeMagnetIngestTask,
   AnimeMagnetIngestTaskListData,
@@ -20,14 +21,6 @@ import type {
 
 const JAVA_ANIME_MAGNET_SEARCH_ERROR_MESSAGE = '动漫搜索失败，请稍后重试。'
 const JAVA_ANIME_MAGNET_TASK_ERROR_MESSAGE = '动漫磁力任务处理失败，请稍后重试。'
-
-const javaApiBaseUrl =
-  import.meta.env.VITE_JAVA_API_BASE_URL?.trim().replace(/\/+$/, '') ?? ''
-
-const javaApiClient = axios.create({
-  baseURL: javaApiBaseUrl || undefined,
-  timeout: API_REQUEST_TIMEOUT_MS,
-})
 
 function getAxiosErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
@@ -75,7 +68,7 @@ export async function searchAnimeMagnetItems(
     }
 
     throw new Error(
-      getAxiosErrorMessage(error) || JAVA_ANIME_MAGNET_SEARCH_ERROR_MESSAGE,
+      getJavaErrorMessage(error) || JAVA_ANIME_MAGNET_SEARCH_ERROR_MESSAGE,
     )
   }
 }
@@ -95,7 +88,7 @@ export async function createAnimeMagnetIngestTask(
     return response.data.data
   } catch (error) {
     throw new Error(
-      getAxiosErrorMessage(error) || JAVA_ANIME_MAGNET_TASK_ERROR_MESSAGE,
+      getJavaErrorMessage(error) || JAVA_ANIME_MAGNET_TASK_ERROR_MESSAGE,
     )
   }
 }
@@ -119,7 +112,7 @@ export async function listAnimeMagnetIngestTasks(): Promise<
     return response.data.data.items
   } catch (error) {
     throw new Error(
-      getAxiosErrorMessage(error) || JAVA_ANIME_MAGNET_TASK_ERROR_MESSAGE,
+      getJavaErrorMessage(error) || JAVA_ANIME_MAGNET_TASK_ERROR_MESSAGE,
     )
   }
 }
@@ -143,7 +136,7 @@ export async function listAnimeMagnetIngestTaskLogs(
     return response.data.data.items
   } catch (error) {
     throw new Error(
-      getAxiosErrorMessage(error) || JAVA_ANIME_MAGNET_TASK_ERROR_MESSAGE,
+      getJavaErrorMessage(error) || JAVA_ANIME_MAGNET_TASK_ERROR_MESSAGE,
     )
   }
 }

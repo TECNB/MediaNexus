@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend stack and quality context."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verification scope and no full-project command discipline."}
+{"file": ".trellis/spec/frontend/api-integration.md", "reason": "Review Java API client separation and error handling."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Review form state and accessibility expectations."}
+{"command": "./node_modules/.bin/eslint src/pages/auth/index.tsx src/lib/auth-token.ts src/lib/java-api.ts src/lib/api/auth.ts src/lib/api/anime.ts src/lib/api/magnet-ingest.ts src/types/auth.ts", "result": "passed", "reason": "Targeted lint for changed frontend auth and Java API client files."}
+{"command": "git diff --check", "result": "passed", "reason": "Whitespace/conflict marker check for staged workspace diff."}
+{"command": "npm run dev -- --host 127.0.0.1 --port 5173", "result": "started and stopped", "reason": "Vite smoke server for /login and /register route/module loading."}
+{"command": "curl -I http://127.0.0.1:5173/login && curl -I http://127.0.0.1:5173/register && curl -I http://127.0.0.1:5173/src/lib/java-api.ts && curl -I http://127.0.0.1:5173/src/pages/auth/index.tsx", "result": "passed", "reason": "Scoped route and module availability smoke check."}

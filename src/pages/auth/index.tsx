@@ -1,7 +1,12 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Check, Eye, EyeOff } from 'lucide-react'
 
+import {
+  login as loginWithPassword,
+  register as registerWithCode,
+} from '@/lib/api/auth'
+import { setAuthToken } from '@/lib/auth-token'
 import { cn } from '@/lib/utils'
 
 type AuthShellProps = {
@@ -15,24 +20,51 @@ type AuthTextFieldProps = {
   id: string
   label: string
   placeholder: string
+  value: string
+  onChange: (value: string) => void
   type?: string
   hint?: string
+  autoComplete?: string
   className?: string
   inputClassName?: string
+  maxLength?: number
 }
 
 type PasswordFieldProps = {
   id: string
   label: string
   placeholder: string
+  value: string
+  onChange: (value: string) => void
   hint?: string
+  autoComplete?: string
+  maxLength?: number
 }
+
+type AuthFormStatus = 'idle' | 'submitting'
+
+const USERNAME_PATTERN = /^[a-z0-9_-]{3,32}$/
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const MIN_PASSWORD_LENGTH = 8
+const MAX_PASSWORD_LENGTH = 32
 
 const inputClassName =
   'w-full rounded-lg border border-transparent bg-[#f3f4f5] px-4 py-3.5 text-sm text-[#191c1d] outline-none transition-all placeholder:text-[#777777] focus:bg-white focus:ring-2 focus:ring-black/10'
 
-function preventAuthSubmit(event: FormEvent<HTMLFormElement>) {
-  event.preventDefault()
+function normalizeUsername(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim()
+  }
+
+  return fallback
 }
 
 function AuthLogo() {
@@ -81,21 +113,32 @@ function AuthTextField({
   id,
   label,
   placeholder,
+  value,
+  onChange,
   type = 'text',
   hint,
+  autoComplete,
   className,
   inputClassName: customInputClassName,
+  maxLength,
 }: AuthTextFieldProps) {
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
-      <label className="pl-1 text-xs font-medium uppercase text-[#474747]" htmlFor={id}>
+      <label
+        className="pl-1 text-xs font-medium uppercase text-[#474747]"
+        htmlFor={id}
+      >
         {label}
       </label>
       <input
+        autoComplete={autoComplete}
         className={cn(inputClassName, customInputClassName)}
         id={id}
+        maxLength={maxLength}
+        onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         type={type}
+        value={value}
       />
       {hint ? (
         <p className="mt-0.5 pl-1 text-[0.6875rem] text-[#474747]">{hint}</p>
@@ -104,21 +147,37 @@ function AuthTextField({
   )
 }
 
-function PasswordField({ id, label, placeholder, hint }: PasswordFieldProps) {
+function PasswordField({
+  id,
+  label,
+  placeholder,
+  value,
+  onChange,
+  hint,
+  autoComplete,
+  maxLength,
+}: PasswordFieldProps) {
   const [isVisible, setIsVisible] = useState(false)
   const Icon = isVisible ? Eye : EyeOff
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="pl-1 text-xs font-medium uppercase text-[#474747]" htmlFor={id}>
+      <label
+        className="pl-1 text-xs font-medium uppercase text-[#474747]"
+        htmlFor={id}
+      >
         {label}
       </label>
       <div className="relative">
         <input
+          autoComplete={autoComplete}
           className={cn(inputClassName, 'pr-11')}
           id={id}
+          maxLength={maxLength}
+          onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
           type={isVisible ? 'text' : 'password'}
+          value={value}
         />
         <button
           aria-label={isVisible ? '隐藏密码' : '显示密码'}
@@ -171,10 +230,20 @@ function RememberMe() {
   )
 }
 
-function PrimaryAuthButton({ children }: { children: ReactNode }) {
+function PrimaryAuthButton({
+  children,
+  disabled,
+}: {
+  children: ReactNode
+  disabled?: boolean
+}) {
   return (
     <button
-      className="w-full rounded-xl bg-gradient-to-b from-black to-[#343b4c] px-4 py-3.5 text-sm font-medium text-white shadow-[0_4px_14px_rgba(0,0,0,0.10)] transition-all hover:shadow-[0_6px_20px_rgba(0,0,0,0.14)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20"
+      className={cn(
+        'w-full rounded-xl bg-gradient-to-b from-black to-[#343b4c] px-4 py-3.5 text-sm font-medium text-white shadow-[0_4px_14px_rgba(0,0,0,0.10)] transition-all hover:shadow-[0_6px_20px_rgba(0,0,0,0.14)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20',
+        disabled && 'cursor-not-allowed opacity-70 hover:shadow-none',
+      )}
+      disabled={disabled}
       type="submit"
     >
       {children}
@@ -182,16 +251,87 @@ function PrimaryAuthButton({ children }: { children: ReactNode }) {
   )
 }
 
+function AuthErrorNotice({ message }: { message: string | null }) {
+  if (!message) {
+    return null
+  }
+
+  return (
+    <div
+      className="rounded-lg bg-[#ffdad6] px-4 py-3 text-sm leading-6 text-[#410002]"
+      role="alert"
+    >
+      {message}
+    </div>
+  )
+}
+
 export function LoginPage() {
+  const navigate = useNavigate()
+  const [account, setAccount] = useState('')
+  const [password, setPassword] = useState('')
+  const [status, setStatus] = useState<AuthFormStatus>('idle')
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  const isSubmitting = status === 'submitting'
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (isSubmitting) {
+      return
+    }
+
+    const normalizedAccount = account.trim()
+    const normalizedPassword = password.trim()
+
+    if (!normalizedAccount) {
+      setErrorMessage('请输入邮箱或用户名')
+      return
+    }
+    if (!normalizedPassword) {
+      setErrorMessage('请输入密码')
+      return
+    }
+
+    setStatus('submitting')
+    setErrorMessage(null)
+
+    try {
+      const session = await loginWithPassword({
+        account: normalizedAccount,
+        password: normalizedPassword,
+      })
+      setAuthToken(session.token)
+      navigate('/resources', { replace: true })
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, '登录失败，请稍后重试。'))
+    } finally {
+      setStatus('idle')
+    }
+  }
+
   return (
     <AuthShell title="欢迎回来" description="登录以继续管理你的媒体资源库">
-      <form className="flex flex-col gap-6" onSubmit={preventAuthSubmit}>
+      <form className="flex flex-col gap-6" noValidate onSubmit={handleSubmit}>
+        <AuthErrorNotice message={errorMessage} />
         <AuthTextField
+          autoComplete="username"
           id="login-username"
           label="邮箱或用户名"
+          onChange={setAccount}
           placeholder="name@example.com 或 tengen"
+          value={account}
         />
-        <PasswordField id="login-password" label="密码" placeholder="输入密码" />
+        <PasswordField
+          autoComplete="current-password"
+          id="login-password"
+          label="密码"
+          maxLength={MAX_PASSWORD_LENGTH}
+          onChange={setPassword}
+          placeholder="输入密码"
+          value={password}
+        />
 
         <div className="-mt-2 flex items-center justify-between gap-4">
           <RememberMe />
@@ -203,7 +343,9 @@ export function LoginPage() {
           </button>
         </div>
 
-        <PrimaryAuthButton>登录</PrimaryAuthButton>
+        <PrimaryAuthButton disabled={isSubmitting}>
+          {isSubmitting ? '登录中…' : '登录'}
+        </PrimaryAuthButton>
       </form>
 
       <div className="mt-8 text-center">
@@ -222,46 +364,137 @@ export function LoginPage() {
 }
 
 export function RegisterPage() {
+  const navigate = useNavigate()
+  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [registrationCode, setRegistrationCode] = useState('')
+  const [status, setStatus] = useState<AuthFormStatus>('idle')
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  const isSubmitting = status === 'submitting'
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (isSubmitting) {
+      return
+    }
+
+    const normalizedUsername = normalizeUsername(username)
+    const normalizedEmail = normalizeEmail(email)
+    const normalizedPassword = password.trim()
+    const normalizedConfirmPassword = confirmPassword.trim()
+    const normalizedRegistrationCode = registrationCode.trim()
+
+    if (!USERNAME_PATTERN.test(normalizedUsername)) {
+      setErrorMessage('用户名需为 3-32 位小写字母、数字、下划线或短横线')
+      return
+    }
+    if (!EMAIL_PATTERN.test(normalizedEmail)) {
+      setErrorMessage('邮箱格式无效')
+      return
+    }
+    if (
+      normalizedPassword.length < MIN_PASSWORD_LENGTH ||
+      normalizedPassword.length > MAX_PASSWORD_LENGTH
+    ) {
+      setErrorMessage('密码需为 8-32 位')
+      return
+    }
+    if (normalizedPassword !== normalizedConfirmPassword) {
+      setErrorMessage('两次输入的密码不一致')
+      return
+    }
+    if (!normalizedRegistrationCode) {
+      setErrorMessage('注册码不能为空')
+      return
+    }
+
+    setStatus('submitting')
+    setErrorMessage(null)
+
+    try {
+      const session = await registerWithCode({
+        username: normalizedUsername,
+        email: normalizedEmail,
+        password: normalizedPassword,
+        confirm_password: normalizedConfirmPassword,
+        registration_code: normalizedRegistrationCode,
+      })
+      setAuthToken(session.token)
+      navigate('/resources', { replace: true })
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, '注册失败，请稍后重试。'))
+    } finally {
+      setStatus('idle')
+    }
+  }
+
   return (
     <AuthShell
       title="创建账户"
       description="使用注册码加入你的私人媒体中心"
       footerNote="注册即表示你已获得 MediaNexus 的访问授权"
     >
-      <form className="flex flex-col gap-5" onSubmit={preventAuthSubmit}>
+      <form className="flex flex-col gap-5" noValidate onSubmit={handleSubmit}>
+        <AuthErrorNotice message={errorMessage} />
         <AuthTextField
+          autoComplete="email"
           id="register-email"
           label="邮箱"
+          maxLength={128}
+          onChange={(value) => setEmail(value.toLowerCase())}
           placeholder="name@example.com"
           type="email"
+          value={email}
         />
         <AuthTextField
+          autoComplete="username"
+          hint="3-32 位，小写字母、数字、下划线或短横线"
           id="register-username"
           label="用户名"
+          maxLength={32}
+          onChange={(value) => setUsername(value.toLowerCase())}
           placeholder="例如：tengen"
+          value={username}
         />
         <PasswordField
+          autoComplete="new-password"
+          hint="8-32 位，建议包含字母与数字"
           id="register-password"
           label="密码"
-          placeholder="至少 8 位"
-          hint="至少 8 位，建议包含字母与数字"
+          maxLength={MAX_PASSWORD_LENGTH}
+          onChange={setPassword}
+          placeholder="输入密码"
+          value={password}
         />
         <PasswordField
+          autoComplete="new-password"
           id="register-confirm-password"
           label="确认密码"
+          maxLength={MAX_PASSWORD_LENGTH}
+          onChange={setConfirmPassword}
           placeholder="再次输入密码"
+          value={confirmPassword}
         />
         <AuthTextField
+          autoComplete="off"
           className="mt-2"
+          hint="注册仅对持有注册码的用户开放"
           id="register-code"
           inputClassName="font-mono"
           label="注册码"
+          onChange={setRegistrationCode}
           placeholder="输入你收到的注册码"
-          hint="注册仅对持有注册码的用户开放"
+          value={registrationCode}
         />
 
         <div className="mt-6 flex flex-col items-center gap-6">
-          <PrimaryAuthButton>创建账户</PrimaryAuthButton>
+          <PrimaryAuthButton disabled={isSubmitting}>
+            {isSubmitting ? '创建中…' : '创建账户'}
+          </PrimaryAuthButton>
           <Link
             className="text-sm text-black underline decoration-black/20 underline-offset-4 transition-all hover:decoration-black"
             to="/login"
