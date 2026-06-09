@@ -10,6 +10,7 @@ import { ResourceSearchPage } from '@/pages/resources'
 import { SettingsPage } from '@/pages/settings'
 import { SubtitleManagePage } from '@/pages/subtitles'
 import { TaskCenterPage } from '@/pages/tasks'
+import { UserManagementPage } from '@/pages/users'
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -28,6 +29,7 @@ export const router = createBrowserRouter([
       { path: 'magnet-ingest', element: <MagnetIngestPage /> },
       { path: 'tasks', element: <TaskCenterPage /> },
       { path: 'subtitles', element: <SubtitleManagePage /> },
+      { path: 'users', element: <UserManagementPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'help', element: <HelpPage /> },
       { path: '*', element: <Navigate to="/resources" replace /> },

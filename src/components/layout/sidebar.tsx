@@ -6,12 +6,14 @@ import {
   Search,
   Settings,
   SquareCheckBig,
+  Users,
   Zap,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
 
 import { SidebarBrand } from './sidebar-brand'
@@ -35,6 +37,10 @@ const secondaryItems: NavigationItem[] = [
   { icon: CircleHelp, label: '帮助', to: '/help' },
 ]
 
+const adminItems: NavigationItem[] = [
+  { icon: Users, label: '用户管理', to: '/users' },
+]
+
 function SidebarLink({ icon: Icon, label, to }: NavigationItem) {
   return (
     <NavLink
@@ -55,6 +61,10 @@ function SidebarLink({ icon: Icon, label, to }: NavigationItem) {
 }
 
 export function Sidebar() {
+  const { user } = useAuth()
+  const visibleSecondaryItems =
+    user?.role === 'ADMIN' ? [...adminItems, ...secondaryItems] : secondaryItems
+
   return (
     <aside className="border-b border-slate-200 bg-slate-50 md:sticky md:top-0 md:h-screen md:border-b-0 md:border-r">
       <div className="flex h-full flex-col">
@@ -72,7 +82,7 @@ export function Sidebar() {
               <Separator className="bg-slate-200" />
 
               <nav className="space-y-1">
-                {secondaryItems.map((item) => (
+                {visibleSecondaryItems.map((item) => (
                   <SidebarLink key={item.to} {...item} />
                 ))}
               </nav>

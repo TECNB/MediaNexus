@@ -1,0 +1,5 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend task entry point and required conventions."}
+{"file":".trellis/spec/frontend/api-integration.md","reason":"Java API client and response envelope rules."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Page and component composition patterns."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Local state and server state handling."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Type and DTO organization rules."}

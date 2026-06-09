@@ -1,0 +1,5 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend verification entry point."}
+{"file":".trellis/spec/frontend/api-integration.md","reason":"Verify Java API request behavior."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Review UI structure and component fit."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Review state and refresh behavior."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Review DTO and UI types."}
