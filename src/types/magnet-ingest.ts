@@ -62,6 +62,7 @@ export type AnimeMagnetIngestTaskStatus =
 
 export type AnimeMagnetIngestTask = {
   id: string
+  created_by_user_id: number | null
   status: AnimeMagnetIngestTaskStatus
   stage: string
   bgm_id: string

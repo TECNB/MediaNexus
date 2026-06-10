@@ -1392,7 +1392,7 @@ export function MagnetIngestPage() {
             }
             description={
               mode === 'anime'
-                ? '展示最近的动漫整季磁力任务，可点击任务查看日志。'
+                ? '展示你有权限查看的动漫整季磁力任务，可点击任务查看日志。'
                 : undefined
             }
             actionLabel={mode === 'anime' ? '刷新' : 'VIEW ALL'}
