@@ -1,5 +1,18 @@
 # React + TypeScript + Vite
 
+## Production Env
+
+For Docker/Nginx deployment, keep the Java backend on the same public origin and
+route it through `/java-api`:
+
+```bash
+VITE_JAVA_API_BASE_URL=/java-api
+```
+
+If `MediaNexus-Core` is not deployed yet, leave `VITE_API_BASE_URL` empty so the
+unfinished Core-backed pages fail against the same origin instead of calling a
+local development URL. See `.env.production.example`.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
