@@ -29,9 +29,31 @@ javaApiClient.interceptors.response.use(
       clearAuthToken()
     }
 
+    logJavaApiRequestFailure(error)
     return Promise.reject(error)
   },
 )
+
+function logJavaApiRequestFailure(error: unknown) {
+  if (isJavaRequestCanceledError(error)) {
+    return
+  }
+
+  if (axios.isAxiosError(error)) {
+    console.warn('Java API request failed', {
+      method: error.config?.method?.toUpperCase(),
+      url: error.config?.url,
+      status: error.response?.status,
+      code: error.code,
+      message: getJavaErrorMessage(error),
+    })
+    return
+  }
+
+  if (error instanceof Error) {
+    console.warn('Java API request failed', { message: error.message })
+  }
+}
 
 export function getJavaErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
@@ -55,4 +77,3 @@ export function isJavaRequestCanceledError(error: unknown) {
     (axios.isAxiosError(error) && error.code === 'ERR_CANCELED')
   )
 }
-
