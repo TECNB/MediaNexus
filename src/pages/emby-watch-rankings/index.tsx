@@ -387,7 +387,7 @@ function WebhookMonitor({ data }: { data: EmbyWatchRankingData }) {
           <span className="text-slate-500">[status]</span>{' '}
           <span className="text-sky-300">INFO</span> secret{' '}
           {data.webhook_status.secret_configured ? 'configured' : 'missing'},
-          active sessions: {data.webhook_status.active_session_count}
+          tracked sessions: {data.webhook_status.active_session_count}
         </div>
         {events.length > 0 ? (
           events.map((event, index) => (
