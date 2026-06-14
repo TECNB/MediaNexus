@@ -4,6 +4,7 @@ import { ProtectedRoute } from '@/components/auth/protected-route'
 import { AdminLayout } from '@/layouts/admin-layout'
 import { LoginPage, RegisterPage } from '@/pages/auth'
 import { DashboardPage } from '@/pages/dashboard'
+import { EmbyWatchRankingsPage } from '@/pages/emby-watch-rankings'
 import { HelpPage } from '@/pages/help'
 import { MagnetIngestPage } from '@/pages/magnet-ingest'
 import { ResourceSearchPage } from '@/pages/resources'
@@ -29,6 +30,7 @@ export const router = createBrowserRouter([
       { path: 'magnet-ingest', element: <MagnetIngestPage /> },
       { path: 'tasks', element: <TaskCenterPage /> },
       { path: 'subtitles', element: <SubtitleManagePage /> },
+      { path: 'emby-watch-rankings', element: <EmbyWatchRankingsPage /> },
       { path: 'users', element: <UserManagementPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'help', element: <HelpPage /> },
