@@ -100,21 +100,11 @@ export type AnimeMagnetIngestTaskLogListData = {
 }
 
 export type CreateMovieMagnetIngestResponse = {
-  save_path?: string
+  save_path: string
 }
 
 export type CreateSeriesMagnetIngestResponse = {
-  save_path?: string
-}
-
-export type CreateMovieMagnetIngestApiResponse = {
-  success: boolean
-  message: string
-  data: CreateMovieMagnetIngestResponse
-}
-
-export type CreateSeriesMagnetIngestApiResponse = {
-  success: boolean
-  message: string
-  data: CreateSeriesMagnetIngestResponse
+  save_path: string
+  series_name: string
+  season_folder: string
 }
