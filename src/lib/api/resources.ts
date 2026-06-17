@@ -1,18 +1,22 @@
 import axios from 'axios'
 
 import apiClient from '@/lib/axios'
+import { getJavaErrorMessage, javaApiClient } from '@/lib/java-api'
 import type {
   AddMovieResourceRequest,
   AddMovieResourceResponse,
   MovieQualityProfile,
   MovieQualityProfilesResponse,
   MovieSearchItem,
-  MovieSearchResponse,
   SeriesSeasonsData,
-  SeriesSeasonsResponse,
   SeriesSearchItem,
-  SeriesSearchResponse,
 } from '@/types/resources'
+
+type JavaApiResponse<TData> = {
+  code: number
+  message: string
+  data: TData | null
+}
 
 function getAxiosErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
@@ -30,34 +34,48 @@ function getAxiosErrorMessage(error: unknown) {
   return null
 }
 
-async function searchResources<TResponse extends { success: boolean; message: string }>(
+async function searchJavaResources<TItem>(
   path: string,
   term: string,
+  fallbackMessage: string,
   signal?: AbortSignal,
 ) {
-  const response = await apiClient.get<TResponse>(path, {
-    params: { term: term.trim() },
-    signal,
-  })
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<{ items: TItem[] }>
+    >(path, {
+      params: { term: term.trim() },
+      signal,
+    })
 
-  if (!response.data.success) {
-    throw new Error(response.data.message || 'Resource search failed')
+    if (
+      response.data.code !== 200 ||
+      !response.data.data ||
+      !Array.isArray(response.data.data.items)
+    ) {
+      throw new Error(response.data.message || fallbackMessage)
+    }
+
+    return response.data.data.items
+  } catch (error) {
+    if (isRequestCanceledError(error)) {
+      throw error
+    }
+
+    throw new Error(getJavaErrorMessage(error) || fallbackMessage)
   }
-
-  return response.data
 }
 
 export async function searchMovies(
   term: string,
   signal?: AbortSignal,
 ): Promise<MovieSearchItem[]> {
-  const response = await searchResources<MovieSearchResponse>(
+  return searchJavaResources<MovieSearchItem>(
     '/api/v1/resources/movies/search',
     term,
+    '电影搜索失败，请稍后重试。',
     signal,
   )
-
-  return response.data.items
 }
 
 export async function getMovieQualityProfiles(
@@ -119,13 +137,12 @@ export async function searchSeries(
   term: string,
   signal?: AbortSignal,
 ): Promise<SeriesSearchItem[]> {
-  const response = await searchResources<SeriesSearchResponse>(
+  return searchJavaResources<SeriesSearchItem>(
     '/api/v1/resources/series/search',
     term,
+    '剧集搜索失败，请稍后重试。',
     signal,
   )
-
-  return response.data.items
 }
 
 export async function getSeriesSeasons(
@@ -133,7 +150,9 @@ export async function getSeriesSeasons(
   signal?: AbortSignal,
 ): Promise<SeriesSeasonsData> {
   try {
-    const response = await apiClient.get<SeriesSeasonsResponse>(
+    const response = await javaApiClient.get<
+      JavaApiResponse<SeriesSeasonsData>
+    >(
       '/api/v1/resources/series/seasons',
       {
         params: { tvdb_id: tvdbId },
@@ -141,7 +160,7 @@ export async function getSeriesSeasons(
       },
     )
 
-    if (!response.data.success) {
+    if (response.data.code !== 200 || !response.data.data) {
       throw new Error(response.data.message || 'series seasons fetch failed')
     }
 
@@ -152,7 +171,7 @@ export async function getSeriesSeasons(
     }
 
     throw new Error(
-      getAxiosErrorMessage(error) || '剧集季数加载失败，请稍后重试。',
+      getJavaErrorMessage(error) || '剧集季数加载失败，请稍后重试。',
     )
   }
 }
