@@ -9,7 +9,6 @@ import { RecentTasksTable } from '@/components/magnet-ingest/recent-tasks-table'
 import {
   NodeStatusCard,
   ProTipCard,
-  SystemLogsCard,
   TaskLogsCard,
 } from '@/components/magnet-ingest/status-cards'
 import { PageContainer } from '@/components/layout/page-container'
@@ -20,6 +19,10 @@ import {
   createSeriesMagnetIngest,
   listAnimeMagnetIngestTaskLogs,
   listAnimeMagnetIngestTasks,
+  listMovieMagnetIngestTaskLogs,
+  listMovieMagnetIngestTasks,
+  listSeriesMagnetIngestTaskLogs,
+  listSeriesMagnetIngestTasks,
   searchAnimeMagnetItems,
 } from '@/lib/api/magnet-ingest'
 import {
@@ -30,8 +33,6 @@ import {
 } from '@/lib/api/resources'
 import {
   defaultMagnetText,
-  initialRecentTasks,
-  systemLogEntries,
   type RecentIngestTask,
   type RecentIngestTaskStatus,
 } from '@/data/mock-magnet-ingest'
@@ -39,21 +40,23 @@ import { cn } from '@/lib/utils'
 import type {
   AnimeMagnetSearchItem,
   AnimeMagnetIngestTask,
-  AnimeMagnetIngestTaskLog,
-  AnimeMagnetIngestTaskStatus,
   CreateAnimeMagnetIngestTaskPayload,
   CreateMovieMagnetIngestPayload,
   CreateSeriesMagnetIngestPayload,
   IngestMode,
+  MagnetIngestTaskLog,
+  MagnetIngestTaskStatus,
+  MovieMagnetIngestTask,
+  SeriesMagnetIngestTask,
 } from '@/types/magnet-ingest'
 import type { MovieSearchItem, SeriesSearchItem } from '@/types/resources'
 
 type SubmitStatus = 'idle' | 'loading' | 'success' | 'error'
 type SeriesSeasonStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
 
-const ANIME_TASK_LOG_POLL_INTERVAL_MS = 2000
-const ANIME_TASK_LIST_POLL_INTERVAL_MS = 5000
-const FINISHED_ANIME_TASK_STATUSES = new Set<AnimeMagnetIngestTaskStatus>([
+const TASK_LOG_POLL_INTERVAL_MS = 2000
+const TASK_LIST_POLL_INTERVAL_MS = 5000
+const FINISHED_TASK_STATUSES = new Set<MagnetIngestTaskStatus>([
   'SUCCEEDED',
   'PARTIAL_SUCCESS',
   'FAILED',
@@ -283,10 +286,10 @@ function getMovieMagnetIngestPayload(
   selectedMovie: MovieSearchItem,
 ): CreateMovieMagnetIngestPayload | null {
   const title = selectedMovie.title.trim()
-  const originalTitle = selectedMovie.original_title?.trim()
+  const originalTitle = selectedMovie.original_title?.trim() || title
   const year = selectedMovie.year
 
-  if (!title || !originalTitle || typeof year !== 'number') {
+  if (!title || typeof year !== 'number') {
     return null
   }
 
@@ -341,7 +344,7 @@ function getAnimeMagnetIngestPayload(
 }
 
 function toRecentTaskStatus(
-  status: AnimeMagnetIngestTaskStatus,
+  status: MagnetIngestTaskStatus,
 ): RecentIngestTaskStatus {
   switch (status) {
     case 'PENDING':
@@ -363,8 +366,8 @@ function toRecentTaskStatus(
   }
 }
 
-function isFinishedAnimeTaskStatus(status: AnimeMagnetIngestTaskStatus) {
-  return FINISHED_ANIME_TASK_STATUSES.has(status)
+function isFinishedTaskStatus(status: MagnetIngestTaskStatus) {
+  return FINISHED_TASK_STATUSES.has(status)
 }
 
 function formatTaskTime(value: string | null) {
@@ -385,11 +388,31 @@ function formatTaskTime(value: string | null) {
   })
 }
 
-function toRecentIngestTask(task: AnimeMagnetIngestTask): RecentIngestTask {
+function toRecentAnimeTask(task: AnimeMagnetIngestTask): RecentIngestTask {
   return {
     id: task.id,
     name: task.magnet_hash,
     libraryTitle: `${task.title} Season ${task.season_number}`,
+    status: toRecentTaskStatus(task.status),
+    time: formatTaskTime(task.updated_at ?? task.created_at),
+  }
+}
+
+function toRecentMovieTask(task: MovieMagnetIngestTask): RecentIngestTask {
+  return {
+    id: task.id,
+    name: task.magnet_hash,
+    libraryTitle: `${task.title} (${task.year})`,
+    status: toRecentTaskStatus(task.status),
+    time: formatTaskTime(task.updated_at ?? task.created_at),
+  }
+}
+
+function toRecentSeriesTask(task: SeriesMagnetIngestTask): RecentIngestTask {
+  return {
+    id: task.id,
+    name: task.magnet_hash,
+    libraryTitle: `${task.series_name} ${task.season_folder}`,
     status: toRecentTaskStatus(task.status),
     time: formatTaskTime(task.updated_at ?? task.created_at),
   }
@@ -452,6 +475,34 @@ export function MagnetIngestPage() {
     null,
   )
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [movieTasks, setMovieTasks] = useState<MovieMagnetIngestTask[]>([])
+  const [movieTasksStatus, setMovieTasksStatus] =
+    useState<ResourceSearchStatus>('idle')
+  const [movieTasksError, setMovieTasksError] = useState<string | null>(null)
+  const [selectedMovieTaskId, setSelectedMovieTaskId] = useState<string | null>(
+    null,
+  )
+  const [movieTaskLogs, setMovieTaskLogs] = useState<MagnetIngestTaskLog[]>([])
+  const [movieTaskLogsStatus, setMovieTaskLogsStatus] =
+    useState<ResourceSearchStatus>('idle')
+  const [movieTaskLogsError, setMovieTaskLogsError] = useState<string | null>(
+    null,
+  )
+  const [seriesTasks, setSeriesTasks] = useState<SeriesMagnetIngestTask[]>([])
+  const [seriesTasksStatus, setSeriesTasksStatus] =
+    useState<ResourceSearchStatus>('idle')
+  const [seriesTasksError, setSeriesTasksError] = useState<string | null>(null)
+  const [selectedSeriesTaskId, setSelectedSeriesTaskId] = useState<string | null>(
+    null,
+  )
+  const [seriesTaskLogs, setSeriesTaskLogs] = useState<MagnetIngestTaskLog[]>(
+    [],
+  )
+  const [seriesTaskLogsStatus, setSeriesTaskLogsStatus] =
+    useState<ResourceSearchStatus>('idle')
+  const [seriesTaskLogsError, setSeriesTaskLogsError] = useState<string | null>(
+    null,
+  )
   const [animeTasks, setAnimeTasks] = useState<AnimeMagnetIngestTask[]>([])
   const [animeTasksStatus, setAnimeTasksStatus] =
     useState<ResourceSearchStatus>('idle')
@@ -459,9 +510,7 @@ export function MagnetIngestPage() {
   const [selectedAnimeTaskId, setSelectedAnimeTaskId] = useState<string | null>(
     null,
   )
-  const [animeTaskLogs, setAnimeTaskLogs] = useState<AnimeMagnetIngestTaskLog[]>(
-    [],
-  )
+  const [animeTaskLogs, setAnimeTaskLogs] = useState<MagnetIngestTaskLog[]>([])
   const [animeTaskLogsStatus, setAnimeTaskLogsStatus] =
     useState<ResourceSearchStatus>('idle')
   const [animeTaskLogsError, setAnimeTaskLogsError] = useState<string | null>(
@@ -471,17 +520,119 @@ export function MagnetIngestPage() {
   const activeSearchControllerRef = useRef<AbortController | null>(null)
   const latestSeriesSeasonRequestIdRef = useRef(0)
   const activeSeriesSeasonControllerRef = useRef<AbortController | null>(null)
+  const latestMovieTaskLogsRequestIdRef = useRef(0)
+  const latestSeriesTaskLogsRequestIdRef = useRef(0)
   const latestAnimeTaskLogsRequestIdRef = useRef(0)
+  const selectedMovieTaskIdRef = useRef<string | null>(null)
+  const selectedSeriesTaskIdRef = useRef<string | null>(null)
   const selectedAnimeTaskIdRef = useRef<string | null>(null)
+  const selectedMovieTask =
+    movieTasks.find((task) => task.id === selectedMovieTaskId) ?? null
+  const selectedSeriesTask =
+    seriesTasks.find((task) => task.id === selectedSeriesTaskId) ?? null
   const selectedAnimeTask =
     animeTasks.find((task) => task.id === selectedAnimeTaskId) ?? null
-  const isSelectedAnimeTaskFinished = selectedAnimeTask
-    ? isFinishedAnimeTaskStatus(selectedAnimeTask.status)
+  const isSelectedMovieTaskFinished = selectedMovieTask
+    ? isFinishedTaskStatus(selectedMovieTask.status)
     : false
+  const isSelectedSeriesTaskFinished = selectedSeriesTask
+    ? isFinishedTaskStatus(selectedSeriesTask.status)
+    : false
+  const isSelectedAnimeTaskFinished = selectedAnimeTask
+    ? isFinishedTaskStatus(selectedAnimeTask.status)
+    : false
+
+  useEffect(() => {
+    selectedMovieTaskIdRef.current = selectedMovieTaskId
+  }, [selectedMovieTaskId])
+
+  useEffect(() => {
+    selectedSeriesTaskIdRef.current = selectedSeriesTaskId
+  }, [selectedSeriesTaskId])
 
   useEffect(() => {
     selectedAnimeTaskIdRef.current = selectedAnimeTaskId
   }, [selectedAnimeTaskId])
+
+  const loadMovieTasks = useCallback(
+    async (options: { showLoading?: boolean } = {}) => {
+      const showLoading = options.showLoading ?? true
+
+      if (showLoading) {
+        setMovieTasksStatus('loading')
+      }
+      setMovieTasksError(null)
+
+      try {
+        const tasks = await listMovieMagnetIngestTasks()
+        setMovieTasks(tasks)
+        setMovieTasksStatus(tasks.length > 0 ? 'success' : 'empty')
+
+        const currentTaskId = selectedMovieTaskIdRef.current
+        if (tasks.length === 0) {
+          selectedMovieTaskIdRef.current = null
+          setSelectedMovieTaskId(null)
+        } else if (
+          !currentTaskId ||
+          !tasks.some((task) => task.id === currentTaskId)
+        ) {
+          selectedMovieTaskIdRef.current = tasks[0].id
+          setSelectedMovieTaskId(tasks[0].id)
+        }
+      } catch (error) {
+        if (showLoading) {
+          setMovieTasks([])
+        }
+        setMovieTasksStatus('error')
+        setMovieTasksError(
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : '电影任务加载失败，请稍后重试。',
+        )
+      }
+    },
+    [],
+  )
+
+  const loadSeriesTasks = useCallback(
+    async (options: { showLoading?: boolean } = {}) => {
+      const showLoading = options.showLoading ?? true
+
+      if (showLoading) {
+        setSeriesTasksStatus('loading')
+      }
+      setSeriesTasksError(null)
+
+      try {
+        const tasks = await listSeriesMagnetIngestTasks()
+        setSeriesTasks(tasks)
+        setSeriesTasksStatus(tasks.length > 0 ? 'success' : 'empty')
+
+        const currentTaskId = selectedSeriesTaskIdRef.current
+        if (tasks.length === 0) {
+          selectedSeriesTaskIdRef.current = null
+          setSelectedSeriesTaskId(null)
+        } else if (
+          !currentTaskId ||
+          !tasks.some((task) => task.id === currentTaskId)
+        ) {
+          selectedSeriesTaskIdRef.current = tasks[0].id
+          setSelectedSeriesTaskId(tasks[0].id)
+        }
+      } catch (error) {
+        if (showLoading) {
+          setSeriesTasks([])
+        }
+        setSeriesTasksStatus('error')
+        setSeriesTasksError(
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : '剧集任务加载失败，请稍后重试。',
+        )
+      }
+    },
+    [],
+  )
 
   const loadAnimeTasks = useCallback(
     async (options: { showLoading?: boolean } = {}) => {
@@ -628,22 +779,24 @@ export function MagnetIngestPage() {
   }, [mode, selectedSeries])
 
   useEffect(() => {
-    if (mode !== 'anime') {
-      return
-    }
-
     let isDisposed = false
     let timeoutId: number | null = null
+    const loadTasks =
+      mode === 'movie'
+        ? loadMovieTasks
+        : mode === 'series'
+          ? loadSeriesTasks
+          : loadAnimeTasks
 
     const refreshTasks = (showLoading: boolean) => {
-      void loadAnimeTasks({ showLoading }).finally(() => {
+      void loadTasks({ showLoading }).finally(() => {
         if (isDisposed) {
           return
         }
 
         timeoutId = window.setTimeout(() => {
           refreshTasks(false)
-        }, ANIME_TASK_LIST_POLL_INTERVAL_MS)
+        }, TASK_LIST_POLL_INTERVAL_MS)
       })
     }
 
@@ -656,7 +809,151 @@ export function MagnetIngestPage() {
         window.clearTimeout(timeoutId)
       }
     }
-  }, [mode, loadAnimeTasks])
+  }, [mode, loadMovieTasks, loadSeriesTasks, loadAnimeTasks])
+
+  useEffect(() => {
+    if (mode !== 'movie' || !selectedMovieTaskId) {
+      latestMovieTaskLogsRequestIdRef.current += 1
+      setMovieTaskLogs([])
+      setMovieTaskLogsStatus('idle')
+      setMovieTaskLogsError(null)
+      return
+    }
+
+    let isDisposed = false
+    let timeoutId: number | null = null
+
+    const refreshLogs = (showLoading: boolean) => {
+      const requestId = latestMovieTaskLogsRequestIdRef.current + 1
+      latestMovieTaskLogsRequestIdRef.current = requestId
+
+      if (showLoading) {
+        setMovieTaskLogsStatus('loading')
+      }
+      setMovieTaskLogsError(null)
+
+      void listMovieMagnetIngestTaskLogs(selectedMovieTaskId)
+        .then((logs) => {
+          if (
+            isDisposed ||
+            latestMovieTaskLogsRequestIdRef.current !== requestId
+          ) {
+            return
+          }
+
+          setMovieTaskLogs(logs)
+          setMovieTaskLogsStatus(logs.length > 0 ? 'success' : 'empty')
+          setMovieTaskLogsError(null)
+        })
+        .catch((error) => {
+          if (
+            isDisposed ||
+            latestMovieTaskLogsRequestIdRef.current !== requestId
+          ) {
+            return
+          }
+
+          setMovieTaskLogs([])
+          setMovieTaskLogsStatus('error')
+          setMovieTaskLogsError(
+            error instanceof Error && error.message.trim()
+              ? error.message.trim()
+              : '任务日志加载失败，请稍后重试。',
+          )
+        })
+        .finally(() => {
+          if (isDisposed || isSelectedMovieTaskFinished) {
+            return
+          }
+
+          timeoutId = window.setTimeout(() => {
+            refreshLogs(false)
+          }, TASK_LOG_POLL_INTERVAL_MS)
+        })
+    }
+
+    refreshLogs(true)
+
+    return () => {
+      isDisposed = true
+
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
+    }
+  }, [mode, selectedMovieTaskId, isSelectedMovieTaskFinished])
+
+  useEffect(() => {
+    if (mode !== 'series' || !selectedSeriesTaskId) {
+      latestSeriesTaskLogsRequestIdRef.current += 1
+      setSeriesTaskLogs([])
+      setSeriesTaskLogsStatus('idle')
+      setSeriesTaskLogsError(null)
+      return
+    }
+
+    let isDisposed = false
+    let timeoutId: number | null = null
+
+    const refreshLogs = (showLoading: boolean) => {
+      const requestId = latestSeriesTaskLogsRequestIdRef.current + 1
+      latestSeriesTaskLogsRequestIdRef.current = requestId
+
+      if (showLoading) {
+        setSeriesTaskLogsStatus('loading')
+      }
+      setSeriesTaskLogsError(null)
+
+      void listSeriesMagnetIngestTaskLogs(selectedSeriesTaskId)
+        .then((logs) => {
+          if (
+            isDisposed ||
+            latestSeriesTaskLogsRequestIdRef.current !== requestId
+          ) {
+            return
+          }
+
+          setSeriesTaskLogs(logs)
+          setSeriesTaskLogsStatus(logs.length > 0 ? 'success' : 'empty')
+          setSeriesTaskLogsError(null)
+        })
+        .catch((error) => {
+          if (
+            isDisposed ||
+            latestSeriesTaskLogsRequestIdRef.current !== requestId
+          ) {
+            return
+          }
+
+          setSeriesTaskLogs([])
+          setSeriesTaskLogsStatus('error')
+          setSeriesTaskLogsError(
+            error instanceof Error && error.message.trim()
+              ? error.message.trim()
+              : '任务日志加载失败，请稍后重试。',
+          )
+        })
+        .finally(() => {
+          if (isDisposed || isSelectedSeriesTaskFinished) {
+            return
+          }
+
+          timeoutId = window.setTimeout(() => {
+            refreshLogs(false)
+          }, TASK_LOG_POLL_INTERVAL_MS)
+        })
+    }
+
+    refreshLogs(true)
+
+    return () => {
+      isDisposed = true
+
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
+    }
+  }, [mode, selectedSeriesTaskId, isSelectedSeriesTaskFinished])
 
   useEffect(() => {
     if (mode !== 'anime' || !selectedAnimeTaskId) {
@@ -715,7 +1012,7 @@ export function MagnetIngestPage() {
 
           timeoutId = window.setTimeout(() => {
             refreshLogs(false)
-          }, ANIME_TASK_LOG_POLL_INTERVAL_MS)
+          }, TASK_LOG_POLL_INTERVAL_MS)
         })
     }
 
@@ -1065,7 +1362,7 @@ export function MagnetIngestPage() {
       )
 
       if (!payload) {
-        const message = '所选剧集缺少标题、原始标题或目标季数，暂时无法提交'
+        const message = '所选剧集缺少标题或目标季数，暂时无法提交'
         setSubmitStatus('error')
         setSubmitError(message)
         setSubmitSuccessMessage(null)
@@ -1078,20 +1375,21 @@ export function MagnetIngestPage() {
       setSubmitSuccessMessage(null)
 
       try {
-        const response = await createSeriesMagnetIngest(payload)
-        const successMessage = response.save_path
-          ? `离线任务已创建：${response.save_path}`
-          : '已成功推送至离线下载'
+        const task = await createSeriesMagnetIngest(payload)
+        const successMessage = `剧集任务已创建：${task.id}`
 
         setSubmitStatus('success')
         setSubmitSuccessMessage(successMessage)
+        selectedSeriesTaskIdRef.current = task.id
+        setSelectedSeriesTaskId(task.id)
         setMagnetInput('')
         setToastMessage(successMessage)
+        await loadSeriesTasks()
       } catch (error) {
         const message =
           error instanceof Error && error.message.trim()
             ? error.message.trim()
-            : '推送失败，请稍后重试'
+            : '任务创建失败，请稍后重试'
 
         console.error('series magnet ingest failed', error)
 
@@ -1147,7 +1445,7 @@ export function MagnetIngestPage() {
         const message =
           error instanceof Error && error.message.trim()
             ? error.message.trim()
-            : '推送失败，请稍后重试'
+            : '任务创建失败，请稍后重试'
 
         console.error('anime magnet ingest failed', error)
 
@@ -1172,7 +1470,7 @@ export function MagnetIngestPage() {
     const payload = getMovieMagnetIngestPayload(normalizedMagnet, selectedMovie)
 
     if (!payload) {
-      const message = '所选电影缺少标题、原始标题或年份，暂时无法提交'
+      const message = '所选电影缺少标题或年份，暂时无法提交'
       setSubmitStatus('error')
       setSubmitError(message)
       setSubmitSuccessMessage(null)
@@ -1185,20 +1483,21 @@ export function MagnetIngestPage() {
     setSubmitSuccessMessage(null)
 
     try {
-      const response = await createMovieMagnetIngest(payload)
-      const successMessage = response.save_path
-        ? `离线任务已创建：${response.save_path}`
-        : '已成功推送至离线下载'
+      const task = await createMovieMagnetIngest(payload)
+      const successMessage = `电影任务已创建：${task.id}`
 
       setSubmitStatus('success')
       setSubmitSuccessMessage(successMessage)
+      selectedMovieTaskIdRef.current = task.id
+      setSelectedMovieTaskId(task.id)
       setMagnetInput('')
       setToastMessage(successMessage)
+      await loadMovieTasks()
     } catch (error) {
       const message =
         error instanceof Error && error.message.trim()
           ? error.message.trim()
-          : '推送失败，请稍后重试'
+          : '任务创建失败，请稍后重试'
 
       console.error('movie magnet ingest failed', error)
 
@@ -1208,6 +1507,51 @@ export function MagnetIngestPage() {
       setToastMessage(message)
     }
   }
+
+  const currentRecentTasks =
+    mode === 'movie'
+      ? movieTasks.map(toRecentMovieTask)
+      : mode === 'series'
+        ? seriesTasks.map(toRecentSeriesTask)
+        : animeTasks.map(toRecentAnimeTask)
+  const currentTasksStatus =
+    mode === 'movie'
+      ? movieTasksStatus
+      : mode === 'series'
+        ? seriesTasksStatus
+        : animeTasksStatus
+  const currentTasksError =
+    mode === 'movie'
+      ? movieTasksError
+      : mode === 'series'
+        ? seriesTasksError
+        : animeTasksError
+  const currentSelectedTaskId =
+    mode === 'movie'
+      ? selectedMovieTaskId
+      : mode === 'series'
+        ? selectedSeriesTaskId
+        : selectedAnimeTaskId
+  const currentTaskLogs =
+    mode === 'movie'
+      ? movieTaskLogs
+      : mode === 'series'
+        ? seriesTaskLogs
+        : animeTaskLogs
+  const currentTaskLogsStatus =
+    mode === 'movie'
+      ? movieTaskLogsStatus
+      : mode === 'series'
+        ? seriesTaskLogsStatus
+        : animeTaskLogsStatus
+  const currentTaskLogsError =
+    mode === 'movie'
+      ? movieTaskLogsError
+      : mode === 'series'
+        ? seriesTaskLogsError
+        : animeTaskLogsError
+  const taskModeLabel =
+    mode === 'movie' ? '电影' : mode === 'series' ? '剧集' : '动漫'
 
   return (
     <PageContainer
@@ -1364,14 +1708,16 @@ export function MagnetIngestPage() {
             {submitStatus === 'loading' ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                推送中...
+                创建中...
               </>
             ) : (
               <>
                 <CloudUpload className="h-4 w-4" />
-                {mode === 'anime'
-                  ? '创建动漫整季任务'
-                  : '推送至离线下载 (Push to Offline)'}
+                {mode === 'movie'
+                  ? '创建电影任务'
+                  : mode === 'series'
+                    ? '创建剧集任务'
+                    : '创建动漫整季任务'}
               </>
             )}
           </Button>
@@ -1385,56 +1731,58 @@ export function MagnetIngestPage() {
           ) : null}
 
           <RecentTasksTable
-            tasks={
-              mode === 'anime'
-                ? animeTasks.map(toRecentIngestTask)
-                : initialRecentTasks
-            }
-            description={
-              mode === 'anime'
-                ? '展示你有权限查看的动漫整季磁力任务，可点击任务查看日志。'
-                : undefined
-            }
-            actionLabel={mode === 'anime' ? '刷新' : 'VIEW ALL'}
+            tasks={currentRecentTasks}
+            description={`展示你有权限查看的${taskModeLabel}磁力任务，可点击任务查看日志。`}
+            actionLabel="刷新"
             emptyMessage={
-              animeTasksStatus === 'loading' ? '正在加载任务...' : '暂无动漫任务'
+              currentTasksStatus === 'loading'
+                ? '正在加载任务...'
+                : `暂无${taskModeLabel}任务`
             }
-            selectedTaskId={mode === 'anime' ? selectedAnimeTaskId : null}
-            onSelectTask={
-              mode === 'anime'
-                ? (task) => {
-                    selectedAnimeTaskIdRef.current = task.id
-                    setSelectedAnimeTaskId(task.id)
-                  }
-                : undefined
-            }
-            onViewAll={() => {
-              if (mode === 'anime') {
-                void loadAnimeTasks()
+            selectedTaskId={currentSelectedTaskId}
+            onSelectTask={(task) => {
+              if (mode === 'movie') {
+                selectedMovieTaskIdRef.current = task.id
+                setSelectedMovieTaskId(task.id)
                 return
               }
-
-              setToastMessage('Recent Tasks 暂保持静态 mock')
+              if (mode === 'series') {
+                selectedSeriesTaskIdRef.current = task.id
+                setSelectedSeriesTaskId(task.id)
+                return
+              }
+              selectedAnimeTaskIdRef.current = task.id
+              setSelectedAnimeTaskId(task.id)
+            }}
+            onViewAll={() => {
+              if (mode === 'movie') {
+                void loadMovieTasks()
+                return
+              }
+              if (mode === 'series') {
+                void loadSeriesTasks()
+                return
+              }
+              if (mode === 'anime') {
+                void loadAnimeTasks()
+              }
             }}
           />
 
-          {mode === 'anime' && animeTasksError ? (
-            <p className="text-sm text-rose-500">{animeTasksError}</p>
+          {currentTasksError ? (
+            <p className="text-sm text-rose-500">{currentTasksError}</p>
           ) : null}
 
         </div>
 
         <aside className="space-y-5">
-          {mode === 'anime' ? (
-            <TaskLogsCard
-              logs={animeTaskLogs}
-              status={animeTaskLogsStatus}
-              error={animeTaskLogsError}
-              selectedTaskId={selectedAnimeTaskId}
-            />
-          ) : (
-            <SystemLogsCard logs={systemLogEntries} />
-          )}
+          <TaskLogsCard
+            logs={currentTaskLogs}
+            status={currentTaskLogsStatus}
+            error={currentTaskLogsError}
+            selectedTaskId={currentSelectedTaskId}
+            emptySelectionMessage={`选择${taskModeLabel}任务后查看执行日志。`}
+          />
           <NodeStatusCard />
           <ProTipCard />
         </aside>

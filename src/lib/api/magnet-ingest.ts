@@ -14,10 +14,18 @@ import type {
   CreateMovieMagnetIngestPayload,
   CreateMovieMagnetIngestResponse,
   JavaApiResponse,
+  MagnetIngestTaskLog,
+  MovieMagnetIngestTask,
+  MovieMagnetIngestTaskListData,
+  MovieMagnetIngestTaskLogListData,
+  SeriesMagnetIngestTask,
+  SeriesMagnetIngestTaskListData,
+  SeriesMagnetIngestTaskLogListData,
 } from '@/types/magnet-ingest'
 
 const JAVA_ANIME_MAGNET_SEARCH_ERROR_MESSAGE = '动漫搜索失败，请稍后重试。'
 const JAVA_ANIME_MAGNET_TASK_ERROR_MESSAGE = '动漫磁力任务处理失败，请稍后重试。'
+const JAVA_MAGNET_TASK_ERROR_MESSAGE = '磁力任务处理失败，请稍后重试。'
 
 export async function searchAnimeMagnetItems(
   term: string,
@@ -129,7 +137,7 @@ export async function createMovieMagnetIngest(
     const response = await javaApiClient.post<
       JavaApiResponse<CreateMovieMagnetIngestResponse>
     >(
-      '/api/v1/magnet-ingest/movies',
+      '/api/v1/magnet-ingest/movies/tasks',
       payload,
     )
 
@@ -139,7 +147,51 @@ export async function createMovieMagnetIngest(
 
     return response.data.data
   } catch (error) {
-    throw new Error(getJavaErrorMessage(error) || '推送失败，请稍后重试')
+    throw new Error(getJavaErrorMessage(error) || JAVA_MAGNET_TASK_ERROR_MESSAGE)
+  }
+}
+
+export async function listMovieMagnetIngestTasks(): Promise<
+  MovieMagnetIngestTask[]
+> {
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<MovieMagnetIngestTaskListData>
+    >('/api/v1/magnet-ingest/movies/tasks')
+
+    if (
+      response.data.code !== 200 ||
+      !response.data.data ||
+      !Array.isArray(response.data.data.items)
+    ) {
+      throw new Error(response.data.message || 'movie magnet tasks failed')
+    }
+
+    return response.data.data.items
+  } catch (error) {
+    throw new Error(getJavaErrorMessage(error) || JAVA_MAGNET_TASK_ERROR_MESSAGE)
+  }
+}
+
+export async function listMovieMagnetIngestTaskLogs(
+  taskId: string,
+): Promise<MagnetIngestTaskLog[]> {
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<MovieMagnetIngestTaskLogListData>
+    >(`/api/v1/magnet-ingest/movies/tasks/${encodeURIComponent(taskId)}/logs`)
+
+    if (
+      response.data.code !== 200 ||
+      !response.data.data ||
+      !Array.isArray(response.data.data.items)
+    ) {
+      throw new Error(response.data.message || 'movie magnet task logs failed')
+    }
+
+    return response.data.data.items
+  } catch (error) {
+    throw new Error(getJavaErrorMessage(error) || JAVA_MAGNET_TASK_ERROR_MESSAGE)
   }
 }
 
@@ -150,7 +202,7 @@ export async function createSeriesMagnetIngest(
     const response = await javaApiClient.post<
       JavaApiResponse<CreateSeriesMagnetIngestResponse>
     >(
-      '/api/v1/magnet-ingest/series',
+      '/api/v1/magnet-ingest/series/tasks',
       payload,
     )
 
@@ -160,6 +212,50 @@ export async function createSeriesMagnetIngest(
 
     return response.data.data
   } catch (error) {
-    throw new Error(getJavaErrorMessage(error) || '推送失败，请稍后重试')
+    throw new Error(getJavaErrorMessage(error) || JAVA_MAGNET_TASK_ERROR_MESSAGE)
+  }
+}
+
+export async function listSeriesMagnetIngestTasks(): Promise<
+  SeriesMagnetIngestTask[]
+> {
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<SeriesMagnetIngestTaskListData>
+    >('/api/v1/magnet-ingest/series/tasks')
+
+    if (
+      response.data.code !== 200 ||
+      !response.data.data ||
+      !Array.isArray(response.data.data.items)
+    ) {
+      throw new Error(response.data.message || 'series magnet tasks failed')
+    }
+
+    return response.data.data.items
+  } catch (error) {
+    throw new Error(getJavaErrorMessage(error) || JAVA_MAGNET_TASK_ERROR_MESSAGE)
+  }
+}
+
+export async function listSeriesMagnetIngestTaskLogs(
+  taskId: string,
+): Promise<MagnetIngestTaskLog[]> {
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<SeriesMagnetIngestTaskLogListData>
+    >(`/api/v1/magnet-ingest/series/tasks/${encodeURIComponent(taskId)}/logs`)
+
+    if (
+      response.data.code !== 200 ||
+      !response.data.data ||
+      !Array.isArray(response.data.data.items)
+    ) {
+      throw new Error(response.data.message || 'series magnet task logs failed')
+    }
+
+    return response.data.data.items
+  } catch (error) {
+    throw new Error(getJavaErrorMessage(error) || JAVA_MAGNET_TASK_ERROR_MESSAGE)
   }
 }

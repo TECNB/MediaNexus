@@ -16,7 +16,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import type { AnimeMagnetIngestTaskLog } from '@/types/magnet-ingest'
+import type { MagnetIngestTaskLog } from '@/types/magnet-ingest'
 
 type SystemLogsCardProps = {
   logs: SystemLogEntry[]
@@ -25,10 +25,11 @@ type SystemLogsCardProps = {
 type TaskLogsStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
 
 type TaskLogsCardProps = {
-  logs: AnimeMagnetIngestTaskLog[]
+  logs: MagnetIngestTaskLog[]
   status: TaskLogsStatus
   error: string | null
   selectedTaskId: string | null
+  emptySelectionMessage?: string
 }
 
 type TaskLogsContentProps = TaskLogsCardProps & {
@@ -101,7 +102,7 @@ function getCurrentAction(props: TaskLogsCardProps) {
   if (!selectedTaskId) {
     return {
       stage: '未选择',
-      message: '选择动漫任务后查看当前动作。',
+      message: props.emptySelectionMessage ?? '选择任务后查看当前动作。',
       detail: null,
       tone: 'idle' as TaskCurrentActionTone,
       active: false,
@@ -256,6 +257,7 @@ function TaskLogsContent({
   status,
   error,
   selectedTaskId,
+  emptySelectionMessage,
   className,
 }: TaskLogsContentProps) {
   const logScrollRef = useRef<HTMLDivElement | null>(null)
@@ -305,7 +307,9 @@ function TaskLogsContent({
       )}
     >
       {!selectedTaskId ? (
-        <p className="text-zinc-500">选择动漫任务后查看执行日志。</p>
+        <p className="text-zinc-500">
+          {emptySelectionMessage ?? '选择任务后查看执行日志。'}
+        </p>
       ) : null}
 
       {selectedTaskId && status === 'loading' ? (

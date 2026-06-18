@@ -50,7 +50,7 @@ export type AnimeMagnetSearchResponseData = {
   total: number
 }
 
-export type AnimeMagnetIngestTaskStatus =
+export type MagnetIngestTaskStatus =
   | 'PENDING'
   | 'SUBMITTED'
   | 'DOWNLOADING'
@@ -60,10 +60,12 @@ export type AnimeMagnetIngestTaskStatus =
   | 'FAILED'
   | 'INTERRUPTED'
 
+export type AnimeMagnetIngestTaskStatus = MagnetIngestTaskStatus
+
 export type AnimeMagnetIngestTask = {
   id: string
   created_by_user_id: number | null
-  status: AnimeMagnetIngestTaskStatus
+  status: MagnetIngestTaskStatus
   stage: string
   bgm_id: string
   title: string
@@ -79,7 +81,47 @@ export type AnimeMagnetIngestTask = {
   finished_at: string | null
 }
 
-export type AnimeMagnetIngestTaskLog = {
+export type MovieMagnetIngestTask = {
+  id: string
+  created_by_user_id: number | null
+  status: MagnetIngestTaskStatus
+  stage: string
+  title: string
+  original_title: string | null
+  year: number
+  magnet_hash: string
+  save_path: string
+  temp_path: string
+  organized_count: number
+  skipped_count: number
+  error_message: string | null
+  created_at: string | null
+  updated_at: string | null
+  finished_at: string | null
+}
+
+export type SeriesMagnetIngestTask = {
+  id: string
+  created_by_user_id: number | null
+  status: MagnetIngestTaskStatus
+  stage: string
+  title: string
+  original_title: string | null
+  season_number: number
+  series_name: string
+  season_folder: string
+  magnet_hash: string
+  save_path: string
+  temp_path: string
+  organized_count: number
+  skipped_count: number
+  error_message: string | null
+  created_at: string | null
+  updated_at: string | null
+  finished_at: string | null
+}
+
+export type MagnetIngestTaskLog = {
   id: number
   task_id: string
   level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | string
@@ -89,22 +131,38 @@ export type AnimeMagnetIngestTaskLog = {
   created_at: string | null
 }
 
+export type AnimeMagnetIngestTaskLog = MagnetIngestTaskLog
+
 export type AnimeMagnetIngestTaskListData = {
   items: AnimeMagnetIngestTask[]
   total: number
 }
 
 export type AnimeMagnetIngestTaskLogListData = {
-  items: AnimeMagnetIngestTaskLog[]
+  items: MagnetIngestTaskLog[]
   total: number
 }
 
-export type CreateMovieMagnetIngestResponse = {
-  save_path: string
+export type MovieMagnetIngestTaskListData = {
+  items: MovieMagnetIngestTask[]
+  total: number
 }
 
-export type CreateSeriesMagnetIngestResponse = {
-  save_path: string
-  series_name: string
-  season_folder: string
+export type MovieMagnetIngestTaskLogListData = {
+  items: MagnetIngestTaskLog[]
+  total: number
 }
+
+export type SeriesMagnetIngestTaskListData = {
+  items: SeriesMagnetIngestTask[]
+  total: number
+}
+
+export type SeriesMagnetIngestTaskLogListData = {
+  items: MagnetIngestTaskLog[]
+  total: number
+}
+
+export type CreateMovieMagnetIngestResponse = MovieMagnetIngestTask
+
+export type CreateSeriesMagnetIngestResponse = SeriesMagnetIngestTask
