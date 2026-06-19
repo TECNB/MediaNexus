@@ -89,6 +89,13 @@ export type MovieMagnetIngestTask = {
   title: string
   original_title: string | null
   year: number
+  source_type: 'MANUAL_MAGNET' | 'PROWLARR_RELEASE' | string
+  release_title: string | null
+  release_indexer: string | null
+  release_size: number | null
+  resolution_tags: string[]
+  quality_tag: string | null
+  dynamic_range_tags: string[]
   magnet_hash: string
   save_path: string
   temp_path: string
@@ -108,6 +115,13 @@ export type SeriesMagnetIngestTask = {
   title: string
   original_title: string | null
   season_number: number
+  source_type: 'MANUAL_MAGNET' | 'PROWLARR_RELEASE' | string
+  release_title: string | null
+  release_indexer: string | null
+  release_size: number | null
+  resolution_tags: string[]
+  quality_tag: string | null
+  dynamic_range_tags: string[]
   series_name: string
   season_folder: string
   magnet_hash: string

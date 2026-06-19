@@ -3,11 +3,21 @@ import axios from 'axios'
 import apiClient from '@/lib/axios'
 import { getJavaErrorMessage, javaApiClient } from '@/lib/java-api'
 import type {
+  MovieMagnetIngestTask,
+  SeriesMagnetIngestTask,
+} from '@/types/magnet-ingest'
+import type {
   AddMovieResourceRequest,
   AddMovieResourceResponse,
+  CreateMovieOpenListIngestPayload,
+  CreateMovieReleaseOpenListIngestPayload,
+  CreateSeriesOpenListIngestPayload,
+  CreateSeriesReleaseOpenListIngestPayload,
   MovieQualityProfile,
   MovieQualityProfilesResponse,
   MovieSearchItem,
+  ProwlarrReleaseSearchData,
+  SearchProwlarrReleasesParams,
   SeriesSeasonsData,
   SeriesSearchItem,
 } from '@/types/resources'
@@ -133,6 +143,26 @@ export async function addMovieResource(
   }
 }
 
+export async function createMovieOpenListIngest(
+  payload: CreateMovieOpenListIngestPayload,
+): Promise<MovieMagnetIngestTask> {
+  try {
+    const response = await javaApiClient.post<
+      JavaApiResponse<MovieMagnetIngestTask>
+    >('/api/v1/resources/movies/openlist-ingest', payload)
+
+    if (response.data.code !== 200 || !response.data.data) {
+      throw new Error(response.data.message || 'movie openlist ingest failed')
+    }
+
+    return response.data.data
+  } catch (error) {
+    throw new Error(
+      getJavaErrorMessage(error) || '电影入库任务创建失败，请稍后重试。',
+    )
+  }
+}
+
 export async function searchSeries(
   term: string,
   signal?: AbortSignal,
@@ -172,6 +202,95 @@ export async function getSeriesSeasons(
 
     throw new Error(
       getJavaErrorMessage(error) || '剧集季数加载失败，请稍后重试。',
+    )
+  }
+}
+
+export async function createSeriesOpenListIngest(
+  payload: CreateSeriesOpenListIngestPayload,
+): Promise<SeriesMagnetIngestTask> {
+  try {
+    const response = await javaApiClient.post<
+      JavaApiResponse<SeriesMagnetIngestTask>
+    >('/api/v1/resources/series/openlist-ingest', payload)
+
+    if (response.data.code !== 200 || !response.data.data) {
+      throw new Error(response.data.message || 'series openlist ingest failed')
+    }
+
+    return response.data.data
+  } catch (error) {
+    throw new Error(
+      getJavaErrorMessage(error) || '剧集入库任务创建失败，请稍后重试。',
+    )
+  }
+}
+
+export async function searchProwlarrReleases(
+  params: SearchProwlarrReleasesParams,
+  signal?: AbortSignal,
+): Promise<ProwlarrReleaseSearchData> {
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<ProwlarrReleaseSearchData>
+    >('/api/v1/resources/releases/search', {
+      params,
+      signal,
+    })
+
+    if (
+      response.data.code !== 200 ||
+      !response.data.data ||
+      !Array.isArray(response.data.data.items)
+    ) {
+      throw new Error(response.data.message || 'prowlarr release search failed')
+    }
+
+    return response.data.data
+  } catch (error) {
+    if (isRequestCanceledError(error)) {
+      throw error
+    }
+    throw new Error(
+      getJavaErrorMessage(error) || '发布资源加载失败，请稍后重试。',
+    )
+  }
+}
+
+export async function createMovieReleaseOpenListIngest(
+  payload: CreateMovieReleaseOpenListIngestPayload,
+): Promise<MovieMagnetIngestTask> {
+  try {
+    const response = await javaApiClient.post<
+      JavaApiResponse<MovieMagnetIngestTask>
+    >('/api/v1/resources/movies/releases/openlist-ingest', payload)
+
+    if (response.data.code !== 200 || !response.data.data) {
+      throw new Error(response.data.message || 'movie release ingest failed')
+    }
+    return response.data.data
+  } catch (error) {
+    throw new Error(
+      getJavaErrorMessage(error) || '电影发布资源入库失败，请稍后重试。',
+    )
+  }
+}
+
+export async function createSeriesReleaseOpenListIngest(
+  payload: CreateSeriesReleaseOpenListIngestPayload,
+): Promise<SeriesMagnetIngestTask> {
+  try {
+    const response = await javaApiClient.post<
+      JavaApiResponse<SeriesMagnetIngestTask>
+    >('/api/v1/resources/series/releases/openlist-ingest', payload)
+
+    if (response.data.code !== 200 || !response.data.data) {
+      throw new Error(response.data.message || 'series release ingest failed')
+    }
+    return response.data.data
+  } catch (error) {
+    throw new Error(
+      getJavaErrorMessage(error) || '剧集发布资源入库失败，请稍后重试。',
     )
   }
 }

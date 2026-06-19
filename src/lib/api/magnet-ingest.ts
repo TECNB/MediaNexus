@@ -173,6 +173,24 @@ export async function listMovieMagnetIngestTasks(): Promise<
   }
 }
 
+export async function getMovieMagnetIngestTask(
+  taskId: string,
+): Promise<MovieMagnetIngestTask> {
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<MovieMagnetIngestTask>
+    >(`/api/v1/magnet-ingest/movies/tasks/${encodeURIComponent(taskId)}`)
+
+    if (response.data.code !== 200 || !response.data.data) {
+      throw new Error(response.data.message || 'movie magnet task failed')
+    }
+
+    return response.data.data
+  } catch (error) {
+    throw new Error(getJavaErrorMessage(error) || JAVA_MAGNET_TASK_ERROR_MESSAGE)
+  }
+}
+
 export async function listMovieMagnetIngestTaskLogs(
   taskId: string,
 ): Promise<MagnetIngestTaskLog[]> {
@@ -233,6 +251,24 @@ export async function listSeriesMagnetIngestTasks(): Promise<
     }
 
     return response.data.data.items
+  } catch (error) {
+    throw new Error(getJavaErrorMessage(error) || JAVA_MAGNET_TASK_ERROR_MESSAGE)
+  }
+}
+
+export async function getSeriesMagnetIngestTask(
+  taskId: string,
+): Promise<SeriesMagnetIngestTask> {
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<SeriesMagnetIngestTask>
+    >(`/api/v1/magnet-ingest/series/tasks/${encodeURIComponent(taskId)}`)
+
+    if (response.data.code !== 200 || !response.data.data) {
+      throw new Error(response.data.message || 'series magnet task failed')
+    }
+
+    return response.data.data
   } catch (error) {
     throw new Error(getJavaErrorMessage(error) || JAVA_MAGNET_TASK_ERROR_MESSAGE)
   }

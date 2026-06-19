@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { ArrowRight, Clock3 } from 'lucide-react'
 
 import { PageContainer } from '@/components/layout/page-container'
 import {
@@ -22,28 +24,41 @@ import {
   subscribeAnime,
 } from '@/lib/api/anime'
 import {
-  addMovieResource,
-  getMovieQualityProfiles,
+  listMovieMagnetIngestTasks,
+  listSeriesMagnetIngestTasks,
+} from '@/lib/api/magnet-ingest'
+import {
+  createMovieOpenListIngest,
+  createSeriesOpenListIngest,
+  getSeriesSeasons,
   isRequestCanceledError,
   searchMovies,
   searchSeries,
 } from '@/lib/api/resources'
+import { cn } from '@/lib/utils'
 import type {
   AnimeSearchItem,
   AnimeSubtitleGroup,
   AnimeSubscriptionPreview,
 } from '@/types/anime'
 import type {
-  MovieQualityProfile,
-  MovieSearchItem,
+  MagnetIngestTaskStatus,
+  MovieMagnetIngestTask,
+  SeriesMagnetIngestTask,
+} from '@/types/magnet-ingest'
+import type {
+  OpenListQualityTag,
+  ResourcePublishPageState,
   SearchableResourceItem,
+  SeriesSearchItem,
 } from '@/types/resources'
 
 type SearchableCategory = ResourceCategoryValue
 type ResourceSearchResultItem = SearchableResourceItem | AnimeSearchItem
 
 type ResourceSearchStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
-type MovieQualityProfilesStatus = 'idle' | 'loading' | 'success' | 'error'
+type RecentIngestStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
+type RecentIngestMediaType = 'movie' | 'series'
 
 type ResourceSearchState = {
   status: ResourceSearchStatus
@@ -51,7 +66,7 @@ type ResourceSearchState = {
   errorMessage: string | null
 }
 
-type MovieAddState = {
+type MediaIngestState = {
   status: MediaCardAddStatus
   message: string | null
 }
@@ -73,6 +88,35 @@ type AnimeSubscribeState = {
   message: string | null
 }
 
+type RecentIngestSummary = {
+  taskId: string
+  title: string
+  mediaType: RecentIngestMediaType
+  status: MagnetIngestTaskStatus
+  qualityTag: string | null
+  updatedAt: string | null
+}
+
+type RecentIngestState = {
+  status: RecentIngestStatus
+  item: RecentIngestSummary | null
+  message: string | null
+}
+
+const OPENLIST_QUALITY_TAGS: OpenListQualityTag[] = ['2160p', '1080p', '720p']
+const DEFAULT_QUALITY_TAG: OpenListQualityTag = '2160p'
+
+const taskStatusCopy: Record<MagnetIngestTaskStatus, string> = {
+  PENDING: '等待中',
+  SUBMITTED: '已提交',
+  DOWNLOADING: '下载中',
+  ORGANIZING: '整理中',
+  SUCCEEDED: '已完成',
+  PARTIAL_SUCCESS: '部分完成',
+  FAILED: '失败',
+  INTERRUPTED: '已中断',
+}
+
 const searchableCategoryCopy: Record<
   SearchableCategory,
   {
@@ -89,9 +133,9 @@ const searchableCategoryCopy: Record<
   movie: {
     placeholder: '搜索电影名称…',
     idleTitle: '输入电影名称开始搜索',
-    idleDescription: '当前分类会调用电影搜索接口。',
+    idleDescription: '选择电影后可直接通过 OpenList 创建入库任务。',
     loadingTitle: '正在搜索电影…',
-    loadingDescription: '已连接后端接口，正在获取最新搜索结果。',
+    loadingDescription: '正在从资源索引服务获取最新搜索结果。',
     emptyTitle: '没有搜索结果',
     emptyDescription: '换个电影名称试试，或检查关键词是否输入正确。',
     errorMessage: '电影搜索失败，请稍后重试。',
@@ -99,9 +143,9 @@ const searchableCategoryCopy: Record<
   tv: {
     placeholder: '搜索电视剧名称…',
     idleTitle: '输入电视剧名称开始搜索',
-    idleDescription: '当前分类会调用电视剧搜索接口。',
+    idleDescription: '选择剧集季数和分辨率后可直接创建入库任务。',
     loadingTitle: '正在搜索电视剧…',
-    loadingDescription: '已连接后端接口，正在获取最新搜索结果。',
+    loadingDescription: '正在从资源索引服务获取最新搜索结果。',
     emptyTitle: '没有搜索结果',
     emptyDescription: '换个电视剧名称试试，或检查关键词是否输入正确。',
     errorMessage: '电视剧搜索失败，请稍后重试。',
@@ -139,24 +183,44 @@ function isAnimeSearchItem(
   return 'source_url' in item
 }
 
-function isMovieSearchItem(
-  item: ResourceSearchResultItem,
-): item is MovieSearchItem {
-  return !isAnimeSearchItem(item) && !('tvdb_id' in item)
+function isSeriesSearchItem(
+  item: SearchableResourceItem,
+): item is SeriesSearchItem {
+  return 'tvdb_id' in item
 }
 
-function getMovieAddKey(item: MovieSearchItem) {
+function getMovieIngestKey(item: SearchableResourceItem) {
   return typeof item.tmdb_id === 'number' && item.tmdb_id > 0
-    ? `tmdb:${item.tmdb_id}`
-    : `id:${item.id}`
+    ? `movie:tmdb:${item.tmdb_id}`
+    : `movie:id:${item.id}`
+}
+
+function getSeriesIngestKey(item: SeriesSearchItem) {
+  if (typeof item.tvdb_id === 'number' && item.tvdb_id > 0) {
+    return `series:tvdb:${item.tvdb_id}`
+  }
+  if (typeof item.tmdb_id === 'number' && item.tmdb_id > 0) {
+    return `series:tmdb:${item.tmdb_id}`
+  }
+  return `series:id:${item.id}`
+}
+
+function getMediaIngestKey(item: SearchableResourceItem) {
+  return isSeriesSearchItem(item)
+    ? getSeriesIngestKey(item)
+    : getMovieIngestKey(item)
 }
 
 function getAnimeCardKey(item: AnimeSearchItem) {
   return item.id
 }
 
-function getDefaultMovieQualityProfileId(profiles: MovieQualityProfile[]) {
-  return profiles.find((profile) => profile.is_default)?.id ?? profiles[0]?.id
+function getTaskRoute(mediaType: RecentIngestMediaType, taskId: string) {
+  return `/resources/ingest/${mediaType}/${encodeURIComponent(taskId)}`
+}
+
+function getPublishRoute() {
+  return '/resources/publish'
 }
 
 function createInitialSearchState(): ResourceSearchState {
@@ -167,6 +231,64 @@ function createInitialSearchState(): ResourceSearchState {
   }
 }
 
+function formatTaskTime(value: string | null) {
+  if (!value) {
+    return '暂无时间'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return '暂无时间'
+  }
+
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function getTaskTimeValue(value: string | null) {
+  if (!value) {
+    return 0
+  }
+
+  const time = new Date(value).getTime()
+  return Number.isNaN(time) ? 0 : time
+}
+
+function toRecentMovieTask(task: MovieMagnetIngestTask): RecentIngestSummary {
+  return {
+    taskId: task.id,
+    title: `${task.title} (${task.year})`,
+    mediaType: 'movie',
+    status: task.status,
+    qualityTag: task.quality_tag ?? task.resolution_tags?.[0] ?? null,
+    updatedAt: task.updated_at ?? task.created_at,
+  }
+}
+
+function toRecentSeriesTask(task: SeriesMagnetIngestTask): RecentIngestSummary {
+  return {
+    taskId: task.id,
+    title: `${task.series_name} ${task.season_folder}`,
+    mediaType: 'series',
+    status: task.status,
+    qualityTag: task.quality_tag ?? task.resolution_tags?.[0] ?? null,
+    updatedAt: task.updated_at ?? task.created_at,
+  }
+}
+
+function pickLatestRecentTask(items: RecentIngestSummary[]) {
+  return items
+    .slice()
+    .sort(
+      (left, right) =>
+        getTaskTimeValue(right.updatedAt) - getTaskTimeValue(left.updatedAt),
+    )[0]
+}
+
 function EmptyState({
   title,
   description,
@@ -175,7 +297,7 @@ function EmptyState({
   description: string
 }) {
   return (
-    <div className="mx-auto max-w-xl rounded-[28px] border border-dashed border-slate-300 bg-white/80 px-8 py-14 text-center">
+    <div className="mx-auto max-w-xl rounded-[28px] bg-white px-8 py-14 text-center shadow-[0_18px_40px_rgba(15,23,42,0.035)]">
       <p className="text-lg font-semibold text-slate-900">{title}</p>
       <p className="mt-2 text-sm text-slate-500">{description}</p>
     </div>
@@ -183,24 +305,30 @@ function EmptyState({
 }
 
 export function ResourceSearchPage() {
+  const navigate = useNavigate()
   const [category, setCategory] = useState<ResourceCategoryValue>('movie')
   const [searchText, setSearchText] = useState('')
+  const [submittedTerm, setSubmittedTerm] = useState('')
   const [searchState, setSearchState] = useState<ResourceSearchState>(
     createInitialSearchState,
   )
-  const [movieAddStates, setMovieAddStates] = useState<
-    Record<string, MovieAddState>
+  const [mediaIngestStates, setMediaIngestStates] = useState<
+    Record<string, MediaIngestState>
   >({})
-  const [movieQualityProfiles, setMovieQualityProfiles] = useState<
-    MovieQualityProfile[]
-  >([])
-  const [movieQualityProfilesStatus, setMovieQualityProfilesStatus] =
-    useState<MovieQualityProfilesStatus>('idle')
-  const [movieQualityProfilesMessage, setMovieQualityProfilesMessage] =
-    useState<string | null>(null)
-  const [movieQualitySelections, setMovieQualitySelections] = useState<
+  const [qualitySelections, setQualitySelections] = useState<
+    Record<string, OpenListQualityTag>
+  >({})
+  const [seriesSeasonSelections, setSeriesSeasonSelections] = useState<
     Record<string, number>
   >({})
+  const [seriesSeasonOptions, setSeriesSeasonOptions] = useState<
+    Record<string, number[]>
+  >({})
+  const [recentIngestState, setRecentIngestState] = useState<RecentIngestState>({
+    status: 'idle',
+    item: null,
+    message: null,
+  })
   const [animeGroupsStates, setAnimeGroupsStates] = useState<
     Record<string, AnimeGroupsState>
   >({})
@@ -215,81 +343,65 @@ export function ResourceSearchPage() {
   >({})
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const latestRequestIdRef = useRef(0)
+  const recentIngestRequestIdRef = useRef(0)
   const activeRequestControllerRef = useRef<AbortController | null>(null)
-  const activeMovieAddKeysRef = useRef<Set<string>>(new Set())
+  const seriesSeasonsControllerRef = useRef<AbortController | null>(null)
+  const activeMediaIngestKeysRef = useRef<Set<string>>(new Set())
   const activeAnimeSubscribeKeysRef = useRef<Set<string>>(new Set())
   const animeCardsControllerRef = useRef<AbortController | null>(null)
   const animePreviewRequestIdsRef = useRef<Record<string, number>>({})
-  const movieQualityProfilesStatusRef =
-    useRef<MovieQualityProfilesStatus>('idle')
-  const movieQualityProfilesRequestIdRef = useRef(0)
-  const movieQualityProfilesControllerRef = useRef<AbortController | null>(
-    null,
-  )
 
-  const loadMovieQualityProfiles = useCallback((force = false) => {
-    if (
-      !force &&
-      (movieQualityProfilesStatusRef.current === 'loading' ||
-        movieQualityProfilesStatusRef.current === 'success')
-    ) {
-      return
-    }
+  const loadRecentIngestSummary = useCallback(() => {
+    recentIngestRequestIdRef.current += 1
+    const requestId = recentIngestRequestIdRef.current
 
-    movieQualityProfilesRequestIdRef.current += 1
-    const requestId = movieQualityProfilesRequestIdRef.current
-    const controller = new AbortController()
+    setRecentIngestState((currentState) => ({
+      status: currentState.item ? 'success' : 'loading',
+      item: currentState.item,
+      message: null,
+    }))
 
-    movieQualityProfilesControllerRef.current?.abort()
-    movieQualityProfilesControllerRef.current = controller
-    movieQualityProfilesStatusRef.current = 'loading'
-    setMovieQualityProfilesStatus('loading')
-    setMovieQualityProfilesMessage(null)
-
-    void getMovieQualityProfiles(controller.signal)
-      .then((items) => {
-        if (movieQualityProfilesRequestIdRef.current !== requestId) {
+    void Promise.all([
+      listMovieMagnetIngestTasks(),
+      listSeriesMagnetIngestTasks(),
+    ])
+      .then(([movieTasks, seriesTasks]) => {
+        if (recentIngestRequestIdRef.current !== requestId) {
           return
         }
 
-        if (items.length === 0) {
-          movieQualityProfilesStatusRef.current = 'error'
-          setMovieQualityProfiles([])
-          setMovieQualityProfilesStatus('error')
-          setMovieQualityProfilesMessage('未获取到可用质量档位，请稍后重试。')
-          return
-        }
+        const latestTask = pickLatestRecentTask([
+          ...movieTasks.map(toRecentMovieTask),
+          ...seriesTasks.map(toRecentSeriesTask),
+        ])
 
-        movieQualityProfilesStatusRef.current = 'success'
-        setMovieQualityProfiles(items)
-        setMovieQualityProfilesStatus('success')
-        setMovieQualityProfilesMessage(null)
+        setRecentIngestState({
+          status: latestTask ? 'success' : 'empty',
+          item: latestTask ?? null,
+          message: null,
+        })
       })
       .catch((error) => {
-        if (controller.signal.aborted || isRequestCanceledError(error)) {
-          return
-        }
-
-        if (movieQualityProfilesRequestIdRef.current !== requestId) {
+        if (recentIngestRequestIdRef.current !== requestId) {
           return
         }
 
         const message =
           error instanceof Error && error.message.trim()
             ? error.message.trim()
-            : '质量档位加载失败，请稍后重试。'
+            : '最近入库记录暂时不可用。'
 
-        movieQualityProfilesStatusRef.current = 'error'
-        setMovieQualityProfiles([])
-        setMovieQualityProfilesStatus('error')
-        setMovieQualityProfilesMessage(message)
-      })
-      .finally(() => {
-        if (movieQualityProfilesControllerRef.current === controller) {
-          movieQualityProfilesControllerRef.current = null
-        }
+        setRecentIngestState({
+          status: 'error',
+          item: null,
+          message,
+        })
       })
   }, [])
+
+  useEffect(() => {
+    loadRecentIngestSummary()
+  }, [loadRecentIngestSummary])
 
   useEffect(() => {
     if (!toastMessage) {
@@ -308,14 +420,9 @@ export function ResourceSearchPage() {
   useEffect(() => {
     return () => {
       activeRequestControllerRef.current?.abort()
+      seriesSeasonsControllerRef.current?.abort()
       animeCardsControllerRef.current?.abort()
       animeCardsControllerRef.current = null
-      movieQualityProfilesControllerRef.current?.abort()
-      movieQualityProfilesControllerRef.current = null
-
-      if (movieQualityProfilesStatusRef.current === 'loading') {
-        movieQualityProfilesStatusRef.current = 'idle'
-      }
     }
   }, [])
 
@@ -323,33 +430,24 @@ export function ResourceSearchPage() {
     latestRequestIdRef.current += 1
     activeRequestControllerRef.current?.abort()
     activeRequestControllerRef.current = null
+    seriesSeasonsControllerRef.current?.abort()
+    seriesSeasonsControllerRef.current = null
     animeCardsControllerRef.current?.abort()
     animeCardsControllerRef.current = null
-    activeMovieAddKeysRef.current.clear()
+    activeMediaIngestKeysRef.current.clear()
     activeAnimeSubscribeKeysRef.current.clear()
     setSearchState(createInitialSearchState())
-    setMovieAddStates({})
-    setMovieQualitySelections({})
+    setSubmittedTerm('')
+    setMediaIngestStates({})
+    setQualitySelections({})
+    setSeriesSeasonSelections({})
+    setSeriesSeasonOptions({})
     setAnimeGroupsStates({})
     setAnimePreviewStates({})
     setAnimeGroupSelections({})
     setAnimeSubscribeStates({})
     animePreviewRequestIdsRef.current = {}
   }, [category])
-
-  useEffect(() => {
-    if (category !== 'movie') {
-      return
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      loadMovieQualityProfiles()
-    }, 0)
-
-    return () => {
-      window.clearTimeout(timeoutId)
-    }
-  }, [category, loadMovieQualityProfiles])
 
   const isCategorySearchable = isSearchableCategory(category)
   const activeCategoryCopy = isCategorySearchable
@@ -358,8 +456,6 @@ export function ResourceSearchPage() {
   const isSearching = isCategorySearchable && searchState.status === 'loading'
   const isSearchSubmitDisabled = !isCategorySearchable || isSearching
   const activeSearchPlaceholder = activeCategoryCopy?.placeholder ?? '搜索资源…'
-  const defaultMovieQualityProfileId =
-    getDefaultMovieQualityProfileId(movieQualityProfiles)
 
   function handleSearchSubmit() {
     if (!isSearchableCategory(category) || searchState.status === 'loading') {
@@ -375,15 +471,20 @@ export function ResourceSearchPage() {
 
     activeRequestControllerRef.current?.abort()
     activeRequestControllerRef.current = null
+    seriesSeasonsControllerRef.current?.abort()
+    seriesSeasonsControllerRef.current = null
     animeCardsControllerRef.current?.abort()
     animeCardsControllerRef.current = null
 
     if (!keyword) {
-      activeMovieAddKeysRef.current.clear()
+      activeMediaIngestKeysRef.current.clear()
       activeAnimeSubscribeKeysRef.current.clear()
       setSearchState(createInitialSearchState())
-      setMovieAddStates({})
-      setMovieQualitySelections({})
+      setSubmittedTerm('')
+      setMediaIngestStates({})
+      setQualitySelections({})
+      setSeriesSeasonSelections({})
+      setSeriesSeasonOptions({})
       setAnimeGroupsStates({})
       setAnimePreviewStates({})
       setAnimeGroupSelections({})
@@ -394,11 +495,15 @@ export function ResourceSearchPage() {
 
     const controller = new AbortController()
     activeRequestControllerRef.current = controller
+    seriesSeasonsControllerRef.current?.abort()
+    seriesSeasonsControllerRef.current = null
 
-    activeMovieAddKeysRef.current.clear()
+    activeMediaIngestKeysRef.current.clear()
     activeAnimeSubscribeKeysRef.current.clear()
-    setMovieAddStates({})
-    setMovieQualitySelections({})
+    setMediaIngestStates({})
+    setQualitySelections({})
+    setSeriesSeasonSelections({})
+    setSeriesSeasonOptions({})
     setAnimeGroupsStates({})
     setAnimePreviewStates({})
     setAnimeGroupSelections({})
@@ -409,6 +514,7 @@ export function ResourceSearchPage() {
       items: [],
       errorMessage: null,
     })
+    setSubmittedTerm(keyword)
 
     void activeSearchHandler(keyword, controller.signal)
       .then((items) => {
@@ -424,6 +530,15 @@ export function ResourceSearchPage() {
 
         if (activeCategory === 'anime' && items.length > 0) {
           startAnimeCardSetup(items.filter(isAnimeSearchItem), requestId)
+        }
+        if (activeCategory === 'tv' && items.length > 0) {
+          startSeriesSeasonSetup(
+            items.filter(
+              (item): item is SeriesSearchItem =>
+                !isAnimeSearchItem(item) && isSeriesSearchItem(item),
+            ),
+            requestId,
+          )
         }
       })
       .catch((error) => {
@@ -450,54 +565,52 @@ export function ResourceSearchPage() {
       })
   }
 
-  function getSelectedMovieQualityProfileId(item: MovieSearchItem) {
-    const selectedQualityProfileId = movieQualitySelections[getMovieAddKey(item)]
-
-    if (
-      typeof selectedQualityProfileId === 'number' &&
-      movieQualityProfiles.some(
-        (profile) => profile.id === selectedQualityProfileId,
-      )
-    ) {
-      return selectedQualityProfileId
-    }
-
-    return defaultMovieQualityProfileId
+  function getSelectedQualityTag(item: SearchableResourceItem) {
+    return qualitySelections[getMediaIngestKey(item)] ?? DEFAULT_QUALITY_TAG
   }
 
-  function handleMovieQualityProfileChange(
-    item: MovieSearchItem,
-    qualityProfileId: number,
+  function getSelectedSeasonNumber(item: SeriesSearchItem) {
+    return seriesSeasonSelections[getSeriesIngestKey(item)] ?? 1
+  }
+
+  function handleQualityTagChange(
+    item: SearchableResourceItem,
+    qualityTag: OpenListQualityTag,
   ) {
-    setMovieQualitySelections((currentSelections) => ({
+    setQualitySelections((currentSelections) => ({
       ...currentSelections,
-      [getMovieAddKey(item)]: qualityProfileId,
+      [getMediaIngestKey(item)]: qualityTag,
     }))
   }
 
-  function handleMovieAdd(
-    item: MovieSearchItem,
-    qualityProfileId: number,
+  function handleSeasonNumberChange(
+    item: SeriesSearchItem,
+    seasonNumber: number,
   ) {
-    const itemKey = getMovieAddKey(item)
-    const currentAddState = movieAddStates[itemKey]
+    setSeriesSeasonSelections((currentSelections) => ({
+      ...currentSelections,
+      [getSeriesIngestKey(item)]: seasonNumber,
+    }))
+  }
+
+  function handleOpenListIngest(
+    item: SearchableResourceItem,
+    qualityTag: OpenListQualityTag,
+    seasonNumber: number | null,
+  ) {
+    const itemKey = getMediaIngestKey(item)
+    const currentIngestState = mediaIngestStates[itemKey]
 
     if (
-      activeMovieAddKeysRef.current.has(itemKey) ||
-      currentAddState?.status === 'loading' ||
-      currentAddState?.status === 'success'
+      activeMediaIngestKeysRef.current.has(itemKey) ||
+      currentIngestState?.status === 'loading' ||
+      currentIngestState?.status === 'success'
     ) {
       return
     }
 
-    if (
-      movieQualityProfilesStatus !== 'success' ||
-      !movieQualityProfiles.some((profile) => profile.id === qualityProfileId)
-    ) {
-      const message =
-        movieQualityProfilesMessage ?? '质量档位未加载完成，请稍后重试。'
-
-      setMovieAddStates((currentStates) => ({
+    const showCardError = (message: string) => {
+      setMediaIngestStates((currentStates) => ({
         ...currentStates,
         [itemKey]: {
           status: 'error',
@@ -505,42 +618,56 @@ export function ResourceSearchPage() {
         },
       }))
       setToastMessage(message)
-      return
     }
 
-    if (typeof item.tmdb_id !== 'number' || item.tmdb_id <= 0) {
-      const message = '该电影缺少必要标识，暂时无法添加。'
+    let mediaType: RecentIngestMediaType
+    let ingestPromise: Promise<MovieMagnetIngestTask | SeriesMagnetIngestTask>
 
-      setMovieAddStates((currentStates) => ({
-        ...currentStates,
-        [itemKey]: {
-          status: 'error',
-          message,
-        },
-      }))
-      setToastMessage(message)
-      return
+    if (isSeriesSearchItem(item)) {
+      if (typeof seasonNumber !== 'number') {
+        showCardError('请选择剧集目标季数。')
+        return
+      }
+
+      mediaType = 'series'
+      ingestPromise = createSeriesOpenListIngest({
+        term: submittedTerm,
+        title: item.title,
+        original_title: item.original_title,
+        season_number: seasonNumber,
+        quality: qualityTag,
+      })
+    } else {
+      const movieYear = item.year
+      if (typeof movieYear !== 'number') {
+        showCardError('该电影缺少年份，暂时无法入库。')
+        return
+      }
+
+      mediaType = 'movie'
+      ingestPromise = createMovieOpenListIngest({
+        term: submittedTerm,
+        title: item.title,
+        original_title: item.original_title,
+        year: movieYear,
+        quality: qualityTag,
+      })
     }
 
-    activeMovieAddKeysRef.current.add(itemKey)
-    setMovieAddStates((currentStates) => ({
+    activeMediaIngestKeysRef.current.add(itemKey)
+    setMediaIngestStates((currentStates) => ({
       ...currentStates,
       [itemKey]: {
         status: 'loading',
-        message: '正在发起搜索…',
+        message: '正在匹配 Prowlarr 发布资源…',
       },
     }))
 
-    void addMovieResource({
-      tmdb_id: item.tmdb_id,
-      title: item.title,
-      year: item.year,
-      qualityProfileId,
-    })
-      .then(() => {
-        const message = '已开始搜索'
+    void ingestPromise
+      .then((task) => {
+        const message = '入库任务已创建'
 
-        setMovieAddStates((currentStates) => ({
+        setMediaIngestStates((currentStates) => ({
           ...currentStates,
           [itemKey]: {
             status: 'success',
@@ -548,15 +675,17 @@ export function ResourceSearchPage() {
           },
         }))
         setToastMessage(message)
+        loadRecentIngestSummary()
+        navigate(getTaskRoute(mediaType, task.id))
       })
       .catch((error) => {
-        activeMovieAddKeysRef.current.delete(itemKey)
+        activeMediaIngestKeysRef.current.delete(itemKey)
         const message =
           error instanceof Error && error.message.trim()
             ? error.message.trim()
-            : '搜索发起失败，请稍后重试。'
+            : '入库任务创建失败，请稍后重试。'
 
-        setMovieAddStates((currentStates) => ({
+        setMediaIngestStates((currentStates) => ({
           ...currentStates,
           [itemKey]: {
             status: 'error',
@@ -565,6 +694,77 @@ export function ResourceSearchPage() {
         }))
         setToastMessage(message)
       })
+  }
+
+  function handleViewMore(
+    item: SearchableResourceItem,
+    qualityTag: OpenListQualityTag,
+    seasonNumber: number | null,
+  ) {
+    const mediaType: RecentIngestMediaType = isSeriesSearchItem(item)
+      ? 'series'
+      : 'movie'
+
+    navigate(getPublishRoute(), {
+      state: {
+        mediaType,
+        item,
+        submittedTerm,
+        qualityTag,
+        seasonNumber: mediaType === 'series' ? seasonNumber ?? 1 : null,
+        seasonOptions:
+          mediaType === 'series' && isSeriesSearchItem(item)
+            ? seriesSeasonOptions[getSeriesIngestKey(item)] ?? [1]
+            : [],
+      } satisfies ResourcePublishPageState,
+    })
+  }
+
+  function startSeriesSeasonSetup(
+    items: SeriesSearchItem[],
+    searchRequestId: number,
+  ) {
+    const controller = new AbortController()
+    seriesSeasonsControllerRef.current = controller
+
+    items.forEach((item) => {
+      if (typeof item.tvdb_id !== 'number' || item.tvdb_id < 1) {
+        return
+      }
+
+      void getSeriesSeasons(item.tvdb_id, controller.signal)
+        .then((result) => {
+          if (
+            controller.signal.aborted ||
+            latestRequestIdRef.current !== searchRequestId
+          ) {
+            return
+          }
+          const options = result.season_numbers.filter(
+            (seasonNumber) => seasonNumber > 0,
+          )
+          if (options.length === 0) {
+            return
+          }
+          const itemKey = getSeriesIngestKey(item)
+          setSeriesSeasonOptions((currentOptions) => ({
+            ...currentOptions,
+            [itemKey]: options,
+          }))
+          setSeriesSeasonSelections((currentSelections) => ({
+            ...currentSelections,
+            [itemKey]: currentSelections[itemKey] ?? options[0],
+          }))
+        })
+        .catch((error) => {
+          if (
+            !controller.signal.aborted &&
+            !isRequestCanceledError(error)
+          ) {
+            console.error('series seasons load failed', error)
+          }
+        })
+    })
   }
 
   function startAnimeCardSetup(items: AnimeSearchItem[], searchRequestId: number) {
@@ -841,38 +1041,65 @@ export function ResourceSearchPage() {
       })
   }
 
-  function renderMovieQualityProfilesNotice() {
-    if (category !== 'movie') {
+  function renderRecentIngestSummary() {
+    if (recentIngestState.status === 'empty') {
       return null
     }
 
-    if (movieQualityProfilesStatus === 'loading') {
+    if (recentIngestState.status === 'loading') {
       return (
-        <div className="mx-auto flex max-w-3xl items-center justify-center rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-500">
-          正在加载质量档位…
+        <div className="mx-auto flex max-w-7xl items-center gap-3 rounded-2xl bg-white px-5 py-4 text-sm font-medium text-slate-500 shadow-[0_12px_30px_rgba(15,23,42,0.03)]">
+          <Clock3 className="h-4 w-4 text-slate-400" />
+          正在读取最近入库任务…
         </div>
       )
     }
 
-    if (movieQualityProfilesStatus !== 'error') {
+    if (recentIngestState.status === 'error') {
+      return (
+        <div className="mx-auto max-w-7xl rounded-2xl bg-white px-5 py-4 text-sm font-medium text-slate-500 shadow-[0_12px_30px_rgba(15,23,42,0.03)]">
+          {recentIngestState.message ?? '最近入库记录暂时不可用。'}
+        </div>
+      )
+    }
+
+    const item = recentIngestState.item
+    if (!item) {
       return null
     }
 
     return (
-      <div
-        role="alert"
-        className="mx-auto flex max-w-3xl flex-col gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <span className="font-medium">
-          {movieQualityProfilesMessage ?? '质量档位加载失败，请稍后重试。'}
-        </span>
-        <button
-          type="button"
-          onClick={() => loadMovieQualityProfiles(true)}
-          className="h-8 rounded-xl border border-rose-200 bg-white px-3 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:bg-rose-100"
-        >
-          重新加载
-        </button>
+      <div className="mx-auto flex max-w-7xl flex-col gap-3 rounded-2xl bg-white px-5 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.03)] sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+            <span>最近入库</span>
+            <span className="h-1 w-1 rounded-full bg-slate-300" />
+            <span>{item.mediaType === 'movie' ? '电影' : '剧集'}</span>
+            {item.qualityTag ? (
+              <>
+                <span className="h-1 w-1 rounded-full bg-slate-300" />
+                <span>{item.qualityTag}</span>
+              </>
+            ) : null}
+          </div>
+          <p className="mt-1 truncate text-sm font-semibold text-slate-950">
+            {item.title}
+          </p>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-4 text-sm">
+          <span className="text-slate-500">
+            {taskStatusCopy[item.status] ?? item.status} ·{' '}
+            {formatTaskTime(item.updatedAt)}
+          </span>
+          <Link
+            to={getTaskRoute(item.mediaType, item.taskId)}
+            className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-slate-200"
+          >
+            查看日志
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
       </div>
     )
   }
@@ -895,7 +1122,9 @@ export function ResourceSearchPage() {
         return (
           <EmptyState
             title="搜索失败"
-            description={searchState.errorMessage ?? activeCategoryCopy.errorMessage}
+            description={
+              searchState.errorMessage ?? activeCategoryCopy.errorMessage
+            }
           />
         )
 
@@ -909,7 +1138,14 @@ export function ResourceSearchPage() {
 
       case 'success':
         return (
-          <div className="mx-auto grid max-w-7xl grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div
+            className={cn(
+              'mx-auto grid max-w-7xl',
+              category === 'anime'
+                ? 'grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
+                : 'grid-cols-1 gap-5 lg:grid-cols-2',
+            )}
+          >
             {searchState.items.map((item) => {
               if (isAnimeSearchItem(item)) {
                 const itemKey = getAnimeCardKey(item)
@@ -936,31 +1172,35 @@ export function ResourceSearchPage() {
                 )
               }
 
-              const movieAddState = isMovieSearchItem(item)
-                ? movieAddStates[getMovieAddKey(item)]
-                : null
-              const selectedMovieQualityProfileId = isMovieSearchItem(item)
-                ? getSelectedMovieQualityProfileId(item)
-                : undefined
+              const itemKey = getMediaIngestKey(item)
+              const ingestState = mediaIngestStates[itemKey]
 
               return (
                 <MediaCard
                   key={item.id}
                   item={item}
-                  addStatus={movieAddState?.status}
-                  addMessage={movieAddState?.message}
-                  qualityProfiles={
-                    isMovieSearchItem(item) ? movieQualityProfiles : undefined
-                  }
-                  selectedQualityProfileId={selectedMovieQualityProfileId}
-                  onQualityProfileChange={
-                    isMovieSearchItem(item)
-                      ? handleMovieQualityProfileChange
+                  addStatus={ingestState?.status}
+                  addMessage={ingestState?.message}
+                  qualityTags={OPENLIST_QUALITY_TAGS}
+                  selectedQualityTag={getSelectedQualityTag(item)}
+                  seasonOptions={
+                    isSeriesSearchItem(item)
+                      ? seriesSeasonOptions[getSeriesIngestKey(item)] ?? [1]
                       : undefined
                   }
-                  onAddMovie={
-                    isMovieSearchItem(item) ? handleMovieAdd : undefined
+                  selectedSeasonNumber={
+                    isSeriesSearchItem(item)
+                      ? getSelectedSeasonNumber(item)
+                      : undefined
                   }
+                  onQualityTagChange={handleQualityTagChange}
+                  onSeasonNumberChange={
+                    isSeriesSearchItem(item)
+                      ? handleSeasonNumberChange
+                      : undefined
+                  }
+                  onOpenListIngest={handleOpenListIngest}
+                  onViewMore={handleViewMore}
                 />
               )
             })}
@@ -981,10 +1221,10 @@ export function ResourceSearchPage() {
   return (
     <PageContainer
       title="资源搜索"
-      description="电影、电视剧与动漫分类支持按回车或点击搜索按钮发起真实搜索。"
+      description="从资源卡片直接匹配 Prowlarr 发布资源，并通过 OpenList 创建电影或剧集入库任务。"
     >
-      <div className="space-y-10">
-        <div className="flex flex-col items-center gap-6">
+      <div className="space-y-8">
+        <div className="flex flex-col items-center gap-5">
           <SearchBar
             value={searchText}
             onChange={setSearchText}
@@ -996,7 +1236,7 @@ export function ResourceSearchPage() {
           <CategorySwitch value={category} onChange={setCategory} />
         </div>
 
-        {renderMovieQualityProfilesNotice()}
+        {renderRecentIngestSummary()}
 
         {renderSearchContent()}
       </div>
@@ -1006,7 +1246,7 @@ export function ResourceSearchPage() {
           aria-live="polite"
           className="pointer-events-none fixed bottom-6 right-6 z-20"
         >
-          <div className="rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white shadow-[0_18px_40px_rgba(15,23,42,0.24)]">
+          <div className="rounded-2xl bg-slate-950 px-4 py-3 text-sm text-white shadow-[0_18px_40px_rgba(15,23,42,0.18)]">
             {toastMessage}
           </div>
         </div>

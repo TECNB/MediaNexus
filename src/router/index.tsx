@@ -7,6 +7,8 @@ import { DashboardPage } from '@/pages/dashboard'
 import { EmbyWatchRankingsPage } from '@/pages/emby-watch-rankings'
 import { HelpPage } from '@/pages/help'
 import { MagnetIngestPage } from '@/pages/magnet-ingest'
+import { ResourceIngestLogPage } from '@/pages/resources/ingest-log'
+import { ResourcePublishPage } from '@/pages/resources/publish'
 import { ResourceSearchPage } from '@/pages/resources'
 import { SettingsPage } from '@/pages/settings'
 import { SubtitleManagePage } from '@/pages/subtitles'
@@ -27,6 +29,11 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/resources" replace /> },
       { path: 'dashboard', element: <DashboardPage /> },
       { path: 'resources', element: <ResourceSearchPage /> },
+      { path: 'resources/publish', element: <ResourcePublishPage /> },
+      {
+        path: 'resources/ingest/:mediaType/:taskId',
+        element: <ResourceIngestLogPage />,
+      },
       { path: 'magnet-ingest', element: <MagnetIngestPage /> },
       { path: 'tasks', element: <TaskCenterPage /> },
       { path: 'subtitles', element: <SubtitleManagePage /> },

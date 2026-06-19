@@ -1,10 +1,15 @@
 import { useState } from 'react'
-import { ChevronDown, Clapperboard } from 'lucide-react'
+import {
+  ArrowRight,
+  ChevronDown,
+  Clapperboard,
+  CloudUpload,
+} from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import type {
-  MovieQualityProfile,
-  MovieSearchItem,
+  OpenListQualityTag,
   SearchableResourceItem,
   SeriesSearchItem,
 } from '@/types/resources'
@@ -15,13 +20,28 @@ type MediaCardProps = {
   item: SearchableResourceItem
   addStatus?: MediaCardAddStatus
   addMessage?: string | null
-  qualityProfiles?: MovieQualityProfile[]
-  selectedQualityProfileId?: number
-  onQualityProfileChange?: (
-    item: MovieSearchItem,
-    qualityProfileId: number,
+  qualityTags?: OpenListQualityTag[]
+  selectedQualityTag?: OpenListQualityTag
+  seasonOptions?: number[]
+  selectedSeasonNumber?: number
+  onQualityTagChange?: (
+    item: SearchableResourceItem,
+    qualityTag: OpenListQualityTag,
   ) => void
-  onAddMovie?: (item: MovieSearchItem, qualityProfileId: number) => void
+  onSeasonNumberChange?: (
+    item: SeriesSearchItem,
+    seasonNumber: number,
+  ) => void
+  onOpenListIngest?: (
+    item: SearchableResourceItem,
+    qualityTag: OpenListQualityTag,
+    seasonNumber: number | null,
+  ) => void
+  onViewMore?: (
+    item: SearchableResourceItem,
+    qualityTag: OpenListQualityTag,
+    seasonNumber: number | null,
+  ) => void
 }
 
 function isSeriesSearchItem(
@@ -30,50 +50,64 @@ function isSeriesSearchItem(
   return 'tvdb_id' in item
 }
 
+function getSeasonLabel(seasonNumber: number) {
+  return `S${String(seasonNumber).padStart(2, '0')}`
+}
+
 export function MediaCard({
   item,
   addStatus = 'idle',
   addMessage = null,
-  qualityProfiles = [],
-  selectedQualityProfileId,
-  onQualityProfileChange,
-  onAddMovie,
+  qualityTags = [],
+  selectedQualityTag,
+  seasonOptions = [1],
+  selectedSeasonNumber = 1,
+  onQualityTagChange,
+  onSeasonNumberChange,
+  onOpenListIngest,
+  onViewMore,
 }: MediaCardProps) {
   const [hasImageError, setHasImageError] = useState(false)
   const isSeriesItem = isSeriesSearchItem(item)
-  const canAddMovie = !isSeriesItem && Boolean(onAddMovie)
   const isAddLoading = addStatus === 'loading'
   const isAddSuccess = addStatus === 'success'
-  const hasQualityProfiles = qualityProfiles.length > 0
-  const hasSelectedQualityProfile =
-    typeof selectedQualityProfileId === 'number'
-  const isQualitySelectDisabled =
-    !canAddMovie || isAddLoading || isAddSuccess || !hasQualityProfiles
-  const isAddDisabled =
-    !canAddMovie ||
+  const hasQualityTags = qualityTags.length > 0
+  const activeQualityTag = selectedQualityTag ?? qualityTags[0]
+  const activeSeasonNumber = isSeriesItem ? selectedSeasonNumber : null
+  const isIngestDisabled =
+    !onOpenListIngest ||
     isAddLoading ||
     isAddSuccess ||
-    !hasQualityProfiles ||
-    !hasSelectedQualityProfile
+    !activeQualityTag ||
+    (isSeriesItem && typeof activeSeasonNumber !== 'number')
+  const isViewMoreDisabled =
+    !onViewMore ||
+    !activeQualityTag ||
+    (isSeriesItem && typeof activeSeasonNumber !== 'number')
   const posterSrc = item.poster?.trim()
   const originalTitle = item.original_title?.trim()
   const overview = item.overview?.trim()
-  const showOriginalTitle = Boolean(originalTitle && originalTitle !== item.title)
+  const showOriginalTitle = Boolean(
+    originalTitle && originalTitle !== item.title,
+  )
   const network = isSeriesItem ? item.network?.trim() : null
   const seriesType = isSeriesItem ? item.series_type?.trim() : null
-  const metaLabel = network || seriesType
-
+  const mediaTypeLabel = isSeriesItem ? 'SERIES' : 'MOVIE'
+  const mediaMeta = [
+    showOriginalTitle ? originalTitle : null,
+    item.year ? String(item.year) : null,
+    network || seriesType,
+  ].filter(Boolean)
   const addFeedbackTone =
     addStatus === 'error' ? 'text-rose-500' : 'text-emerald-600'
-  const addButtonTitle = !canAddMovie
-    ? '暂未实现'
-    : !hasQualityProfiles
-      ? '质量档位未加载'
-      : undefined
 
   return (
-    <article className="group space-y-3">
-      <div className="relative aspect-[2/3] overflow-hidden rounded-[22px] bg-slate-200">
+    <article className="group overflow-hidden rounded-[24px] bg-white p-3 shadow-[0_20px_40px_rgba(15,23,42,0.035)] md:grid md:grid-cols-[minmax(150px,42%)_minmax(0,1fr)] md:gap-5">
+      <div className="relative aspect-[2/3] overflow-hidden rounded-[18px] bg-slate-100">
+        <span className="absolute left-3 top-3 z-10 rounded-md bg-slate-950 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
+          {mediaTypeLabel}
+        </span>
+
         {posterSrc && !hasImageError ? (
           <img
             src={posterSrc}
@@ -84,7 +118,7 @@ export function MediaCard({
           />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-slate-100 text-slate-400">
-            <Clapperboard className="h-8 w-8" />
+            <Clapperboard className="h-9 w-9" />
             <span className="text-xs font-medium tracking-[0.18em] text-slate-500">
               POSTER
             </span>
@@ -92,93 +126,140 @@ export function MediaCard({
         )}
       </div>
 
-      <div className="space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="truncate text-[15px] font-semibold text-slate-900">
-              {item.title}
-            </h3>
-            {showOriginalTitle ? (
-              <p className="truncate text-xs text-slate-400">{originalTitle}</p>
-            ) : null}
-            {metaLabel ? (
-              <p className="mt-1 truncate text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">
-                {metaLabel}
-              </p>
-            ) : null}
-          </div>
-          <span className="shrink-0 pt-0.5 text-xs font-medium text-slate-400">
-            {item.year ?? '待定'}
-          </span>
+      <div className="flex min-w-0 flex-col pt-5 md:pt-1">
+        <div className="min-w-0">
+          <h3
+            className="overflow-hidden text-lg font-semibold leading-tight text-slate-950 [display:-webkit-box] [-webkit-box-orient:vertical]"
+            style={{ WebkitLineClamp: 2 }}
+          >
+            {item.title}
+          </h3>
+          {mediaMeta.length > 0 ? (
+            <p className="mt-2 truncate text-xs font-medium text-slate-400">
+              {mediaMeta.join(' · ')}
+            </p>
+          ) : null}
         </div>
 
         <p
-          className="overflow-hidden text-sm leading-6 text-slate-500 [display:-webkit-box] [-webkit-box-orient:vertical]"
+          className="mt-4 min-h-[4.5rem] overflow-hidden text-sm leading-6 text-slate-500 [display:-webkit-box] [-webkit-box-orient:vertical]"
           style={{ WebkitLineClamp: 3 }}
         >
           {overview || '暂无简介'}
         </p>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="relative min-w-0 flex-1">
-            <select
-              value={selectedQualityProfileId ?? ''}
-              onChange={(event) => {
-                if (isSeriesItem) {
-                  return
-                }
+        <div className="mt-auto space-y-3 pt-5">
+          <div
+            className={cn(
+              'grid gap-3',
+              isSeriesItem ? 'grid-cols-2' : 'grid-cols-1',
+            )}
+          >
+            {isSeriesItem ? (
+              <label className="space-y-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  目标季
+                </span>
+                <div className="relative">
+                  <select
+                    value={activeSeasonNumber ?? ''}
+                    onChange={(event) => {
+                      const nextSeasonNumber = Number(event.target.value)
+                      if (Number.isInteger(nextSeasonNumber)) {
+                        onSeasonNumberChange?.(item, nextSeasonNumber)
+                      }
+                    }}
+                    disabled={isAddLoading || isAddSuccess}
+                    aria-label={`${item.title} 目标季`}
+                    className="h-10 w-full appearance-none rounded-xl bg-slate-100 px-3 pr-8 text-xs font-semibold text-slate-700 outline-none transition hover:bg-slate-200 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:cursor-not-allowed disabled:text-slate-400"
+                  >
+                    {seasonOptions.map((seasonNumber) => (
+                      <option key={seasonNumber} value={seasonNumber}>
+                        {getSeasonLabel(seasonNumber)}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                </div>
+              </label>
+            ) : null}
 
-                if (!event.target.value) {
-                  return
-                }
-
-                const nextQualityProfileId = Number(event.target.value)
-
-                if (Number.isFinite(nextQualityProfileId)) {
-                  onQualityProfileChange?.(item, nextQualityProfileId)
-                }
-              }}
-              disabled={isQualitySelectDisabled}
-              aria-label={`${item.title} 质量档位`}
-              className="h-9 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-8 text-xs font-medium text-slate-600 outline-none transition hover:border-slate-300 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/60 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-            >
-              {hasQualityProfiles ? (
-                qualityProfiles.map((qualityProfile) => (
-                  <option key={qualityProfile.id} value={qualityProfile.id}>
-                    {qualityProfile.name}
-                  </option>
-                ))
-              ) : (
-                <option value="">质量档位</option>
-              )}
-            </select>
-
-            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <label className="space-y-1.5">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                分辨率
+              </span>
+              <div className="relative">
+                <select
+                  value={activeQualityTag ?? ''}
+                  onChange={(event) => {
+                    const nextQualityTag =
+                      event.target.value as OpenListQualityTag
+                    if (qualityTags.includes(nextQualityTag)) {
+                      onQualityTagChange?.(item, nextQualityTag)
+                    }
+                  }}
+                  disabled={isAddLoading || isAddSuccess || !hasQualityTags}
+                  aria-label={`${item.title} 分辨率`}
+                  className="h-10 w-full appearance-none rounded-xl bg-slate-100 px-3 pr-8 text-xs font-semibold text-slate-700 outline-none transition hover:bg-slate-200 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:cursor-not-allowed disabled:text-slate-400"
+                >
+                  {hasQualityTags ? (
+                    qualityTags.map((qualityTag) => (
+                      <option key={qualityTag} value={qualityTag}>
+                        {qualityTag}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">分辨率</option>
+                  )}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              </div>
+            </label>
           </div>
 
-          <Button
-            type="button"
-            disabled={isAddDisabled}
-            title={addButtonTitle}
-            onClick={() => {
-              if (
-                !isSeriesItem &&
-                typeof selectedQualityProfileId === 'number'
-              ) {
-                onAddMovie?.(item, selectedQualityProfileId)
-              }
-            }}
-            className="h-9 w-full rounded-xl bg-slate-900 px-4 text-xs font-semibold text-white shadow-none hover:bg-slate-800 sm:w-auto"
-          >
-            添加
-          </Button>
-        </div>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+            <Button
+              type="button"
+              disabled={isIngestDisabled}
+              onClick={() => {
+                if (activeQualityTag) {
+                  onOpenListIngest?.(item, activeQualityTag, activeSeasonNumber)
+                }
+              }}
+              className="h-10 whitespace-nowrap rounded-xl bg-slate-950 px-4 text-xs font-semibold text-white shadow-none hover:bg-slate-800"
+            >
+              {isAddLoading ? (
+                '添加中…'
+              ) : (
+                <span className="inline-flex items-center gap-2">
+                  <CloudUpload className="h-3.5 w-3.5" />
+                  添加
+                </span>
+              )}
+            </Button>
 
-        {addMessage ? (
-          <p className={`text-xs font-medium ${addFeedbackTone}`}>
-            {addMessage}
-          </p>
-        ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isViewMoreDisabled}
+              onClick={() => {
+                if (activeQualityTag) {
+                  onViewMore?.(item, activeQualityTag, activeSeasonNumber)
+                }
+              }}
+              className="h-10 rounded-xl border-slate-200 px-3 text-xs font-semibold text-slate-700 shadow-none hover:bg-slate-100"
+            >
+              查看更多
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+
+          {addMessage ? (
+            <p className={`text-xs font-medium ${addFeedbackTone}`}>
+              {addMessage}
+            </p>
+          ) : null}
+        </div>
       </div>
     </article>
   )

@@ -88,3 +88,79 @@ export type SeriesSeasonsResponse = {
   message: string
   data: SeriesSeasonsData
 }
+
+export type OpenListQualityTag = '2160p' | '1080p' | '720p'
+
+export type ResourcePublishMediaType = 'movie' | 'series'
+
+export type ResourcePublishPageState = {
+  mediaType: ResourcePublishMediaType
+  item: SearchableResourceItem
+  submittedTerm: string
+  qualityTag: OpenListQualityTag
+  seasonNumber: number | null
+  seasonOptions: number[]
+}
+
+export type CreateMovieOpenListIngestPayload = {
+  term: string
+  title: string
+  original_title: string | null
+  year: number
+  quality: OpenListQualityTag
+}
+
+export type CreateSeriesOpenListIngestPayload = {
+  term: string
+  title: string
+  original_title: string | null
+  season_number: number
+  quality: OpenListQualityTag
+}
+
+export type ProwlarrRelease = {
+  title: string
+  size: number | null
+  seeders: number | null
+  leechers: number | null
+  grabs: number | null
+  indexer: string | null
+  publish_date: string | null
+  indexer_id: number
+  download_ref: string
+  resolution_tags: OpenListQualityTag[]
+  dynamic_range_tags: string[]
+}
+
+export type ProwlarrReleaseSearchData = {
+  query: string
+  items: ProwlarrRelease[]
+}
+
+export type SearchProwlarrReleasesParams = {
+  term: string
+  media_type: ResourcePublishMediaType
+  season_number?: number
+}
+
+type SelectedReleasePayload = {
+  title: string
+  original_title: string | null
+  release_title: string
+  indexer: string | null
+  size: number | null
+  indexer_id: number
+  download_ref: string
+  resolution_tags: OpenListQualityTag[]
+  dynamic_range_tags: string[]
+}
+
+export type CreateMovieReleaseOpenListIngestPayload =
+  SelectedReleasePayload & {
+    year: number
+  }
+
+export type CreateSeriesReleaseOpenListIngestPayload =
+  SelectedReleasePayload & {
+    season_number: number
+  }
