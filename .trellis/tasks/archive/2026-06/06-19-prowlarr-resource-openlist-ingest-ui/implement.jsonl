@@ -1,0 +1,10 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend entry point for required conventions"}
+{"file": ".trellis/spec/frontend/project-context.md", "reason": "Resource page must remain an upper-layer orchestration UI"}
+{"file": ".trellis/spec/frontend/api-integration.md", "reason": "Use Java API routing and response envelope rules"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Card and page component implementation rules"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Polling and request lifecycle behavior"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Keep local state and URL state scoped"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Explicit API and task types"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Scope and verification rules"}
+{"file": ".trellis/tasks/06-19-prowlarr-resource-openlist-ingest-ui/research/stitch-resource-screens.md", "reason": "Stitch resource page and log page design notes"}
