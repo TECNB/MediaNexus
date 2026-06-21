@@ -12,14 +12,20 @@ import {
 import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
 import {
+  getSeriesSeasons,
   isRequestCanceledError,
   searchMovies,
   searchSeries,
 } from '@/lib/api/resources'
-import { uploadSubtitleByAssociation } from '@/lib/api/subtitles'
+import {
+  listSubtitleUploadLogs,
+  listSubtitleUploads,
+  uploadSubtitleByAssociation,
+} from '@/lib/api/subtitles'
 import { cn } from '@/lib/utils'
 import type { MovieSearchItem, SeriesSearchItem } from '@/types/resources'
 import type {
+  SubtitleUploadLog,
   SubtitleUploadResponse,
   SubtitleUploadStatus,
 } from '@/types/subtitles'
@@ -28,6 +34,7 @@ type ProcessStatus = 'mounted' | 'uploaded' | 'matching' | 'failed'
 type AssociationStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
 
 type RecentProcessRecord = {
+  uploadId: string
   fileName: string
   language: string
   project: string
@@ -49,6 +56,7 @@ type SubtitleAssociationItem = {
   originalTitle?: string
   year?: number
   poster?: string
+  tvdbId?: number
   mediaType: 'movie' | 'series'
   subtitle: string
 }
@@ -60,71 +68,7 @@ type LastUploadResult = {
 }
 
 const demoToastMessage = '演示模式：当前仅展示前端搜索与选择交互'
-const supportedSubtitleUploadExtensions = ['srt', 'ass', 'ssa', 'sub', 'zip']
-
-const recentProcesses: RecentProcessRecord[] = [
-  {
-    fileName: 'Dune.Part.Two.2024.srt',
-    language: '简体中文',
-    project: '沙丘：第二部 (2024)',
-    status: 'mounted',
-    time: '2分钟前',
-  },
-  {
-    fileName: 'Poor.Things.2023.ass',
-    language: '繁体中文',
-    project: '可怜的东西 (2023)',
-    status: 'mounted',
-    time: '15分钟前',
-  },
-  {
-    fileName: 'Godzilla.Minus.One.srt',
-    language: '英语',
-    project: '哥斯拉-1.0 (2023)',
-    status: 'matching',
-    time: '1小时前',
-  },
-  {
-    fileName: 'All.of.Us.Strangers.2023.zip',
-    language: '双语',
-    project: '我们同在陌生人中 (2023)',
-    status: 'failed',
-    time: '今天 09:24',
-  },
-]
-
-const systemLogs: SystemLogRecord[] = [
-  { timestamp: '14:22:10', message: 'Worker initialized.', tone: 'muted' },
-  {
-    timestamp: '14:22:12',
-    message: 'Found: archive_4421.zip',
-    tone: 'success',
-  },
-  { timestamp: '14:22:13', message: 'Unzipping contents...' },
-  {
-    timestamp: '14:22:14',
-    message: 'Processing: Dune.Part.2.Chs.srt',
-    tone: 'muted',
-  },
-  { timestamp: '14:22:14', message: 'Mapping to STRM directory...' },
-  {
-    timestamp: '14:22:15',
-    message: 'Target: /media/movies/Dune 2 (2024)/',
-    tone: 'info',
-  },
-  { timestamp: '14:22:16', message: 'SUCCESS: Mounted.', tone: 'success' },
-  { timestamp: '14:25:01', message: 'Watching file system...', tone: 'muted' },
-  {
-    timestamp: '14:28:44',
-    message: "WARN: Ambiguous match 'Godzilla'",
-    tone: 'warning',
-  },
-  {
-    timestamp: '14:28:45',
-    message: 'Auto-resolving to 2023 release...',
-    tone: 'default',
-  },
-]
+const supportedSubtitleUploadExtensions = ['srt', 'ass', 'sup', 'zip']
 
 const processStatusMeta: Record<
   ProcessStatus,
@@ -135,7 +79,7 @@ const processStatusMeta: Record<
   }
 > = {
   mounted: {
-    label: '已挂载',
+    label: '等待 AS',
     badgeClassName: 'bg-emerald-50 text-emerald-700',
     dotClassName: 'bg-emerald-500',
   },
@@ -216,22 +160,6 @@ function inferSubtitleLanguageLabel(fileName: string) {
   return '待识别'
 }
 
-function getAssociationMediaTypeLabel(type: SubtitleAssociationItem['mediaType']) {
-  return type === 'movie' ? '电影' : '电视剧'
-}
-
-function getAssociationLibraryTitle(item: SubtitleAssociationItem) {
-  const originalTitle = item.originalTitle?.trim()
-
-  if (originalTitle) {
-    return originalTitle
-  }
-
-  const title = item.title.trim()
-
-  return title || null
-}
-
 function getAssociationLibraryYear(item: SubtitleAssociationItem) {
   if (typeof item.year !== 'number' || !Number.isFinite(item.year)) {
     return null
@@ -240,14 +168,18 @@ function getAssociationLibraryYear(item: SubtitleAssociationItem) {
   return item.year
 }
 
-function getAssociationProjectLabel(item: SubtitleAssociationItem) {
+function getAssociationProjectLabel(
+  item: SubtitleAssociationItem,
+  seasonNumber?: number | null,
+) {
   const year = getAssociationLibraryYear(item)
+  const baseLabel = year ? `${item.title} (${year})` : item.title
 
-  if (year) {
-    return `${item.title} (${year})`
+  if (item.mediaType === 'series' && seasonNumber) {
+    return `${baseLabel} · Season ${seasonNumber}`
   }
 
-  return item.title
+  return baseLabel
 }
 
 function getCurrentLogTimestamp() {
@@ -257,6 +189,104 @@ function getCurrentLogTimestamp() {
     second: '2-digit',
     hour12: false,
   }).format(new Date())
+}
+
+function formatLogTimestamp(value: string | null) {
+  if (!value) {
+    return getCurrentLogTimestamp()
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return getCurrentLogTimestamp()
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(date)
+}
+
+function formatRecordTime(value: string | null) {
+  if (!value) {
+    return '刚刚'
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return '刚刚'
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
+}
+
+function mapUploadStatus(status: SubtitleUploadResponse['status']): ProcessStatus {
+  if (status === 'FAILED') {
+    return 'failed'
+  }
+
+  if (status === 'WAITING_FOR_AS') {
+    return 'mounted'
+  }
+
+  return 'matching'
+}
+
+function buildRecentProcessRecord(
+  upload: SubtitleUploadResponse,
+): RecentProcessRecord {
+  const yearLabel = upload.year ? ` (${upload.year})` : ''
+  const seasonLabel =
+    upload.media_type === 'SERIES' && upload.season_number
+      ? ` · Season ${upload.season_number}`
+      : ''
+
+  return {
+    uploadId: upload.id,
+    fileName: upload.source_file_name,
+    language: inferSubtitleLanguageLabel(upload.source_file_name),
+    project: `${upload.title}${yearLabel}${seasonLabel}`,
+    status: mapUploadStatus(upload.status),
+    time: formatRecordTime(upload.created_at),
+  }
+}
+
+function mapLogTone(log: SubtitleUploadLog): LogTone {
+  if (log.level === 'ERROR') {
+    return 'warning'
+  }
+
+  if (log.level === 'WARN') {
+    return 'warning'
+  }
+
+  if (log.stage === 'waiting_for_as') {
+    return 'success'
+  }
+
+  if (log.stage === 'target_checking' || log.stage === 'planning') {
+    return 'info'
+  }
+
+  return 'default'
+}
+
+function buildSystemLogRecords(logs: SubtitleUploadLog[]): SystemLogRecord[] {
+  return logs.map((log) => ({
+    timestamp: formatLogTimestamp(log.created_at),
+    message: log.detail ? `${log.message}: ${log.detail}` : log.message,
+    tone: mapLogTone(log),
+  }))
 }
 
 function buildUploadSuccessLogs(
@@ -279,7 +309,7 @@ function buildUploadSuccessLogs(
     },
     {
       timestamp,
-      message: `Linked to ${getAssociationMediaTypeLabel(item.mediaType)} · ${getAssociationProjectLabel(item)}`,
+      message: `已保存 ${response.files.length} 个字幕文件：${getAssociationProjectLabel(item, response.season_number)}`,
       tone: 'muted',
     },
   ]
@@ -343,6 +373,7 @@ function normalizeSeriesAssociationItem(
     originalTitle: item.original_title?.trim() || undefined,
     year: item.year ?? undefined,
     poster: item.poster?.trim() || undefined,
+    tvdbId: item.tvdb_id ?? undefined,
     mediaType: 'series',
     subtitle: buildAssociationSubtitle({
       title: item.title,
@@ -365,7 +396,7 @@ async function searchAssociationItems(
   return [
     ...movies.map(normalizeMovieAssociationItem),
     ...series.map(normalizeSeriesAssociationItem),
-  ].slice(0, 5)
+  ].slice(0, 6)
 }
 
 function PosterPlaceholder({
@@ -669,11 +700,13 @@ function MediaAssociationCombobox({
 type RecentSubtitleTableProps = {
   records: RecentProcessRecord[]
   onViewAll: () => void
+  onSelectRecord: (record: RecentProcessRecord) => void
 }
 
 function RecentSubtitleTable({
   records,
   onViewAll,
+  onSelectRecord,
 }: RecentSubtitleTableProps) {
   return (
     <section className="rounded-[26px] border border-slate-200 bg-white/95 p-4 shadow-shell">
@@ -709,13 +742,24 @@ function RecentSubtitleTable({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
+              {records.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-6 text-center text-sm text-slate-400"
+                  >
+                    暂无字幕上传记录
+                  </td>
+                </tr>
+              ) : null}
               {records.map((record) => {
                 const statusMeta = processStatusMeta[record.status]
 
                 return (
                   <tr
-                    key={`${record.fileName}-${record.time}`}
-                    className="transition-colors hover:bg-slate-50/80"
+                    key={record.uploadId}
+                    className="cursor-pointer transition-colors hover:bg-slate-50/80"
+                    onClick={() => onSelectRecord(record)}
                   >
                     <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-900">
                       {record.fileName}
@@ -789,10 +833,7 @@ function UploadResultSummary({
           目标目录：{response.target_path}
         </p>
         <p className="mt-1 text-xs text-emerald-700/90">
-          已保存 {response.saved_files.length} 个文件
-          {response.skipped_files.length > 0
-            ? `，跳过 ${response.skipped_files.length} 个`
-            : ''}
+          已上传 {response.files.length} 个字幕文件，当前等待 AS 后续迁移。
         </p>
       </div>
     )
@@ -805,6 +846,7 @@ export function SubtitleManagePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const associationRequestControllerRef = useRef<AbortController | null>(null)
   const associationLatestRequestIdRef = useRef(0)
+  const seasonLatestRequestIdRef = useRef(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [uploadStatus, setUploadStatus] =
@@ -815,9 +857,9 @@ export function SubtitleManagePage() {
   const [lastUploadResult, setLastUploadResult] =
     useState<LastUploadResult | null>(null)
   const [recentProcessRecords, setRecentProcessRecords] =
-    useState<RecentProcessRecord[]>(recentProcesses)
+    useState<RecentProcessRecord[]>([])
   const [systemLogRecords, setSystemLogRecords] =
-    useState<SystemLogRecord[]>(systemLogs)
+    useState<SystemLogRecord[]>([])
   const [associationKeyword, setAssociationKeyword] = useState('')
   const [associationOpen, setAssociationOpen] = useState(false)
   const [associationStatus, setAssociationStatus] =
@@ -827,6 +869,10 @@ export function SubtitleManagePage() {
   >([])
   const [selectedAssociationItem, setSelectedAssociationItem] =
     useState<SubtitleAssociationItem | null>(null)
+  const [selectedSeasonNumber, setSelectedSeasonNumber] = useState(1)
+  const [seriesSeasonOptions, setSeriesSeasonOptions] = useState<number[]>([])
+  const [seriesSeasonStatus, setSeriesSeasonStatus] =
+    useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [associationErrorMessage, setAssociationErrorMessage] = useState<
     string | null
   >(null)
@@ -848,8 +894,52 @@ export function SubtitleManagePage() {
   useEffect(() => {
     return () => {
       associationRequestControllerRef.current?.abort()
+      seasonLatestRequestIdRef.current += 1
     }
   }, [])
+
+  useEffect(() => {
+    void refreshUploadHistory()
+  }, [])
+
+  async function refreshUploadHistory(preferredUploadId?: string) {
+    try {
+      const uploads = await listSubtitleUploads()
+      setRecentProcessRecords(uploads.map(buildRecentProcessRecord))
+
+      const selectedUpload =
+        uploads.find((upload) => upload.id === preferredUploadId) ?? uploads[0]
+
+      if (!selectedUpload) {
+        setSystemLogRecords([])
+        return
+      }
+
+      const logs = await listSubtitleUploadLogs(selectedUpload.id)
+      setSystemLogRecords(buildSystemLogRecords(logs))
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message.trim()
+          : '字幕上传记录加载失败'
+
+      setSystemLogRecords([buildUploadFailureLog(message)])
+    }
+  }
+
+  async function refreshUploadLogs(uploadId: string) {
+    try {
+      const logs = await listSubtitleUploadLogs(uploadId)
+      setSystemLogRecords(buildSystemLogRecords(logs))
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message.trim()
+          : '字幕上传日志加载失败'
+
+      setSystemLogRecords([buildUploadFailureLog(message)])
+    }
+  }
 
   function showToast(message: string) {
     setToastMessage(message)
@@ -885,10 +975,8 @@ export function SubtitleManagePage() {
       event.target.value = ''
       setSelectedFile(null)
       setUploadStatus('error')
-      setUploadErrorMessage(
-        '当前仅支持 .srt、.ass、.ssa、.sub、.zip 格式文件',
-      )
-      showToast('当前仅支持 .srt、.ass、.ssa、.sub、.zip 格式文件')
+      setUploadErrorMessage('当前仅支持 .srt、.ass、.sup、.zip 格式文件')
+      showToast('当前仅支持 .srt、.ass、.sup、.zip 格式文件')
       return
     }
 
@@ -930,6 +1018,10 @@ export function SubtitleManagePage() {
       closePanel: true,
     })
     setSelectedAssociationItem(null)
+    setSelectedSeasonNumber(1)
+    seasonLatestRequestIdRef.current += 1
+    setSeriesSeasonOptions([])
+    setSeriesSeasonStatus('idle')
   }
 
   function handleAssociationInputFocus() {
@@ -1006,8 +1098,49 @@ export function SubtitleManagePage() {
 
   function handleAssociationSelect(item: SubtitleAssociationItem) {
     setSelectedAssociationItem(item)
+    setSelectedSeasonNumber(1)
+    setSeriesSeasonOptions([])
     setAssociationKeyword(item.title)
     setAssociationOpen(false)
+
+    seasonLatestRequestIdRef.current += 1
+    const requestId = seasonLatestRequestIdRef.current
+
+    if (item.mediaType !== 'series') {
+      setSeriesSeasonStatus('idle')
+      return
+    }
+    if (!item.tvdbId) {
+      setSeriesSeasonStatus('error')
+      return
+    }
+
+    setSeriesSeasonStatus('loading')
+    void getSeriesSeasons(item.tvdbId)
+      .then((data) => {
+        if (seasonLatestRequestIdRef.current !== requestId) {
+          return
+        }
+        const options = Array.from(
+          new Set(
+            data.season_numbers.filter(
+              (seasonNumber) =>
+                Number.isInteger(seasonNumber) && seasonNumber > 0,
+            ),
+          ),
+        ).sort((left, right) => left - right)
+        setSeriesSeasonOptions(options)
+        setSelectedSeasonNumber(options[0] ?? 1)
+        setSeriesSeasonStatus(options.length > 0 ? 'success' : 'error')
+      })
+      .catch((error) => {
+        if (seasonLatestRequestIdRef.current !== requestId) {
+          return
+        }
+        console.error('subtitle series seasons fetch failed', error)
+        setSeriesSeasonOptions([])
+        setSeriesSeasonStatus('error')
+      })
   }
 
   async function handleUploadSubmit() {
@@ -1029,28 +1162,39 @@ export function SubtitleManagePage() {
       return
     }
 
-    if (selectedAssociationItem.mediaType !== 'movie') {
-      setUploadStatus('error')
-      setUploadErrorMessage('当前只支持电影字幕上传')
-      showToast('当前只支持电影字幕上传')
-      return
-    }
+    const selectedTitle = selectedAssociationItem.title.trim()
 
-    const libraryTitle = getAssociationLibraryTitle(selectedAssociationItem)
-
-    if (!libraryTitle) {
+    if (!selectedTitle) {
       setUploadStatus('error')
-      setUploadErrorMessage('无法获取有效的英文标题')
-      showToast('无法获取有效的英文标题')
+      setUploadErrorMessage('无法获取有效的媒体标题')
+      showToast('无法获取有效的媒体标题')
       return
     }
 
     const libraryYear = getAssociationLibraryYear(selectedAssociationItem)
 
-    if (!libraryYear) {
+    if (selectedAssociationItem.mediaType === 'movie' && !libraryYear) {
       setUploadStatus('error')
       setUploadErrorMessage('该项目缺少有效年份，暂时无法上传')
       showToast('该项目缺少有效年份，暂时无法上传')
+      return
+    }
+    if (
+      selectedAssociationItem.mediaType === 'series' &&
+      (!Number.isInteger(selectedSeasonNumber) || selectedSeasonNumber < 1)
+    ) {
+      setUploadStatus('error')
+      setUploadErrorMessage('请输入有效的剧集季数')
+      showToast('请输入有效的剧集季数')
+      return
+    }
+    if (
+      selectedAssociationItem.mediaType === 'series' &&
+      seriesSeasonStatus === 'loading'
+    ) {
+      setUploadStatus('error')
+      setUploadErrorMessage('请等待剧集季列表加载完成')
+      showToast('请等待剧集季列表加载完成')
       return
     }
 
@@ -1062,10 +1206,20 @@ export function SubtitleManagePage() {
         file: selectedFile,
         overwrite: false,
         mediaType: selectedAssociationItem.mediaType,
-        libraryTitle,
-        libraryYear,
+        title: selectedTitle,
+        originalTitle: selectedAssociationItem.originalTitle,
+        year: libraryYear,
+        seasonNumber:
+          selectedAssociationItem.mediaType === 'series'
+            ? selectedSeasonNumber
+            : null,
       })
-      const projectTitle = getAssociationProjectLabel(selectedAssociationItem)
+      const projectTitle = getAssociationProjectLabel(
+        selectedAssociationItem,
+        selectedAssociationItem.mediaType === 'series'
+          ? selectedSeasonNumber
+          : null,
+      )
       const uploadedFileName = selectedFile.name
 
       setUploadStatus('success')
@@ -1076,10 +1230,11 @@ export function SubtitleManagePage() {
       })
       setRecentProcessRecords((currentRecords) => [
         {
+          uploadId: response.id,
           fileName: uploadedFileName,
           language: inferSubtitleLanguageLabel(uploadedFileName),
           project: projectTitle,
-          status: 'uploaded',
+          status: mapUploadStatus(response.status),
           time: '刚刚',
         },
         ...currentRecords,
@@ -1094,7 +1249,8 @@ export function SubtitleManagePage() {
         fileInputRef.current.value = ''
       }
 
-      showToast('上传成功，已提交处理')
+      void refreshUploadHistory(response.id)
+      showToast('上传成功，等待 AS 迁移')
     } catch (error) {
       const message =
         error instanceof Error && error.message.trim()
@@ -1116,7 +1272,7 @@ export function SubtitleManagePage() {
   return (
     <PageContainer
       title="资源编目"
-      description="上传字幕并自动化重命名关联的 STRM 目录。"
+      description="上传字幕到电影或剧集源目录，自动重命名后等待 AS 迁移。"
     >
       <div className="space-y-5">
         <div className="flex items-center gap-2 text-xs text-slate-400">
@@ -1138,7 +1294,7 @@ export function SubtitleManagePage() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".zip,.srt,.ass,.ssa,.sub"
+                  accept=".zip,.srt,.ass,.sup"
                   className="hidden"
                   onChange={handleFileSelect}
                 />
@@ -1151,7 +1307,7 @@ export function SubtitleManagePage() {
                   拖拽或点击上传字幕压缩包
                 </h2>
                 <p className="mt-1.5 text-xs text-slate-500">
-                  支持 ZIP / SRT / ASS / SSA / SUB · 最大 100MB
+                  支持 ZIP / SRT / ASS / SUP · 最大 50MB
                 </p>
 
                 <span className="mt-4 inline-flex h-9 items-center justify-center rounded-2xl border border-slate-900 px-4 text-sm font-medium text-slate-950 transition-colors group-hover:bg-slate-950 group-hover:text-white">
@@ -1191,9 +1347,68 @@ export function SubtitleManagePage() {
               onDemoInteraction={showDemoToast}
             />
 
+            {selectedAssociationItem?.mediaType === 'series' ? (
+              <section className="rounded-[22px] border border-slate-200 bg-white/95 p-4 shadow-shell">
+                <label
+                  htmlFor="subtitle-season-number"
+                  className="text-sm font-semibold text-slate-950"
+                >
+                  目标季数
+                </label>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  字幕将上传到对应的 Season 目录，并按集数匹配视频。
+                </p>
+                {seriesSeasonStatus === 'loading' ? (
+                  <div className="mt-3 flex h-10 items-center gap-2 rounded-[14px] border border-slate-200 bg-slate-50 px-3 text-sm text-slate-500">
+                    <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
+                    正在加载季列表...
+                  </div>
+                ) : seriesSeasonOptions.length > 0 ? (
+                  <select
+                    id="subtitle-season-number"
+                    value={selectedSeasonNumber}
+                    className="mt-3 h-10 w-full rounded-[14px] border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200/60"
+                    onChange={(event) =>
+                      setSelectedSeasonNumber(Number(event.target.value))
+                    }
+                  >
+                    {seriesSeasonOptions.map((seasonNumber) => (
+                      <option key={seasonNumber} value={seasonNumber}>
+                        Season {seasonNumber}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    id="subtitle-season-number"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={selectedSeasonNumber}
+                    className="mt-3 h-10 w-full rounded-[14px] border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200/60"
+                    onChange={(event) => {
+                      const value = Number.parseInt(event.target.value, 10)
+                      setSelectedSeasonNumber(
+                        Number.isFinite(value) ? value : 1,
+                      )
+                    }}
+                  />
+                )}
+                {seriesSeasonStatus === 'error' ? (
+                  <p className="mt-2 text-xs text-amber-600">
+                    未能获取季列表，可手动填写目标季数。
+                  </p>
+                ) : null}
+              </section>
+            ) : null}
+
             <Button
               type="button"
-              disabled={uploadStatus === 'submitting'}
+              disabled={
+                uploadStatus === 'submitting' ||
+                (selectedAssociationItem?.mediaType === 'series' &&
+                  seriesSeasonStatus === 'loading')
+              }
               className="h-11 w-full rounded-[18px] bg-slate-950 text-sm font-medium text-white hover:bg-black disabled:bg-slate-200 disabled:text-slate-500"
               onClick={() => {
                 void handleUploadSubmit()
@@ -1217,7 +1432,12 @@ export function SubtitleManagePage() {
 
             <RecentSubtitleTable
               records={recentProcessRecords}
-              onViewAll={showDemoToast}
+              onViewAll={() => {
+                void refreshUploadHistory()
+              }}
+              onSelectRecord={(record) => {
+                void refreshUploadLogs(record.uploadId)
+              }}
             />
           </div>
 
@@ -1235,6 +1455,14 @@ export function SubtitleManagePage() {
               </div>
 
               <div className="space-y-2 px-4 py-4 font-mono text-[12px] leading-5 text-zinc-300">
+                {systemLogRecords.length === 0 ? (
+                  <p className="text-zinc-500">
+                    <span className="text-zinc-600">
+                      [{getCurrentLogTimestamp()}]
+                    </span>{' '}
+                    暂无上传日志
+                  </p>
+                ) : null}
                 {systemLogRecords.map((record) => (
                   <p
                     key={`${record.timestamp}-${record.message}`}
