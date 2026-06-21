@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, Clock3 } from 'lucide-react'
 
 import { PageContainer } from '@/components/layout/page-container'
+import { Button } from '@/components/ui/button'
 import {
   AnimeCard,
   type AnimeCardLoadStatus,
@@ -28,10 +29,11 @@ import {
   listSeriesMagnetIngestTasks,
 } from '@/lib/api/magnet-ingest'
 import {
-  createMovieOpenListIngest,
-  createSeriesOpenListIngest,
+  createMovieReleaseOpenListIngest,
+  createSeriesReleaseOpenListIngest,
   getSeriesSeasons,
   isRequestCanceledError,
+  searchProwlarrReleases,
   searchMovies,
   searchSeries,
 } from '@/lib/api/resources'
@@ -48,6 +50,7 @@ import type {
 } from '@/types/magnet-ingest'
 import type {
   OpenListQualityTag,
+  ProwlarrRelease,
   ResourcePublishPageState,
   SearchableResourceItem,
   SeriesSearchItem,
@@ -103,8 +106,23 @@ type RecentIngestState = {
   message: string | null
 }
 
+type SearchLanguage = 'chinese' | 'english' | 'unknown'
+
+type AutoReleaseConfirmation = {
+  item: SearchableResourceItem
+  itemKey: string
+  mediaType: RecentIngestMediaType
+  qualityTag: OpenListQualityTag
+  seasonNumber: number | null
+  release: ProwlarrRelease
+  query: string
+  searchLanguage: SearchLanguage
+  isSubmitting: boolean
+}
+
 const OPENLIST_QUALITY_TAGS: OpenListQualityTag[] = ['2160p', '1080p', '720p']
 const DEFAULT_QUALITY_TAG: OpenListQualityTag = '2160p'
+const HDR_DYNAMIC_TAGS = ['hdr10_plus', 'hdr10', 'hdr', 'hlg']
 
 const taskStatusCopy: Record<MagnetIngestTaskStatus, string> = {
   PENDING: '等待中',
@@ -171,6 +189,15 @@ const categorySearchHandlers: Record<
   anime: async (term, signal) => searchAnime(term, signal),
 }
 
+const dynamicRangeCopy: Record<string, string> = {
+  dolby_vision: 'Dolby Vision',
+  hdr10_plus: 'HDR10+',
+  hdr10: 'HDR10',
+  hdr: 'HDR',
+  hlg: 'HLG',
+  sdr: 'SDR',
+}
+
 function isSearchableCategory(
   category: ResourceCategoryValue,
 ): category is SearchableCategory {
@@ -221,6 +248,165 @@ function getTaskRoute(mediaType: RecentIngestMediaType, taskId: string) {
 
 function getPublishRoute() {
   return '/resources/publish'
+}
+
+function hasChineseText(value: string) {
+  return /[\u3400-\u9fff]/.test(value)
+}
+
+function hasLatinText(value: string) {
+  return /[A-Za-z]/.test(value)
+}
+
+function getSearchLanguage(term: string): SearchLanguage {
+  if (hasChineseText(term)) {
+    return 'chinese'
+  }
+  if (hasLatinText(term)) {
+    return 'english'
+  }
+  return 'unknown'
+}
+
+function matchesLanguage(title: string, language: SearchLanguage) {
+  if (language === 'chinese') {
+    return hasChineseText(title)
+  }
+  if (language === 'english') {
+    return hasLatinText(title) && !hasChineseText(title)
+  }
+  return true
+}
+
+function normalizeSearchText(value: string) {
+  return value.toLowerCase().replace(/[^0-9a-z\u3400-\u9fff]+/gi, '')
+}
+
+function matchesSearchTerm(title: string, term: string) {
+  const normalizedTitle = normalizeSearchText(title)
+  const normalizedTerm = normalizeSearchText(term)
+  return normalizedTerm ? normalizedTitle.includes(normalizedTerm) : true
+}
+
+function getReleaseMatchTerms(term: string, item: SearchableResourceItem) {
+  const language = getSearchLanguage(term)
+  const terms = [term, item.title, item.original_title ?? '']
+    .map((value) => value.trim())
+    .filter((value, index, values) => value && values.indexOf(value) === index)
+
+  if (language === 'chinese') {
+    return terms.filter(hasChineseText)
+  }
+  if (language === 'english') {
+    return terms.filter((value) => hasLatinText(value) && !hasChineseText(value))
+  }
+  return terms
+}
+
+function matchesAnySearchTerm(title: string, terms: string[]) {
+  return terms.some((term) => matchesSearchTerm(title, term))
+}
+
+function getDynamicPriority(release: ProwlarrRelease) {
+  if (release.dynamic_range_tags.includes('dolby_vision')) {
+    return 2
+  }
+  if (
+    release.dynamic_range_tags.some((tag) => HDR_DYNAMIC_TAGS.includes(tag))
+  ) {
+    return 1
+  }
+  return 0
+}
+
+function hasActivePeers(release: ProwlarrRelease) {
+  return (release.seeders ?? 0) > 0
+}
+
+function getSeederHealthPriority(release: ProwlarrRelease) {
+  return (release.seeders ?? 0) >= 3 ? 0 : 1
+}
+
+function formatDynamicRange(tags: string[]) {
+  return tags.length > 0
+    ? tags.map((tag) => dynamicRangeCopy[tag] ?? tag).join(' / ')
+    : '未标注'
+}
+
+function formatReleaseSize(value: number | null) {
+  if (typeof value !== 'number' || value < 0) {
+    return '未知大小'
+  }
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let size = value
+  let unitIndex = 0
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex += 1
+  }
+  return `${size.toFixed(unitIndex > 2 ? 2 : 0)} ${units[unitIndex]}`
+}
+
+function selectAutoRelease(
+  releases: ProwlarrRelease[],
+  qualityTag: OpenListQualityTag,
+  term: string,
+  item: SearchableResourceItem,
+) {
+  const activeReleases = releases.filter(hasActivePeers)
+  const resolutionMatches = activeReleases.filter((release) =>
+    release.resolution_tags.includes(qualityTag),
+  )
+  if (resolutionMatches.length === 0) {
+    return null
+  }
+
+  const matchTerms = getReleaseMatchTerms(term, item)
+  const relevantMatches = resolutionMatches.filter((release) =>
+    matchesAnySearchTerm(release.title, matchTerms),
+  )
+  if (relevantMatches.length === 0) {
+    return null
+  }
+
+  const bestDynamicPriority = Math.min(
+    ...relevantMatches.map(getDynamicPriority),
+  )
+  const dynamicMatches = relevantMatches.filter(
+    (release) => getDynamicPriority(release) === bestDynamicPriority,
+  )
+  const language = getSearchLanguage(term)
+  const languageMatches = dynamicMatches.filter((release) =>
+    matchesLanguage(release.title, language),
+  )
+  const finalPool = languageMatches.length > 0 ? languageMatches : dynamicMatches
+
+  return finalPool
+    .slice()
+    .sort((left, right) => {
+      const healthDelta =
+        getSeederHealthPriority(left) - getSeederHealthPriority(right)
+      if (healthDelta !== 0) {
+        return healthDelta
+      }
+
+      const sizeDelta = (right.size ?? 0) - (left.size ?? 0)
+      if (sizeDelta !== 0) {
+        return sizeDelta
+      }
+
+      const seederDelta = (right.seeders ?? 0) - (left.seeders ?? 0)
+      if (seederDelta !== 0) {
+        return seederDelta
+      }
+
+      const grabDelta = (right.grabs ?? 0) - (left.grabs ?? 0)
+      if (grabDelta !== 0) {
+        return grabDelta
+      }
+
+      return (right.leechers ?? 0) - (left.leechers ?? 0)
+    })[0]
 }
 
 function createInitialSearchState(): ResourceSearchState {
@@ -341,6 +527,8 @@ export function ResourceSearchPage() {
   const [animeSubscribeStates, setAnimeSubscribeStates] = useState<
     Record<string, AnimeSubscribeState>
   >({})
+  const [autoReleaseConfirmation, setAutoReleaseConfirmation] =
+    useState<AutoReleaseConfirmation | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const latestRequestIdRef = useRef(0)
   const recentIngestRequestIdRef = useRef(0)
@@ -446,6 +634,7 @@ export function ResourceSearchPage() {
     setAnimePreviewStates({})
     setAnimeGroupSelections({})
     setAnimeSubscribeStates({})
+    setAutoReleaseConfirmation(null)
     animePreviewRequestIdsRef.current = {}
   }, [category])
 
@@ -489,6 +678,7 @@ export function ResourceSearchPage() {
       setAnimePreviewStates({})
       setAnimeGroupSelections({})
       setAnimeSubscribeStates({})
+      setAutoReleaseConfirmation(null)
       animePreviewRequestIdsRef.current = {}
       return
     }
@@ -508,6 +698,7 @@ export function ResourceSearchPage() {
     setAnimePreviewStates({})
     setAnimeGroupSelections({})
     setAnimeSubscribeStates({})
+    setAutoReleaseConfirmation(null)
     animePreviewRequestIdsRef.current = {}
     setSearchState({
       status: 'loading',
@@ -621,7 +812,6 @@ export function ResourceSearchPage() {
     }
 
     let mediaType: RecentIngestMediaType
-    let ingestPromise: Promise<MovieMagnetIngestTask | SeriesMagnetIngestTask>
 
     if (isSeriesSearchItem(item)) {
       if (typeof seasonNumber !== 'number') {
@@ -630,13 +820,6 @@ export function ResourceSearchPage() {
       }
 
       mediaType = 'series'
-      ingestPromise = createSeriesOpenListIngest({
-        term: submittedTerm,
-        title: item.title,
-        original_title: item.original_title,
-        season_number: seasonNumber,
-        quality: qualityTag,
-      })
     } else {
       const movieYear = item.year
       if (typeof movieYear !== 'number') {
@@ -645,13 +828,6 @@ export function ResourceSearchPage() {
       }
 
       mediaType = 'movie'
-      ingestPromise = createMovieOpenListIngest({
-        term: submittedTerm,
-        title: item.title,
-        original_title: item.original_title,
-        year: movieYear,
-        quality: qualityTag,
-      })
     }
 
     activeMediaIngestKeysRef.current.add(itemKey)
@@ -663,20 +839,42 @@ export function ResourceSearchPage() {
       },
     }))
 
-    void ingestPromise
-      .then((task) => {
-        const message = '入库任务已创建'
-
+    void searchProwlarrReleases({
+      term: submittedTerm,
+      media_type: mediaType,
+      season_number:
+        mediaType === 'series' ? seasonNumber ?? undefined : undefined,
+    })
+      .then((data) => {
+        const release = selectAutoRelease(
+          data.items,
+          qualityTag,
+          submittedTerm,
+          item,
+        )
+        if (!release) {
+          throw new Error(
+            `未找到匹配 ${qualityTag} 且有做种的发布资源。`,
+          )
+        }
         setMediaIngestStates((currentStates) => ({
           ...currentStates,
           [itemKey]: {
-            status: 'success',
-            message,
+            status: 'loading',
+            message: '请确认自动匹配的发布资源。',
           },
         }))
-        setToastMessage(message)
-        loadRecentIngestSummary()
-        navigate(getTaskRoute(mediaType, task.id))
+        setAutoReleaseConfirmation({
+          item,
+          itemKey,
+          mediaType,
+          qualityTag,
+          seasonNumber: mediaType === 'series' ? seasonNumber : null,
+          release,
+          query: data.query,
+          searchLanguage: getSearchLanguage(submittedTerm),
+          isSubmitting: false,
+        })
       })
       .catch((error) => {
         activeMediaIngestKeysRef.current.delete(itemKey)
@@ -692,6 +890,95 @@ export function ResourceSearchPage() {
             message,
           },
         }))
+        setToastMessage(message)
+      })
+  }
+
+  function handleCancelAutoReleaseConfirmation() {
+    if (!autoReleaseConfirmation || autoReleaseConfirmation.isSubmitting) {
+      return
+    }
+
+    const itemKey = autoReleaseConfirmation.itemKey
+    activeMediaIngestKeysRef.current.delete(itemKey)
+    setMediaIngestStates((currentStates) => {
+      const nextStates = { ...currentStates }
+      delete nextStates[itemKey]
+      return nextStates
+    })
+    setAutoReleaseConfirmation(null)
+  }
+
+  function handleConfirmAutoRelease() {
+    if (!autoReleaseConfirmation || autoReleaseConfirmation.isSubmitting) {
+      return
+    }
+
+    const selection = autoReleaseConfirmation
+    const release = selection.release
+    const commonPayload = {
+      title: selection.item.title,
+      original_title: selection.item.original_title,
+      release_title: release.title,
+      indexer: release.indexer,
+      size: release.size,
+      indexer_id: release.indexer_id,
+      download_ref: release.download_ref,
+      resolution_tags: release.resolution_tags,
+      dynamic_range_tags: release.dynamic_range_tags,
+    }
+
+    const request =
+      selection.mediaType === 'movie'
+        ? createMovieReleaseOpenListIngest({
+            ...commonPayload,
+            year: selection.item.year as number,
+          })
+        : createSeriesReleaseOpenListIngest({
+            ...commonPayload,
+            season_number: selection.seasonNumber ?? 1,
+          })
+
+    setAutoReleaseConfirmation({ ...selection, isSubmitting: true })
+    setMediaIngestStates((currentStates) => ({
+      ...currentStates,
+      [selection.itemKey]: {
+        status: 'loading',
+        message: '正在创建 OpenList 入库任务…',
+      },
+    }))
+
+    void request
+      .then((task) => {
+        const message = '入库任务已创建'
+
+        setMediaIngestStates((currentStates) => ({
+          ...currentStates,
+          [selection.itemKey]: {
+            status: 'success',
+            message,
+          },
+        }))
+        setAutoReleaseConfirmation(null)
+        setToastMessage(message)
+        loadRecentIngestSummary()
+        navigate(getTaskRoute(selection.mediaType, task.id))
+      })
+      .catch((error) => {
+        activeMediaIngestKeysRef.current.delete(selection.itemKey)
+        const message =
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : '入库任务创建失败，请稍后重试。'
+
+        setMediaIngestStates((currentStates) => ({
+          ...currentStates,
+          [selection.itemKey]: {
+            status: 'error',
+            message,
+          },
+        }))
+        setAutoReleaseConfirmation(null)
         setToastMessage(message)
       })
   }
@@ -757,10 +1044,7 @@ export function ResourceSearchPage() {
           }))
         })
         .catch((error) => {
-          if (
-            !controller.signal.aborted &&
-            !isRequestCanceledError(error)
-          ) {
+          if (!controller.signal.aborted && !isRequestCanceledError(error)) {
             console.error('series seasons load failed', error)
           }
         })
@@ -1104,6 +1388,93 @@ export function ResourceSearchPage() {
     )
   }
 
+  function renderAutoReleaseConfirmation() {
+    if (!autoReleaseConfirmation) {
+      return null
+    }
+
+    const selection = autoReleaseConfirmation
+    const release = selection.release
+    const isNonChineseRelease = !hasChineseText(release.title)
+    const languageCopy =
+      selection.searchLanguage === 'chinese'
+        ? '中文'
+        : selection.searchLanguage === 'english'
+          ? '英文'
+          : '未识别'
+
+    return (
+      <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/40 px-4 py-8 backdrop-blur-sm">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.22)]"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                自动匹配资源
+              </p>
+              <h2 className="mt-2 text-xl font-semibold text-slate-950">
+                确认使用该发布入库？
+              </h2>
+              <p className="mt-2 text-sm text-slate-500">
+                查询：{selection.query} · 搜索词语种：{languageCopy}
+              </p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+              {selection.mediaType === 'movie' ? '电影' : '剧集'} ·{' '}
+              {selection.qualityTag}
+            </span>
+          </div>
+
+          {isNonChineseRelease ? (
+            <div className="mt-5 rounded-xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-700">
+              当前自动选中的发布标题不含中文，可能没有内置中文字幕。确认后如有需要，可以继续使用字幕上传能力补充字幕。
+            </div>
+          ) : null}
+
+          <div className="mt-5 rounded-xl bg-slate-100 px-4 py-4">
+            <p className="break-words text-sm font-semibold leading-6 text-slate-950">
+              {release.title}
+            </p>
+            <div className="mt-4 grid gap-3 text-xs text-slate-500 sm:grid-cols-2">
+              <span>
+                质量：{selection.qualityTag} /{' '}
+                {formatDynamicRange(release.dynamic_range_tags)}
+              </span>
+              <span>体积：{formatReleaseSize(release.size)}</span>
+              <span>做种：{release.seeders ?? '—'}</span>
+              <span>下载：{release.leechers ?? '—'}</span>
+              <span>抓取：{release.grabs ?? '—'}</span>
+              <span>来源：{release.indexer || '—'}</span>
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={selection.isSubmitting}
+              onClick={handleCancelAutoReleaseConfirmation}
+              className="rounded-xl border-slate-200 shadow-none"
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={selection.isSubmitting}
+              onClick={handleConfirmAutoRelease}
+              className="rounded-xl bg-slate-950 text-white shadow-none hover:bg-slate-800"
+            >
+              {selection.isSubmitting ? '正在创建任务…' : '确认入库'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   function renderSearchContent() {
     if (!activeCategoryCopy) {
       return null
@@ -1251,6 +1622,8 @@ export function ResourceSearchPage() {
           </div>
         </div>
       ) : null}
+
+      {renderAutoReleaseConfirmation()}
     </PageContainer>
   )
 }

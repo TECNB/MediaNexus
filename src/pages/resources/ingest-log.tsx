@@ -56,6 +56,15 @@ const taskStatusCopy: Record<MagnetIngestTaskStatus, string> = {
   INTERRUPTED: '已中断',
 }
 
+const dynamicRangeCopy: Record<string, string> = {
+  dolby_vision: 'Dolby Vision',
+  hdr10_plus: 'HDR10+',
+  hdr10: 'HDR10',
+  hdr: 'HDR',
+  hlg: 'HLG',
+  sdr: 'SDR',
+}
+
 const stageOrder = ['created', 'submitted', 'downloading', 'organizing', 'done']
 
 const stageCopy = [
@@ -309,6 +318,13 @@ export function ResourceIngestLogPage() {
   const resolutionTags = task.resolution_tags ?? []
   const dynamicRangeTags = task.dynamic_range_tags ?? []
   const primaryResolution = task.quality_tag ?? resolutionTags[0] ?? null
+  const displayDynamicRangeTags = dynamicRangeTags.map(
+    (tag) => dynamicRangeCopy[tag] ?? tag,
+  )
+  const primaryQuality = [
+    primaryResolution,
+    ...displayDynamicRangeTags,
+  ].filter(Boolean).join(' / ')
   const displayResolutionTags =
     resolutionTags.length > 0
       ? resolutionTags
@@ -345,7 +361,7 @@ export function ResourceIngestLogPage() {
             </div>
 
             <div className="mt-6 grid gap-3 md:grid-cols-3">
-              <StatBlock label="分辨率" value={primaryResolution ?? '未记录'} />
+              <StatBlock label="分辨率" value={primaryQuality || '未记录'} />
               <StatBlock
                 label="整理结果"
                 value={`${task.organized_count} 个入库 · ${task.skipped_count} 个跳过`}
@@ -491,7 +507,7 @@ export function ResourceIngestLogPage() {
                   {tag}
                 </span>
               ))}
-              {dynamicRangeTags.map((tag) => (
+              {displayDynamicRangeTags.map((tag) => (
                 <span
                   key={tag}
                   className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
