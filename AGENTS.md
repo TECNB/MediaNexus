@@ -20,6 +20,13 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 
 <!-- TRELLIS:END -->
 
+## External Product Docs
+
+- For feature work, check the relevant external docs under:
+  `/Users/tengenchang/Library/Mobile Documents/com~apple~CloudDocs/AI-Coding-Docs/Media`
+- If those docs conflict with in-repo Trellis docs or archived tasks, treat the
+  external docs as the current source of truth.
+
 ## Commit Rules
 
 - This is a hard requirement, not a preference: every commit in this repository must use `TECNB <3489044730@qq.com>`.
