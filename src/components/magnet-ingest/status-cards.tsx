@@ -162,7 +162,7 @@ export function SystemLogsCard({ logs }: SystemLogsCardProps) {
   return (
     <section className="space-y-3">
       <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
-        System Logs
+        系统日志
       </p>
 
       <div className="overflow-hidden rounded-[28px] border border-slate-900 bg-[#111214] shadow-[0_24px_50px_rgba(15,23,42,0.2)]">
@@ -175,7 +175,7 @@ export function SystemLogsCard({ logs }: SystemLogsCardProps) {
 
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
             <TerminalSquare className="h-3.5 w-3.5" />
-            <span>Live Monitor</span>
+            <span>实时监控</span>
           </div>
         </div>
 
@@ -192,7 +192,7 @@ export function SystemLogsCard({ logs }: SystemLogsCardProps) {
 
           <p className="flex items-center gap-2 text-zinc-500">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            Active monitoring enabled.
+            实时监控已启用。
           </p>
         </div>
       </div>
@@ -386,7 +386,7 @@ export function TaskLogsCard(props: TaskLogsCardProps) {
   return (
     <section className="space-y-3">
       <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
-        Task Logs
+        任务日志
       </p>
 
       <div className="overflow-hidden rounded-[28px] border border-slate-900 bg-[#111214] shadow-[0_24px_50px_rgba(15,23,42,0.2)]">
@@ -399,13 +399,13 @@ export function TaskLogsCard(props: TaskLogsCardProps) {
 
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
             <TerminalSquare className="h-3.5 w-3.5" />
-            <span>Task Monitor</span>
+            <span>任务监控</span>
             <TooltipProvider delayDuration={120}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    aria-label="放大 Task Logs"
+                    aria-label="放大任务日志"
                     onClick={() => {
                       setIsExpanded(true)
                     }}
@@ -428,7 +428,7 @@ export function TaskLogsCard(props: TaskLogsCardProps) {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Task Logs"
+          aria-label="任务日志"
           className="fixed inset-0 z-50 bg-slate-950/60 p-4 backdrop-blur-sm md:p-8"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
@@ -441,7 +441,7 @@ export function TaskLogsCard(props: TaskLogsCardProps) {
               <div className="flex items-center gap-3">
                 <TerminalSquare className="h-4 w-4 text-zinc-500" />
                 <p className="text-sm font-semibold uppercase tracking-[0.24em] text-zinc-400">
-                  Task Logs
+                  任务日志
                 </p>
               </div>
 
@@ -450,7 +450,7 @@ export function TaskLogsCard(props: TaskLogsCardProps) {
                   <TooltipTrigger asChild>
                     <button
                       type="button"
-                      aria-label="关闭 Task Logs"
+                      aria-label="关闭任务日志"
                       onClick={() => {
                         setIsExpanded(false)
                       }}
@@ -480,7 +480,7 @@ export function NodeStatusCard() {
   return (
     <section className="space-y-3">
       <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
-        Node Status
+        节点状态
       </p>
 
       <div className="rounded-[28px] border border-slate-200 bg-white/95 p-5 shadow-shell">
@@ -492,7 +492,7 @@ export function NodeStatusCard() {
 
             <div>
               <p className="text-lg font-semibold text-slate-950">PikPak API</p>
-              <p className="text-sm text-slate-500">Singapore Region</p>
+              <p className="text-sm text-slate-500">新加坡区域</p>
             </div>
           </div>
 
@@ -514,7 +514,7 @@ export function NodeStatusCard() {
         </div>
 
         <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4 text-sm">
-          <span className="text-slate-400">UPTIME</span>
+          <span className="text-slate-400">运行时长</span>
           <span className="font-semibold text-slate-900">24d 18h 12m</span>
         </div>
       </div>
@@ -531,7 +531,7 @@ export function ProTipCard() {
         </div>
 
         <div>
-          <p className="text-lg font-semibold text-slate-950">Pro Tip</p>
+          <p className="text-lg font-semibold text-slate-950">小提示</p>
           <p className="mt-2 text-sm leading-6 text-slate-500">
             可以使用快捷键
             {' '}

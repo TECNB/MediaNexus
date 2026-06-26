@@ -51,7 +51,7 @@ const statusMeta: Record<
 export function RecentTasksTable({
   tasks,
   description = '纯前端 mock 任务流，仅用于展示提交后的任务状态骨架。',
-  actionLabel = 'VIEW ALL',
+  actionLabel = '查看全部',
   emptyMessage = '暂无任务记录',
   selectedTaskId,
   onViewAll,
@@ -62,7 +62,7 @@ export function RecentTasksTable({
       <div className="flex items-center justify-between gap-4 px-5 py-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
-            Recent Tasks
+            最近任务
           </p>
           <p className="mt-2 text-sm text-slate-500">
             {description}

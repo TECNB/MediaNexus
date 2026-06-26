@@ -32,7 +32,6 @@ import {
   searchSeries,
 } from '@/lib/api/resources'
 import {
-  defaultMagnetText,
   type RecentIngestTask,
   type RecentIngestTaskStatus,
 } from '@/data/mock-magnet-ingest'
@@ -88,9 +87,9 @@ function MediaTypeToggle({
   onChange: (mode: IngestMode) => void
 }) {
   const options: Array<{ label: string; value: IngestMode }> = [
-    { label: '电影(Movie)', value: 'movie' },
-    { label: '电视剧(TV)', value: 'series' },
-    { label: '动漫(Anime)', value: 'anime' },
+    { label: '电影', value: 'movie' },
+    { label: '电视剧', value: 'series' },
+    { label: '动漫', value: 'anime' },
   ]
 
   return (
@@ -135,11 +134,11 @@ function TargetSeasonSelect({
   const isDisabled = status !== 'success'
   const placeholder =
     status === 'loading'
-      ? 'Loading seasons...'
+      ? '正在加载季数...'
       : status === 'empty'
-        ? 'No seasons available'
+        ? '暂无可用季数'
         : status === 'error'
-          ? 'Failed to load seasons'
+          ? '季数加载失败'
           : '请选择目标季数'
 
   return (
@@ -156,11 +155,9 @@ function TargetSeasonSelect({
             {placeholder}
           </option>
           {options.map((seasonNumber) => {
-            const seasonLabel = String(seasonNumber).padStart(2, '0')
-
             return (
               <option key={seasonNumber} value={seasonNumber}>
-                {`第 ${seasonNumber} 季 (Season ${seasonLabel})`}
+                {`第 ${seasonNumber} 季`}
               </option>
             )
           })}
@@ -243,15 +240,6 @@ function getSeasonLoadValidationMessage({
   }
 
   return null
-}
-
-function getInitialMagnetText() {
-  return (
-    defaultMagnetText
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean) ?? ''
-  )
 }
 
 function getMagnetValidationMessage(
@@ -392,7 +380,7 @@ function toRecentAnimeTask(task: AnimeMagnetIngestTask): RecentIngestTask {
   return {
     id: task.id,
     name: task.magnet_hash,
-    libraryTitle: `${task.title} Season ${task.season_number}`,
+    libraryTitle: `${task.title} 第 ${task.season_number} 季`,
     status: toRecentTaskStatus(task.status),
     time: formatTaskTime(task.updated_at ?? task.created_at),
   }
@@ -438,7 +426,7 @@ function isAnimeMagnetSearchItem(item: unknown): item is AnimeMagnetSearchItem {
 
 export function MagnetIngestPage() {
   const [mode, setMode] = useState<IngestMode>('movie')
-  const [magnetInput, setMagnetInput] = useState(getInitialMagnetText)
+  const [magnetInput, setMagnetInput] = useState('')
   const [movieKeyword, setMovieKeyword] = useState('')
   const [seriesKeyword, setSeriesKeyword] = useState('')
   const [animeKeyword, setAnimeKeyword] = useState('')
@@ -1555,14 +1543,14 @@ export function MagnetIngestPage() {
 
   return (
     <PageContainer
-      title="手动磁力直收"
+      title="手动磁力入库"
       description="直接粘贴高质量磁力链接，将其绑定至媒体库结构并推送至云端离线下载。"
     >
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.72fr)_320px]">
         <div className="space-y-6">
           <section className="space-y-3">
             <SectionHeading
-              label="Magnet Links"
+              label="磁力链接"
               title="当前仅支持单条 magnet，提交前会进行最小格式校验。"
             />
 
@@ -1593,7 +1581,7 @@ export function MagnetIngestPage() {
           <section className="space-y-3">
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <SectionHeading
-                label="关联库项目 (Link to Library Item)"
+                label="关联库项目"
                 title={
                   mode === 'movie'
                     ? '使用电影搜索接口查询媒体库项目，并从结果中单选一个电影进行绑定。'
@@ -1679,7 +1667,7 @@ export function MagnetIngestPage() {
           {mode === 'series' ? (
             <section className="space-y-3">
               <SectionHeading
-                label="目标季数 (Target Season)"
+                label="目标季数"
                 title="选中剧集后会动态拉取真实可用季数，并用于电视剧离线直收提交。"
               />
 

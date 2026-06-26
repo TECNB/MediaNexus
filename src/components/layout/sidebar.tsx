@@ -28,7 +28,7 @@ type NavigationItem = {
 const primaryItems: NavigationItem[] = [
   { icon: LayoutGrid, label: '控制台', to: '/dashboard' },
   { icon: Search, label: '资源搜索', to: '/resources' },
-  { icon: Zap, label: 'Magnet Ingest', to: '/magnet-ingest' },
+  { icon: Zap, label: '手动磁力入库', to: '/magnet-ingest' },
   { icon: SquareCheckBig, label: '任务中心', to: '/tasks' },
   { icon: Captions, label: '字幕管理', to: '/subtitles' },
 ]
