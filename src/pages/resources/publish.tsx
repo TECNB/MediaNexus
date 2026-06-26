@@ -217,6 +217,7 @@ export function ResourcePublishPage() {
     }))
     setSubmitState({ keys: [], message: null })
 
+    const seriesItem = isSeriesSearchItem(item) ? item : null
     const request =
       mediaType === 'movie'
         ? searchMovieReleases(
@@ -230,18 +231,20 @@ export function ResourcePublishPage() {
             },
             controller.signal,
           )
-        : searchSeriesReleases(
-            {
-              tvdb_id: item.tvdb_id,
-              tmdb_id: item.tmdb_id,
-              imdb_id: item.imdb_id,
-              title: item.title,
-              original_title: item.original_title,
-              season_number: seasonNumber,
-              quality: pageState.qualityTag,
-            },
-            controller.signal,
-          )
+        : seriesItem
+          ? searchSeriesReleases(
+              {
+                tvdb_id: seriesItem.tvdb_id,
+                tmdb_id: seriesItem.tmdb_id,
+                imdb_id: seriesItem.imdb_id,
+                title: seriesItem.title,
+                original_title: seriesItem.original_title,
+                season_number: seasonNumber,
+                quality: pageState.qualityTag,
+              },
+              controller.signal,
+            )
+          : Promise.reject(new Error('缺少剧集资源信息。'))
 
     void request
       .then((data) => {
