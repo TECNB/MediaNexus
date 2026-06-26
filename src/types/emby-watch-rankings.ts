@@ -1,3 +1,5 @@
+export type EmbyWatchRankingPeriod = 'day' | 'month'
+
 export type EmbyWatchRankingSummary = {
   active_user_count: number
   total_watch_seconds: number
@@ -39,7 +41,9 @@ export type EmbyWebhookStatus = {
 }
 
 export type EmbyWatchRankingData = {
+  period: EmbyWatchRankingPeriod
   date: string
+  month: string
   timezone: string
   generated_at: string
   summary: EmbyWatchRankingSummary
@@ -50,6 +54,8 @@ export type EmbyWatchRankingData = {
 }
 
 export type EmbyWatchRankingParams = {
+  period?: EmbyWatchRankingPeriod
   date?: string
+  month?: string
   limit?: number
 }

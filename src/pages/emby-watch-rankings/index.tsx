@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   CalendarDays,
+  CalendarRange,
   Hash,
   Lightbulb,
   Loader2,
@@ -20,6 +21,7 @@ import type {
   EmbyMediaWatchRankingItem,
   EmbyUserWatchRankingItem,
   EmbyWatchRankingData,
+  EmbyWatchRankingPeriod,
   EmbyWebhookRecentEvent,
 } from '@/types/emby-watch-rankings'
 
@@ -35,6 +37,10 @@ function getTodayDateInput() {
     month: '2-digit',
     day: '2-digit',
   }).format(new Date())
+}
+
+function getCurrentMonthInput() {
+  return getTodayDateInput().slice(0, 7)
 }
 
 function parseLimit(value: string) {
@@ -196,11 +202,13 @@ function ForbiddenWatchRankingsPage() {
 }
 
 function SummaryPanel({ data }: { data: EmbyWatchRankingData }) {
+  const summaryLabel = data.period === 'month' ? '月统计概览' : '日统计概览'
+
   return (
     <div className="rounded-2xl bg-white p-6 shadow-shell ring-1 ring-slate-200">
       <div className="mb-6 flex items-center justify-between">
         <p className="text-xs font-semibold uppercase text-slate-400">
-          今日概览
+          {summaryLabel}
         </p>
         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[0.6875rem] font-semibold text-slate-500">
           {data.timezone}
@@ -237,7 +245,13 @@ function SummaryPanel({ data }: { data: EmbyWatchRankingData }) {
   )
 }
 
-function UserRankingTable({ users }: { users: EmbyUserWatchRankingItem[] }) {
+function UserRankingTable({
+  period,
+  users,
+}: {
+  period: EmbyWatchRankingPeriod
+  users: EmbyUserWatchRankingItem[]
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
@@ -282,7 +296,9 @@ function UserRankingTable({ users }: { users: EmbyUserWatchRankingItem[] }) {
                 {user.play_count} 次
               </td>
               <td className="py-4 pr-4 text-slate-500">
-                {formatTime(user.last_watched_at)}
+                {period === 'month'
+                  ? formatDateTime(user.last_watched_at)
+                  : formatTime(user.last_watched_at)}
               </td>
               <td className="max-w-[240px] truncate py-4 text-slate-500">
                 {user.last_item_name ?? '-'}
@@ -407,7 +423,9 @@ function WebhookMonitor({ data }: { data: EmbyWatchRankingData }) {
 }
 
 function EmbyWatchRankingPageContent() {
+  const [period, setPeriod] = useState<EmbyWatchRankingPeriod>('day')
   const [date, setDate] = useState(getTodayDateInput)
+  const [month, setMonth] = useState(getCurrentMonthInput)
   const [limitDraft, setLimitDraft] = useState(String(DEFAULT_LIMIT))
   const [data, setData] = useState<EmbyWatchRankingData | null>(null)
   const [status, setStatus] = useState<LoadStatus>('idle')
@@ -421,7 +439,12 @@ function EmbyWatchRankingPageContent() {
       setErrorMessage(null)
 
       try {
-        const rankingData = await getEmbyWatchRankings({ date, limit }, signal)
+        const rankingData = await getEmbyWatchRankings(
+          period === 'month'
+            ? { period, month, limit }
+            : { period, date, limit },
+          signal,
+        )
         setData(rankingData)
         setStatus('success')
       } catch (error) {
@@ -436,8 +459,18 @@ function EmbyWatchRankingPageContent() {
         )
       }
     },
-    [date, limit],
+    [date, limit, month, period],
   )
+
+  const handlePeriodChange = (nextPeriod: EmbyWatchRankingPeriod) => {
+    if (nextPeriod === period) {
+      return
+    }
+    if (nextPeriod === 'month' && period === 'day') {
+      setMonth(date.slice(0, 7))
+    }
+    setPeriod(nextPeriod)
+  }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -449,37 +482,77 @@ function EmbyWatchRankingPageContent() {
   return (
     <PageContainer
       title="Emby 观看活跃与排行统计"
-      description="查看朋友们是否在使用媒体服务，以及按天聚合的用户和作品观看排行。"
+      description="查看朋友们是否在使用媒体服务，以及按天或按月聚合的用户和作品观看排行。"
     >
-      <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-shell ring-1 ring-slate-200 md:flex-row md:items-center md:justify-end">
-        <label className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
-          <CalendarDays className="h-4 w-4 text-slate-400" />
-          <input
-            className="bg-transparent font-medium text-slate-950 outline-none"
-            onChange={(event) => setDate(event.target.value)}
-            type="date"
-            value={date}
-          />
-        </label>
-        <label className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
-          <Hash className="h-4 w-4 text-slate-400" />
-          <input
-            className="w-16 bg-transparent text-center font-medium text-slate-950 outline-none"
-            min="1"
-            onChange={(event) => setLimitDraft(event.target.value)}
-            type="number"
-            value={limitDraft}
-          />
-        </label>
-        <Button
-          className="h-10"
-          onClick={() => setRefreshIndex((value) => value + 1)}
-          type="button"
-          variant="outline"
-        >
-          <RefreshCw className="h-4 w-4" />
-          刷新
-        </Button>
+      <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-shell ring-1 ring-slate-200 md:flex-row md:items-center md:justify-between">
+        <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1 text-sm font-semibold text-slate-500 md:w-[180px]">
+          <button
+            className={cn(
+              'h-9 rounded-lg transition-colors',
+              period === 'day'
+                ? 'bg-white text-slate-950 shadow-sm'
+                : 'hover:text-slate-700',
+            )}
+            onClick={() => handlePeriodChange('day')}
+            type="button"
+          >
+            按日
+          </button>
+          <button
+            className={cn(
+              'h-9 rounded-lg transition-colors',
+              period === 'month'
+                ? 'bg-white text-slate-950 shadow-sm'
+                : 'hover:text-slate-700',
+            )}
+            onClick={() => handlePeriodChange('month')}
+            type="button"
+          >
+            按月
+          </button>
+        </div>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          {period === 'month' ? (
+            <label className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              <CalendarRange className="h-4 w-4 text-slate-400" />
+              <input
+                className="bg-transparent font-medium text-slate-950 outline-none"
+                onChange={(event) => setMonth(event.target.value)}
+                type="month"
+                value={month}
+              />
+            </label>
+          ) : (
+            <label className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              <CalendarDays className="h-4 w-4 text-slate-400" />
+              <input
+                className="bg-transparent font-medium text-slate-950 outline-none"
+                onChange={(event) => setDate(event.target.value)}
+                type="date"
+                value={date}
+              />
+            </label>
+          )}
+          <label className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            <Hash className="h-4 w-4 text-slate-400" />
+            <input
+              className="w-16 bg-transparent text-center font-medium text-slate-950 outline-none"
+              min="1"
+              onChange={(event) => setLimitDraft(event.target.value)}
+              type="number"
+              value={limitDraft}
+            />
+          </label>
+          <Button
+            className="h-10"
+            onClick={() => setRefreshIndex((value) => value + 1)}
+            type="button"
+            variant="outline"
+          >
+            <RefreshCw className="h-4 w-4" />
+            刷新
+          </Button>
+        </div>
       </div>
 
       {status === 'loading' && !data ? (
@@ -516,9 +589,13 @@ function EmbyWatchRankingPageContent() {
                 ) : null}
               </div>
               {data.users.length > 0 ? (
-                <UserRankingTable users={data.users} />
+                <UserRankingTable period={data.period} users={data.users} />
               ) : (
-                <EmptyPanel message="当天还没有有效用户观看记录。" />
+                <EmptyPanel
+                  message={`${
+                    data.period === 'month' ? '当月' : '当天'
+                  }还没有有效用户观看记录。`}
+                />
               )}
             </div>
 
@@ -526,12 +603,20 @@ function EmbyWatchRankingPageContent() {
               {data.movies.length > 0 ? (
                 <MediaRankingCard items={data.movies} title="电影排行" />
               ) : (
-                <EmptyPanel message="当天还没有电影观看记录。" />
+                <EmptyPanel
+                  message={`${
+                    data.period === 'month' ? '当月' : '当天'
+                  }还没有电影观看记录。`}
+                />
               )}
               {data.series.length > 0 ? (
                 <MediaRankingCard items={data.series} title="电视剧/番剧排行" />
               ) : (
-                <EmptyPanel message="当天还没有剧集观看记录。" />
+                <EmptyPanel
+                  message={`${
+                    data.period === 'month' ? '当月' : '当天'
+                  }还没有剧集观看记录。`}
+                />
               )}
             </div>
           </div>

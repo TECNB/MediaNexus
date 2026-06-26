@@ -26,7 +26,9 @@ export async function getEmbyWatchRankings(
       JavaApiResponse<EmbyWatchRankingData>
     >('/api/v1/admin/emby/watch-rankings', {
       params: {
+        period: params.period,
         date: params.date,
+        month: params.month,
         limit: params.limit,
       },
       signal,
