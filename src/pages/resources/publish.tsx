@@ -20,8 +20,10 @@ import {
   createMovieReleaseOpenListIngest,
   createSeriesReleaseOpenListIngest,
   isRequestCanceledError,
+  searchMovieReleases,
   searchProwlarrReleases,
 } from '@/lib/api/resources'
+import { formatElapsedMessage, useElapsedNow } from '@/lib/use-elapsed-time'
 import { cn } from '@/lib/utils'
 import type {
   OpenListQualityTag,
@@ -127,6 +129,16 @@ function releaseKey(release: ProwlarrRelease, index: number) {
   return `${index}:${release.indexer_id}:${release.download_ref}`
 }
 
+function releaseMatchLabel(release: ProwlarrRelease) {
+  const source = release.match_source?.trim()
+  const query = release.match_query?.trim()
+
+  if (source && query) {
+    return `${source}：${query}`
+  }
+  return source || query || null
+}
+
 function MissingState() {
   return (
     <PageContainer
@@ -168,11 +180,13 @@ export function ResourcePublishPage() {
     query: string
     items: ProwlarrRelease[]
     message: string | null
+    startedAt: number | null
   }>({
     status: 'loading',
     query: '',
     items: [],
     message: null,
+    startedAt: Date.now(),
   })
   const [submitState, setSubmitState] = useState<{
     keys: string[]
@@ -187,7 +201,7 @@ export function ResourcePublishPage() {
       !pageState ||
       !item ||
       (mediaType !== 'movie' && mediaType !== 'series') ||
-      !pageState.submittedTerm.trim() ||
+      (mediaType === 'series' && !pageState.submittedTerm.trim()) ||
       (mediaType === 'movie' && typeof item.year !== 'number')
     ) {
       return
@@ -199,28 +213,40 @@ export function ResourcePublishPage() {
       query: current.query,
       items: current.items,
       message: null,
+      startedAt: Date.now(),
     }))
     setSubmitState({ keys: [], message: null })
 
-    const params =
+    const request =
       mediaType === 'movie'
-        ? {
-            term: pageState.submittedTerm,
-            media_type: mediaType,
-          }
-        : {
-            term: pageState.submittedTerm,
-            media_type: mediaType,
-            season_number: seasonNumber,
-          }
+        ? searchMovieReleases(
+            {
+              tmdb_id: item.tmdb_id,
+              imdb_id: item.imdb_id,
+              title: item.title,
+              original_title: item.original_title,
+              year: item.year as number,
+              quality: pageState.qualityTag,
+            },
+            controller.signal,
+          )
+        : searchProwlarrReleases(
+            {
+              term: pageState.submittedTerm,
+              media_type: mediaType,
+              season_number: seasonNumber,
+            },
+            controller.signal,
+          )
 
-    void searchProwlarrReleases(params, controller.signal)
+    void request
       .then((data) => {
         setLoadState({
           status: 'success',
           query: data.query,
           items: data.items,
           message: null,
+          startedAt: null,
         })
       })
       .catch((error) => {
@@ -235,6 +261,7 @@ export function ResourcePublishPage() {
             error instanceof Error && error.message.trim()
               ? error.message.trim()
               : '发布资源加载失败，请稍后重试。',
+          startedAt: null,
         })
       })
 
@@ -250,12 +277,20 @@ export function ResourcePublishPage() {
       ),
     [dynamicFilter, loadState.items, resolutionFilter],
   )
+  const loadElapsedNow = useElapsedNow(
+    loadState.status === 'loading' && typeof loadState.startedAt === 'number',
+  )
+  const loadMessage = formatElapsedMessage(
+    '正在加载 Prowlarr 发布资源…',
+    loadState.startedAt,
+    loadElapsedNow,
+  )
 
   if (
     !pageState ||
     !item ||
     (mediaType !== 'movie' && mediaType !== 'series') ||
-    !pageState.submittedTerm.trim() ||
+    (mediaType === 'series' && !pageState.submittedTerm.trim()) ||
     (mediaType === 'movie' && typeof item.year !== 'number')
   ) {
     return <MissingState />
@@ -355,8 +390,9 @@ export function ResourcePublishPage() {
               {item.title}
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              {mediaType === 'movie' ? '电影' : '剧集'} · {targetLabel} · 搜索词
-              “{pageState.submittedTerm}”
+              {mediaType === 'movie'
+                ? `电影 · ${targetLabel} · 使用电影实体搜索计划`
+                : `剧集 · ${targetLabel} · 搜索词“${pageState.submittedTerm}”`}
             </p>
           </div>
 
@@ -460,7 +496,7 @@ export function ResourcePublishPage() {
         <div className="rounded-lg bg-white px-8 py-16 text-center">
           <Loader2 className="mx-auto h-7 w-7 animate-spin text-slate-400" />
           <p className="mt-4 text-sm font-medium text-slate-500">
-            正在加载 Prowlarr 发布资源…
+            {loadMessage}
           </p>
         </div>
       ) : loadState.status === 'error' ? (
@@ -484,6 +520,7 @@ export function ResourcePublishPage() {
           {filteredItems.map((release) => {
             const key = releaseKey(release, loadState.items.indexOf(release))
             const isSubmitting = submitState.keys.includes(key)
+            const matchLabel = releaseMatchLabel(release)
             const tags = [
               ...release.resolution_tags,
               ...release.dynamic_range_tags.map(
@@ -499,6 +536,11 @@ export function ResourcePublishPage() {
                       {release.title}
                     </h3>
                     <div className="mt-3 flex flex-wrap gap-2">
+                      {matchLabel ? (
+                        <span className="rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                          命中 {matchLabel}
+                        </span>
+                      ) : null}
                       {tags.map((tag) => (
                         <span
                           key={tag}

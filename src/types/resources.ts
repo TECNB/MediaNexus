@@ -130,10 +130,36 @@ export type ProwlarrRelease = {
   download_ref: string
   resolution_tags: OpenListQualityTag[]
   dynamic_range_tags: string[]
+  match_source: string | null
+  match_query: string | null
 }
 
 export type ProwlarrReleaseSearchData = {
   query: string
+  items: ProwlarrRelease[]
+}
+
+export type MovieReleaseRecommendationPayload = {
+  tmdb_id: number | null
+  imdb_id: string | null
+  title: string
+  original_title: string | null
+  year: number
+  quality: OpenListQualityTag
+}
+
+export type MovieReleaseSearchPayload = {
+  tmdb_id: number | null
+  imdb_id: string | null
+  title: string
+  original_title: string | null
+  year: number
+  quality: OpenListQualityTag
+}
+
+export type ProwlarrReleaseRecommendationData = {
+  query: string
+  item: ProwlarrRelease
   items: ProwlarrRelease[]
 }
 

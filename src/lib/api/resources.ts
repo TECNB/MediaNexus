@@ -13,9 +13,12 @@ import type {
   CreateMovieReleaseOpenListIngestPayload,
   CreateSeriesOpenListIngestPayload,
   CreateSeriesReleaseOpenListIngestPayload,
+  MovieReleaseRecommendationPayload,
+  MovieReleaseSearchPayload,
   MovieQualityProfile,
   MovieQualityProfilesResponse,
   MovieSearchItem,
+  ProwlarrReleaseRecommendationData,
   ProwlarrReleaseSearchData,
   SearchProwlarrReleasesParams,
   SeriesSeasonsData,
@@ -253,6 +256,68 @@ export async function searchProwlarrReleases(
     }
     throw new Error(
       getJavaErrorMessage(error) || '发布资源加载失败，请稍后重试。',
+    )
+  }
+}
+
+export async function recommendMovieRelease(
+  payload: MovieReleaseRecommendationPayload,
+): Promise<ProwlarrReleaseRecommendationData> {
+  try {
+    const response = await javaApiClient.post<
+      JavaApiResponse<ProwlarrReleaseRecommendationData>
+    >('/api/v1/resources/movies/releases/recommendation', payload)
+
+    const data = response.data.data
+    const items = Array.isArray(data?.items)
+      ? data.items
+      : data?.item
+        ? [data.item]
+        : []
+    const item = data?.item ?? items[0]
+
+    if (response.data.code !== 200 || !data || !item || items.length === 0) {
+      throw new Error(
+        response.data.message || 'movie release recommendation failed',
+      )
+    }
+
+    return {
+      ...data,
+      item,
+      items,
+    }
+  } catch (error) {
+    throw new Error(
+      getJavaErrorMessage(error) || '电影发布资源推荐失败，请稍后重试。',
+    )
+  }
+}
+
+export async function searchMovieReleases(
+  payload: MovieReleaseSearchPayload,
+  signal?: AbortSignal,
+): Promise<ProwlarrReleaseSearchData> {
+  try {
+    const response = await javaApiClient.post<
+      JavaApiResponse<ProwlarrReleaseSearchData>
+    >('/api/v1/resources/movies/releases/search', payload, { signal })
+
+    if (
+      response.data.code !== 200 ||
+      !response.data.data ||
+      !Array.isArray(response.data.data.items)
+    ) {
+      throw new Error(response.data.message || 'movie release search failed')
+    }
+
+    return response.data.data
+  } catch (error) {
+    if (isRequestCanceledError(error)) {
+      throw error
+    }
+    throw new Error(
+      getJavaErrorMessage(error) || '电影发布资源加载失败，请稍后重试。',
     )
   }
 }

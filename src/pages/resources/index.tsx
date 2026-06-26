@@ -33,10 +33,12 @@ import {
   createSeriesReleaseOpenListIngest,
   getSeriesSeasons,
   isRequestCanceledError,
+  recommendMovieRelease,
   searchProwlarrReleases,
   searchMovies,
   searchSeries,
 } from '@/lib/api/resources'
+import { formatElapsedMessage, useElapsedNow } from '@/lib/use-elapsed-time'
 import { cn } from '@/lib/utils'
 import type {
   AnimeSearchItem,
@@ -72,6 +74,7 @@ type ResourceSearchState = {
 type MediaIngestState = {
   status: MediaCardAddStatus
   message: string | null
+  startedAt?: number | null
 }
 
 type AnimeGroupsState = {
@@ -115,6 +118,7 @@ type AutoReleaseConfirmation = {
   qualityTag: OpenListQualityTag
   seasonNumber: number | null
   release: ProwlarrRelease
+  releases: ProwlarrRelease[]
   query: string
   searchLanguage: SearchLanguage
   isSubmitting: boolean
@@ -268,6 +272,10 @@ function getSearchLanguage(term: string): SearchLanguage {
   return 'unknown'
 }
 
+function getItemSearchLanguage(item: SearchableResourceItem) {
+  return getSearchLanguage(`${item.title} ${item.original_title ?? ''}`)
+}
+
 function matchesLanguage(title: string, language: SearchLanguage) {
   if (language === 'chinese') {
     return hasChineseText(title)
@@ -325,6 +333,20 @@ function hasActivePeers(release: ProwlarrRelease) {
 
 function getSeederHealthPriority(release: ProwlarrRelease) {
   return (release.seeders ?? 0) >= 3 ? 0 : 1
+}
+
+function releaseMatchLabel(release: ProwlarrRelease, fallbackQuery: string) {
+  const source = release.match_source?.trim()
+  const query = release.match_query?.trim() || fallbackQuery.trim()
+
+  if (source && query) {
+    return `${source}：${query}`
+  }
+  return query || source || '-'
+}
+
+function releaseCandidateKey(release: ProwlarrRelease, index: number) {
+  return `${index}:${release.indexer_id}:${release.download_ref}:${release.title}`
 }
 
 function formatDynamicRange(tags: string[]) {
@@ -645,6 +667,10 @@ export function ResourceSearchPage() {
   const isSearching = isCategorySearchable && searchState.status === 'loading'
   const isSearchSubmitDisabled = !isCategorySearchable || isSearching
   const activeSearchPlaceholder = activeCategoryCopy?.placeholder ?? '搜索资源…'
+  const hasActiveTimedIngest = Object.values(mediaIngestStates).some(
+    (state) => state.status === 'loading' && typeof state.startedAt === 'number',
+  )
+  const elapsedNow = useElapsedNow(hasActiveTimedIngest)
 
   function handleSearchSubmit() {
     if (!isSearchableCategory(category) || searchState.status === 'loading') {
@@ -836,27 +862,57 @@ export function ResourceSearchPage() {
       [itemKey]: {
         status: 'loading',
         message: '正在匹配 Prowlarr 发布资源…',
+        startedAt: Date.now(),
       },
     }))
 
-    void searchProwlarrReleases({
-      term: submittedTerm,
-      media_type: mediaType,
-      season_number:
-        mediaType === 'series' ? seasonNumber ?? undefined : undefined,
-    })
-      .then((data) => {
-        const release = selectAutoRelease(
-          data.items,
-          qualityTag,
-          submittedTerm,
-          item,
-        )
-        if (!release) {
-          throw new Error(
-            `未找到匹配 ${qualityTag} 且有做种的发布资源。`,
-          )
-        }
+    const releaseRequest =
+      mediaType === 'movie'
+        ? recommendMovieRelease({
+            tmdb_id: item.tmdb_id,
+            imdb_id: item.imdb_id,
+            title: item.title,
+            original_title: item.original_title,
+            year: item.year as number,
+            quality: qualityTag,
+          }).then((data) => {
+            const release = data.items[0]
+            if (!release) {
+              throw new Error('未找到匹配的电影发布资源。')
+            }
+            return {
+              release,
+              releases: data.items,
+              query: data.query,
+              searchLanguage: getItemSearchLanguage(item),
+            }
+          })
+        : searchProwlarrReleases({
+            term: submittedTerm,
+            media_type: mediaType,
+            season_number: seasonNumber ?? undefined,
+          }).then((data) => {
+            const release = selectAutoRelease(
+              data.items,
+              qualityTag,
+              submittedTerm,
+              item,
+            )
+            if (!release) {
+              throw new Error(
+                `未找到匹配 ${qualityTag} 且有做种的发布资源。`,
+              )
+            }
+            return {
+              release,
+              releases: [release],
+              query: data.query,
+              searchLanguage: getSearchLanguage(submittedTerm),
+            }
+          })
+
+    void releaseRequest
+      .then(({ release, releases, query, searchLanguage }) => {
         setMediaIngestStates((currentStates) => ({
           ...currentStates,
           [itemKey]: {
@@ -871,8 +927,9 @@ export function ResourceSearchPage() {
           qualityTag,
           seasonNumber: mediaType === 'series' ? seasonNumber : null,
           release,
-          query: data.query,
-          searchLanguage: getSearchLanguage(submittedTerm),
+          releases,
+          query,
+          searchLanguage,
           isSubmitting: false,
         })
       })
@@ -907,6 +964,17 @@ export function ResourceSearchPage() {
       return nextStates
     })
     setAutoReleaseConfirmation(null)
+  }
+
+  function handleSelectAutoReleaseCandidate(release: ProwlarrRelease) {
+    if (!autoReleaseConfirmation || autoReleaseConfirmation.isSubmitting) {
+      return
+    }
+
+    setAutoReleaseConfirmation({
+      ...autoReleaseConfirmation,
+      release,
+    })
   }
 
   function handleConfirmAutoRelease() {
@@ -1396,6 +1464,8 @@ export function ResourceSearchPage() {
     const selection = autoReleaseConfirmation
     const release = selection.release
     const isNonChineseRelease = !hasChineseText(release.title)
+    const matchLabel = releaseMatchLabel(release, selection.query)
+    const hasMultipleCandidates = selection.releases.length > 1
     const languageCopy =
       selection.searchLanguage === 'chinese'
         ? '中文'
@@ -1416,15 +1486,16 @@ export function ResourceSearchPage() {
                 自动匹配资源
               </p>
               <h2 className="mt-2 text-xl font-semibold text-slate-950">
-                确认使用该发布入库？
+                {hasMultipleCandidates ? '选择推荐发布入库' : '确认使用该发布入库？'}
               </h2>
               <p className="mt-2 text-sm text-slate-500">
-                查询：{selection.query} · 搜索词语种：{languageCopy}
+                命中：{matchLabel} · 搜索词语种：{languageCopy}
               </p>
             </div>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
               {selection.mediaType === 'movie' ? '电影' : '剧集'} ·{' '}
               {selection.qualityTag}
+              {hasMultipleCandidates ? ` · ${selection.releases.length} 个推荐` : ''}
             </span>
           </div>
 
@@ -1434,13 +1505,57 @@ export function ResourceSearchPage() {
             </div>
           ) : null}
 
+          <div className="mt-5 space-y-3">
+            {selection.releases.map((candidate, index) => {
+              const isSelected = candidate === release
+              const candidateMatchLabel = releaseMatchLabel(
+                candidate,
+                selection.query,
+              )
+              return (
+                <button
+                  key={releaseCandidateKey(candidate, index)}
+                  type="button"
+                  disabled={selection.isSubmitting}
+                  onClick={() => handleSelectAutoReleaseCandidate(candidate)}
+                  className={cn(
+                    'w-full rounded-xl border px-4 py-4 text-left transition',
+                    isSelected
+                      ? 'border-slate-950 bg-slate-100'
+                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50',
+                  )}
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <p className="break-words text-sm font-semibold leading-6 text-slate-950">
+                      {candidate.title}
+                    </p>
+                    <span className="shrink-0 rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-slate-600">
+                      推荐 {index + 1}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
+                    <span className="rounded-md bg-emerald-50 px-2 py-1 text-emerald-700">
+                      命中 {candidateMatchLabel}
+                    </span>
+                    <span className="rounded-md bg-slate-200 px-2 py-1 text-slate-700">
+                      {formatReleaseSize(candidate.size)}
+                    </span>
+                    <span className="rounded-md bg-slate-200 px-2 py-1 text-slate-700">
+                      做种 {candidate.seeders ?? '—'}
+                    </span>
+                    <span className="rounded-md bg-slate-200 px-2 py-1 text-slate-700">
+                      {formatDynamicRange(candidate.dynamic_range_tags)}
+                    </span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
           <div className="mt-5 rounded-xl bg-slate-100 px-4 py-4">
-            <p className="break-words text-sm font-semibold leading-6 text-slate-950">
-              {release.title}
-            </p>
-            <div className="mt-4 grid gap-3 text-xs text-slate-500 sm:grid-cols-2">
+            <div className="grid gap-3 text-xs text-slate-500 sm:grid-cols-2">
               <span>
-                质量：{selection.qualityTag} /{' '}
+                当前选择：{selection.qualityTag} /{' '}
                 {formatDynamicRange(release.dynamic_range_tags)}
               </span>
               <span>体积：{formatReleaseSize(release.size)}</span>
@@ -1545,13 +1660,18 @@ export function ResourceSearchPage() {
 
               const itemKey = getMediaIngestKey(item)
               const ingestState = mediaIngestStates[itemKey]
+              const ingestMessage = formatElapsedMessage(
+                ingestState?.message,
+                ingestState?.startedAt,
+                elapsedNow,
+              )
 
               return (
                 <MediaCard
                   key={item.id}
                   item={item}
                   addStatus={ingestState?.status}
-                  addMessage={ingestState?.message}
+                  addMessage={ingestMessage}
                   qualityTags={OPENLIST_QUALITY_TAGS}
                   selectedQualityTag={getSelectedQualityTag(item)}
                   seasonOptions={
