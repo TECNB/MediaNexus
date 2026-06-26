@@ -34,7 +34,7 @@ import {
   getSeriesSeasons,
   isRequestCanceledError,
   recommendMovieRelease,
-  searchProwlarrReleases,
+  recommendSeriesRelease,
   searchMovies,
   searchSeries,
 } from '@/lib/api/resources'
@@ -126,7 +126,6 @@ type AutoReleaseConfirmation = {
 
 const OPENLIST_QUALITY_TAGS: OpenListQualityTag[] = ['2160p', '1080p', '720p']
 const DEFAULT_QUALITY_TAG: OpenListQualityTag = '2160p'
-const HDR_DYNAMIC_TAGS = ['hdr10_plus', 'hdr10', 'hdr', 'hlg']
 
 const taskStatusCopy: Record<MagnetIngestTaskStatus, string> = {
   PENDING: '等待中',
@@ -276,65 +275,6 @@ function getItemSearchLanguage(item: SearchableResourceItem) {
   return getSearchLanguage(`${item.title} ${item.original_title ?? ''}`)
 }
 
-function matchesLanguage(title: string, language: SearchLanguage) {
-  if (language === 'chinese') {
-    return hasChineseText(title)
-  }
-  if (language === 'english') {
-    return hasLatinText(title) && !hasChineseText(title)
-  }
-  return true
-}
-
-function normalizeSearchText(value: string) {
-  return value.toLowerCase().replace(/[^0-9a-z\u3400-\u9fff]+/gi, '')
-}
-
-function matchesSearchTerm(title: string, term: string) {
-  const normalizedTitle = normalizeSearchText(title)
-  const normalizedTerm = normalizeSearchText(term)
-  return normalizedTerm ? normalizedTitle.includes(normalizedTerm) : true
-}
-
-function getReleaseMatchTerms(term: string, item: SearchableResourceItem) {
-  const language = getSearchLanguage(term)
-  const terms = [term, item.title, item.original_title ?? '']
-    .map((value) => value.trim())
-    .filter((value, index, values) => value && values.indexOf(value) === index)
-
-  if (language === 'chinese') {
-    return terms.filter(hasChineseText)
-  }
-  if (language === 'english') {
-    return terms.filter((value) => hasLatinText(value) && !hasChineseText(value))
-  }
-  return terms
-}
-
-function matchesAnySearchTerm(title: string, terms: string[]) {
-  return terms.some((term) => matchesSearchTerm(title, term))
-}
-
-function getDynamicPriority(release: ProwlarrRelease) {
-  if (release.dynamic_range_tags.includes('dolby_vision')) {
-    return 2
-  }
-  if (
-    release.dynamic_range_tags.some((tag) => HDR_DYNAMIC_TAGS.includes(tag))
-  ) {
-    return 1
-  }
-  return 0
-}
-
-function hasActivePeers(release: ProwlarrRelease) {
-  return (release.seeders ?? 0) > 0
-}
-
-function getSeederHealthPriority(release: ProwlarrRelease) {
-  return (release.seeders ?? 0) >= 3 ? 0 : 1
-}
-
 function releaseMatchLabel(release: ProwlarrRelease, fallbackQuery: string) {
   const source = release.match_source?.trim()
   const query = release.match_query?.trim() || fallbackQuery.trim()
@@ -367,68 +307,6 @@ function formatReleaseSize(value: number | null) {
     unitIndex += 1
   }
   return `${size.toFixed(unitIndex > 2 ? 2 : 0)} ${units[unitIndex]}`
-}
-
-function selectAutoRelease(
-  releases: ProwlarrRelease[],
-  qualityTag: OpenListQualityTag,
-  term: string,
-  item: SearchableResourceItem,
-) {
-  const activeReleases = releases.filter(hasActivePeers)
-  const resolutionMatches = activeReleases.filter((release) =>
-    release.resolution_tags.includes(qualityTag),
-  )
-  if (resolutionMatches.length === 0) {
-    return null
-  }
-
-  const matchTerms = getReleaseMatchTerms(term, item)
-  const relevantMatches = resolutionMatches.filter((release) =>
-    matchesAnySearchTerm(release.title, matchTerms),
-  )
-  if (relevantMatches.length === 0) {
-    return null
-  }
-
-  const bestDynamicPriority = Math.min(
-    ...relevantMatches.map(getDynamicPriority),
-  )
-  const dynamicMatches = relevantMatches.filter(
-    (release) => getDynamicPriority(release) === bestDynamicPriority,
-  )
-  const language = getSearchLanguage(term)
-  const languageMatches = dynamicMatches.filter((release) =>
-    matchesLanguage(release.title, language),
-  )
-  const finalPool = languageMatches.length > 0 ? languageMatches : dynamicMatches
-
-  return finalPool
-    .slice()
-    .sort((left, right) => {
-      const healthDelta =
-        getSeederHealthPriority(left) - getSeederHealthPriority(right)
-      if (healthDelta !== 0) {
-        return healthDelta
-      }
-
-      const sizeDelta = (right.size ?? 0) - (left.size ?? 0)
-      if (sizeDelta !== 0) {
-        return sizeDelta
-      }
-
-      const seederDelta = (right.seeders ?? 0) - (left.seeders ?? 0)
-      if (seederDelta !== 0) {
-        return seederDelta
-      }
-
-      const grabDelta = (right.grabs ?? 0) - (left.grabs ?? 0)
-      if (grabDelta !== 0) {
-        return grabDelta
-      }
-
-      return (right.leechers ?? 0) - (left.leechers ?? 0)
-    })[0]
 }
 
 function createInitialSearchState(): ResourceSearchState {
@@ -856,6 +734,7 @@ export function ResourceSearchPage() {
       mediaType = 'movie'
     }
 
+    const seriesItem = isSeriesSearchItem(item) ? item : null
     activeMediaIngestKeysRef.current.add(itemKey)
     setMediaIngestStates((currentStates) => ({
       ...currentStates,
@@ -887,29 +766,28 @@ export function ResourceSearchPage() {
               searchLanguage: getItemSearchLanguage(item),
             }
           })
-        : searchProwlarrReleases({
-            term: submittedTerm,
-            media_type: mediaType,
-            season_number: seasonNumber ?? undefined,
-          }).then((data) => {
-            const release = selectAutoRelease(
-              data.items,
-              qualityTag,
-              submittedTerm,
-              item,
-            )
-            if (!release) {
-              throw new Error(
-                `未找到匹配 ${qualityTag} 且有做种的发布资源。`,
-              )
-            }
-            return {
-              release,
-              releases: [release],
-              query: data.query,
-              searchLanguage: getSearchLanguage(submittedTerm),
-            }
-          })
+        : seriesItem
+          ? recommendSeriesRelease({
+              tvdb_id: seriesItem.tvdb_id,
+              tmdb_id: seriesItem.tmdb_id,
+              imdb_id: seriesItem.imdb_id,
+              title: seriesItem.title,
+              original_title: seriesItem.original_title,
+              season_number: seasonNumber ?? 1,
+              quality: qualityTag,
+            }).then((data) => {
+              const release = data.items[0]
+              if (!release) {
+                throw new Error('未找到匹配的剧集发布资源。')
+              }
+              return {
+                release,
+                releases: data.items,
+                query: data.query,
+                searchLanguage: getItemSearchLanguage(seriesItem),
+              }
+            })
+          : Promise.reject(new Error('请选择剧集目标季数。'))
 
     void releaseRequest
       .then(({ release, releases, query, searchLanguage }) => {

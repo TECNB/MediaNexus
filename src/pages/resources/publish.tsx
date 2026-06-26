@@ -21,7 +21,7 @@ import {
   createSeriesReleaseOpenListIngest,
   isRequestCanceledError,
   searchMovieReleases,
-  searchProwlarrReleases,
+  searchSeriesReleases,
 } from '@/lib/api/resources'
 import { formatElapsedMessage, useElapsedNow } from '@/lib/use-elapsed-time'
 import { cn } from '@/lib/utils'
@@ -201,7 +201,7 @@ export function ResourcePublishPage() {
       !pageState ||
       !item ||
       (mediaType !== 'movie' && mediaType !== 'series') ||
-      (mediaType === 'series' && !pageState.submittedTerm.trim()) ||
+      (mediaType === 'series' && !isSeriesSearchItem(item)) ||
       (mediaType === 'movie' && typeof item.year !== 'number')
     ) {
       return
@@ -230,11 +230,15 @@ export function ResourcePublishPage() {
             },
             controller.signal,
           )
-        : searchProwlarrReleases(
+        : searchSeriesReleases(
             {
-              term: pageState.submittedTerm,
-              media_type: mediaType,
+              tvdb_id: item.tvdb_id,
+              tmdb_id: item.tmdb_id,
+              imdb_id: item.imdb_id,
+              title: item.title,
+              original_title: item.original_title,
               season_number: seasonNumber,
+              quality: pageState.qualityTag,
             },
             controller.signal,
           )
@@ -290,7 +294,7 @@ export function ResourcePublishPage() {
     !pageState ||
     !item ||
     (mediaType !== 'movie' && mediaType !== 'series') ||
-    (mediaType === 'series' && !pageState.submittedTerm.trim()) ||
+    (mediaType === 'series' && !isSeriesSearchItem(item)) ||
     (mediaType === 'movie' && typeof item.year !== 'number')
   ) {
     return <MissingState />
@@ -392,7 +396,7 @@ export function ResourcePublishPage() {
             <p className="mt-1 text-sm text-slate-500">
               {mediaType === 'movie'
                 ? `电影 · ${targetLabel} · 使用电影实体搜索计划`
-                : `剧集 · ${targetLabel} · 搜索词“${pageState.submittedTerm}”`}
+                : `剧集 · ${targetLabel} · 使用剧集实体搜索计划`}
             </p>
           </div>
 

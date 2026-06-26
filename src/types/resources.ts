@@ -157,6 +157,26 @@ export type MovieReleaseSearchPayload = {
   quality: OpenListQualityTag
 }
 
+export type SeriesReleaseRecommendationPayload = {
+  tvdb_id: number | null
+  tmdb_id: number | null
+  imdb_id: string | null
+  title: string
+  original_title: string | null
+  season_number: number
+  quality: OpenListQualityTag
+}
+
+export type SeriesReleaseSearchPayload = {
+  tvdb_id: number | null
+  tmdb_id: number | null
+  imdb_id: string | null
+  title: string
+  original_title: string | null
+  season_number: number
+  quality: OpenListQualityTag
+}
+
 export type ProwlarrReleaseRecommendationData = {
   query: string
   item: ProwlarrRelease
