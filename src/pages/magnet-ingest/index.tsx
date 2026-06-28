@@ -14,9 +14,12 @@ import {
 import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
 import {
+  createAdultMagnetIngestTask,
   createAnimeMagnetIngestTask,
   createMovieMagnetIngest,
   createSeriesMagnetIngest,
+  listAdultMagnetIngestTaskLogs,
+  listAdultMagnetIngestTasks,
   listAnimeMagnetIngestTaskLogs,
   listAnimeMagnetIngestTasks,
   listMovieMagnetIngestTaskLogs,
@@ -35,10 +38,14 @@ import {
   type RecentIngestTask,
   type RecentIngestTaskStatus,
 } from '@/data/mock-magnet-ingest'
+import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
 import type {
+  AdultMagnetCategory,
+  AdultMagnetIngestTask,
   AnimeMagnetSearchItem,
   AnimeMagnetIngestTask,
+  CreateAdultMagnetIngestTaskPayload,
   CreateAnimeMagnetIngestTaskPayload,
   CreateMovieMagnetIngestPayload,
   CreateSeriesMagnetIngestPayload,
@@ -81,15 +88,18 @@ function SectionHeading({
 
 function MediaTypeToggle({
   mode,
+  isAdmin,
   onChange,
 }: {
   mode: IngestMode
+  isAdmin: boolean
   onChange: (mode: IngestMode) => void
 }) {
   const options: Array<{ label: string; value: IngestMode }> = [
     { label: '电影', value: 'movie' },
     { label: '电视剧', value: 'series' },
     { label: '动漫', value: 'anime' },
+    ...(isAdmin ? [{ label: 'Adult', value: 'adult' as const }] : []),
   ]
 
   return (
@@ -105,6 +115,44 @@ function MediaTypeToggle({
             onClick={() => onChange(option.value)}
             className={cn(
               'min-w-0 flex-1 whitespace-nowrap rounded-[14px] px-3 py-2 text-sm font-semibold transition-all md:flex-none md:px-4',
+              isActive
+                ? 'bg-white text-slate-950 shadow-[0_1px_2px_rgba(15,23,42,0.08)]'
+                : 'text-slate-500 hover:text-slate-900',
+            )}
+          >
+            {option.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function AdultCategoryToggle({
+  category,
+  onChange,
+}: {
+  category: AdultMagnetCategory
+  onChange: (category: AdultMagnetCategory) => void
+}) {
+  const options: Array<{ label: string; value: AdultMagnetCategory }> = [
+    { label: 'JAV', value: 'JAV' },
+    { label: 'Other', value: 'OTHER' },
+  ]
+
+  return (
+    <div className="flex w-full rounded-2xl border border-slate-200 bg-slate-100/80 p-1 md:w-auto">
+      {options.map((option) => {
+        const isActive = option.value === category
+
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={isActive}
+            onClick={() => onChange(option.value)}
+            className={cn(
+              'min-w-0 flex-1 whitespace-nowrap rounded-[14px] px-4 py-2 text-sm font-semibold transition-all md:flex-none',
               isActive
                 ? 'bg-white text-slate-950 shadow-[0_1px_2px_rgba(15,23,42,0.08)]'
                 : 'text-slate-500 hover:text-slate-900',
@@ -269,6 +317,51 @@ function getMagnetValidationMessage(
   return null
 }
 
+function getAdultMagnetLines(magnetInput: string) {
+  return magnetInput
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+function getAdultMagnetValidationMessage(
+  magnetInput: string,
+  treatEmptyAsError = false,
+) {
+  const magnetLines = getAdultMagnetLines(magnetInput)
+
+  if (magnetLines.length === 0) {
+    return treatEmptyAsError ? '请输入至少一条 magnet 或 ed2k 链接' : null
+  }
+
+  if (magnetLines.length > 50) {
+    return '单批最多提交 50 条下载链接'
+  }
+
+  for (const [index, line] of magnetLines.entries()) {
+    const linkMatchCount = (line.match(/magnet:\?|ed2k:\/\//gi) ?? []).length
+    const lowerCaseLine = line.toLowerCase()
+    if (
+      linkMatchCount !== 1 ||
+      (!lowerCaseLine.startsWith('magnet:?') &&
+        !lowerCaseLine.startsWith('ed2k://'))
+    ) {
+      return `第 ${index + 1} 行不是有效的 magnet 或 ed2k 链接`
+    }
+  }
+
+  return null
+}
+
+function formatAdultPreviewDate(date: Date) {
+  return `${date.getMonth() + 1}.${date.getDate()}`
+}
+
+const adultCategoryLabel: Record<AdultMagnetCategory, string> = {
+  JAV: 'JAV',
+  OTHER: 'Other',
+}
+
 function getMovieMagnetIngestPayload(
   magnet: string,
   selectedMovie: MovieSearchItem,
@@ -331,6 +424,22 @@ function getAnimeMagnetIngestPayload(
   }
 }
 
+function getAdultMagnetIngestPayload(
+  magnetInput: string,
+  category: AdultMagnetCategory,
+): CreateAdultMagnetIngestTaskPayload | null {
+  const magnets = getAdultMagnetLines(magnetInput)
+
+  if (magnets.length === 0 || magnets.length > 50) {
+    return null
+  }
+
+  return {
+    category,
+    magnets,
+  }
+}
+
 function toRecentTaskStatus(
   status: MagnetIngestTaskStatus,
 ): RecentIngestTaskStatus {
@@ -386,6 +495,18 @@ function toRecentAnimeTask(task: AnimeMagnetIngestTask): RecentIngestTask {
   }
 }
 
+function toRecentAdultTask(task: AdultMagnetIngestTask): RecentIngestTask {
+  return {
+    id: task.id,
+    name: `${adultCategoryLabel[task.category] ?? task.category} · ${
+      task.magnet_count
+    } 条`,
+    libraryTitle: `${task.date_folder} · 保留 ${task.kept_count} · 删除 ${task.deleted_count}`,
+    status: toRecentTaskStatus(task.status),
+    time: formatTaskTime(task.updated_at ?? task.created_at),
+  }
+}
+
 function toRecentMovieTask(task: MovieMagnetIngestTask): RecentIngestTask {
   return {
     id: task.id,
@@ -425,8 +546,12 @@ function isAnimeMagnetSearchItem(item: unknown): item is AnimeMagnetSearchItem {
 }
 
 export function MagnetIngestPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'ADMIN'
   const [mode, setMode] = useState<IngestMode>('movie')
   const [magnetInput, setMagnetInput] = useState('')
+  const [adultCategory, setAdultCategory] =
+    useState<AdultMagnetCategory>('JAV')
   const [movieKeyword, setMovieKeyword] = useState('')
   const [seriesKeyword, setSeriesKeyword] = useState('')
   const [animeKeyword, setAnimeKeyword] = useState('')
@@ -504,6 +629,19 @@ export function MagnetIngestPage() {
   const [animeTaskLogsError, setAnimeTaskLogsError] = useState<string | null>(
     null,
   )
+  const [adultTasks, setAdultTasks] = useState<AdultMagnetIngestTask[]>([])
+  const [adultTasksStatus, setAdultTasksStatus] =
+    useState<ResourceSearchStatus>('idle')
+  const [adultTasksError, setAdultTasksError] = useState<string | null>(null)
+  const [selectedAdultTaskId, setSelectedAdultTaskId] = useState<string | null>(
+    null,
+  )
+  const [adultTaskLogs, setAdultTaskLogs] = useState<MagnetIngestTaskLog[]>([])
+  const [adultTaskLogsStatus, setAdultTaskLogsStatus] =
+    useState<ResourceSearchStatus>('idle')
+  const [adultTaskLogsError, setAdultTaskLogsError] = useState<string | null>(
+    null,
+  )
   const latestSearchRequestIdRef = useRef(0)
   const activeSearchControllerRef = useRef<AbortController | null>(null)
   const latestSeriesSeasonRequestIdRef = useRef(0)
@@ -511,15 +649,19 @@ export function MagnetIngestPage() {
   const latestMovieTaskLogsRequestIdRef = useRef(0)
   const latestSeriesTaskLogsRequestIdRef = useRef(0)
   const latestAnimeTaskLogsRequestIdRef = useRef(0)
+  const latestAdultTaskLogsRequestIdRef = useRef(0)
   const selectedMovieTaskIdRef = useRef<string | null>(null)
   const selectedSeriesTaskIdRef = useRef<string | null>(null)
   const selectedAnimeTaskIdRef = useRef<string | null>(null)
+  const selectedAdultTaskIdRef = useRef<string | null>(null)
   const selectedMovieTask =
     movieTasks.find((task) => task.id === selectedMovieTaskId) ?? null
   const selectedSeriesTask =
     seriesTasks.find((task) => task.id === selectedSeriesTaskId) ?? null
   const selectedAnimeTask =
     animeTasks.find((task) => task.id === selectedAnimeTaskId) ?? null
+  const selectedAdultTask =
+    adultTasks.find((task) => task.id === selectedAdultTaskId) ?? null
   const isSelectedMovieTaskFinished = selectedMovieTask
     ? isFinishedTaskStatus(selectedMovieTask.status)
     : false
@@ -528,6 +670,9 @@ export function MagnetIngestPage() {
     : false
   const isSelectedAnimeTaskFinished = selectedAnimeTask
     ? isFinishedTaskStatus(selectedAnimeTask.status)
+    : false
+  const isSelectedAdultTaskFinished = selectedAdultTask
+    ? isFinishedTaskStatus(selectedAdultTask.status)
     : false
 
   useEffect(() => {
@@ -541,6 +686,16 @@ export function MagnetIngestPage() {
   useEffect(() => {
     selectedAnimeTaskIdRef.current = selectedAnimeTaskId
   }, [selectedAnimeTaskId])
+
+  useEffect(() => {
+    selectedAdultTaskIdRef.current = selectedAdultTaskId
+  }, [selectedAdultTaskId])
+
+  useEffect(() => {
+    if (!isAdmin && mode === 'adult') {
+      setMode('movie')
+    }
+  }, [isAdmin, mode])
 
   const loadMovieTasks = useCallback(
     async (options: { showLoading?: boolean } = {}) => {
@@ -662,6 +817,46 @@ export function MagnetIngestPage() {
     [],
   )
 
+  const loadAdultTasks = useCallback(
+    async (options: { showLoading?: boolean } = {}) => {
+      const showLoading = options.showLoading ?? true
+
+      if (showLoading) {
+        setAdultTasksStatus('loading')
+      }
+      setAdultTasksError(null)
+
+      try {
+        const tasks = await listAdultMagnetIngestTasks()
+        setAdultTasks(tasks)
+        setAdultTasksStatus(tasks.length > 0 ? 'success' : 'empty')
+
+        const currentTaskId = selectedAdultTaskIdRef.current
+        if (tasks.length === 0) {
+          selectedAdultTaskIdRef.current = null
+          setSelectedAdultTaskId(null)
+        } else if (
+          !currentTaskId ||
+          !tasks.some((task) => task.id === currentTaskId)
+        ) {
+          selectedAdultTaskIdRef.current = tasks[0].id
+          setSelectedAdultTaskId(tasks[0].id)
+        }
+      } catch (error) {
+        if (showLoading) {
+          setAdultTasks([])
+        }
+        setAdultTasksStatus('error')
+        setAdultTasksError(
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : 'Adult 任务加载失败，请稍后重试。',
+        )
+      }
+    },
+    [],
+  )
+
   useEffect(() => {
     if (!toastMessage) {
       return
@@ -774,7 +969,9 @@ export function MagnetIngestPage() {
         ? loadMovieTasks
         : mode === 'series'
           ? loadSeriesTasks
-          : loadAnimeTasks
+          : mode === 'anime'
+            ? loadAnimeTasks
+            : loadAdultTasks
 
     const refreshTasks = (showLoading: boolean) => {
       void loadTasks({ showLoading }).finally(() => {
@@ -797,7 +994,7 @@ export function MagnetIngestPage() {
         window.clearTimeout(timeoutId)
       }
     }
-  }, [mode, loadMovieTasks, loadSeriesTasks, loadAnimeTasks])
+  }, [mode, loadMovieTasks, loadSeriesTasks, loadAnimeTasks, loadAdultTasks])
 
   useEffect(() => {
     if (mode !== 'movie' || !selectedMovieTaskId) {
@@ -1015,7 +1212,82 @@ export function MagnetIngestPage() {
     }
   }, [mode, selectedAnimeTaskId, isSelectedAnimeTaskFinished])
 
-  const magnetValidationMessage = getMagnetValidationMessage(magnetInput)
+  useEffect(() => {
+    if (mode !== 'adult' || !selectedAdultTaskId) {
+      latestAdultTaskLogsRequestIdRef.current += 1
+      setAdultTaskLogs([])
+      setAdultTaskLogsStatus('idle')
+      setAdultTaskLogsError(null)
+      return
+    }
+
+    let isDisposed = false
+    let timeoutId: number | null = null
+
+    const refreshLogs = (showLoading: boolean) => {
+      const requestId = latestAdultTaskLogsRequestIdRef.current + 1
+      latestAdultTaskLogsRequestIdRef.current = requestId
+
+      if (showLoading) {
+        setAdultTaskLogsStatus('loading')
+      }
+      setAdultTaskLogsError(null)
+
+      void listAdultMagnetIngestTaskLogs(selectedAdultTaskId)
+        .then((logs) => {
+          if (
+            isDisposed ||
+            latestAdultTaskLogsRequestIdRef.current !== requestId
+          ) {
+            return
+          }
+
+          setAdultTaskLogs(logs)
+          setAdultTaskLogsStatus(logs.length > 0 ? 'success' : 'empty')
+          setAdultTaskLogsError(null)
+        })
+        .catch((error) => {
+          if (
+            isDisposed ||
+            latestAdultTaskLogsRequestIdRef.current !== requestId
+          ) {
+            return
+          }
+
+          setAdultTaskLogs([])
+          setAdultTaskLogsStatus('error')
+          setAdultTaskLogsError(
+            error instanceof Error && error.message.trim()
+              ? error.message.trim()
+              : '任务日志加载失败，请稍后重试。',
+          )
+        })
+        .finally(() => {
+          if (isDisposed || isSelectedAdultTaskFinished) {
+            return
+          }
+
+          timeoutId = window.setTimeout(() => {
+            refreshLogs(false)
+          }, TASK_LOG_POLL_INTERVAL_MS)
+        })
+    }
+
+    refreshLogs(true)
+
+    return () => {
+      isDisposed = true
+
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
+    }
+  }, [mode, selectedAdultTaskId, isSelectedAdultTaskFinished])
+
+  const singleMagnetValidationMessage = getMagnetValidationMessage(magnetInput)
+  const adultMagnetValidationMessage = getAdultMagnetValidationMessage(magnetInput)
+  const magnetValidationMessage =
+    mode === 'adult' ? adultMagnetValidationMessage : singleMagnetValidationMessage
   const seriesSeasonValidationMessage = getSeasonLoadValidationMessage({
     selectedSeries,
     seriesSeasonStatus,
@@ -1031,7 +1303,9 @@ export function MagnetIngestPage() {
       ? !selectedMovie
       : mode === 'series'
         ? Boolean(seriesSeasonValidationMessage)
-        : !selectedAnime)
+        : mode === 'anime'
+          ? !selectedAnime
+          : !isAdmin)
 
   function abortActiveSearch() {
     latestSearchRequestIdRef.current += 1
@@ -1085,13 +1359,17 @@ export function MagnetIngestPage() {
       return
     }
 
+    if (nextMode === 'adult' && !isAdmin) {
+      return
+    }
+
     abortActiveSearch()
 
     if (mode === 'movie') {
       resetMovieModeState()
     } else if (mode === 'series') {
       resetSeriesModeState()
-    } else {
+    } else if (mode === 'anime') {
       resetAnimeModeState()
     }
 
@@ -1307,13 +1585,72 @@ export function MagnetIngestPage() {
     }
 
     const normalizedMagnet = magnetInput.trim()
-    const magnetErrorMessage = getMagnetValidationMessage(magnetInput, true)
+    const magnetErrorMessage =
+      mode === 'adult'
+        ? getAdultMagnetValidationMessage(magnetInput, true)
+        : getMagnetValidationMessage(magnetInput, true)
 
     if (magnetErrorMessage) {
       setSubmitStatus('error')
       setSubmitError(magnetErrorMessage)
       setSubmitSuccessMessage(null)
       setToastMessage(magnetErrorMessage)
+      return
+    }
+
+    if (mode === 'adult') {
+      if (!isAdmin) {
+        const message = '仅管理员可以创建 Adult 任务'
+        setSubmitStatus('error')
+        setSubmitError(message)
+        setSubmitSuccessMessage(null)
+        setToastMessage(message)
+        return
+      }
+
+      const payload = getAdultMagnetIngestPayload(
+        magnetInput,
+        adultCategory,
+      )
+
+      if (!payload) {
+        const message = 'Adult 下载链接列表无效，暂时无法提交'
+        setSubmitStatus('error')
+        setSubmitError(message)
+        setSubmitSuccessMessage(null)
+        setToastMessage(message)
+        return
+      }
+
+      setSubmitStatus('loading')
+      setSubmitError(null)
+      setSubmitSuccessMessage(null)
+
+      try {
+        const task = await createAdultMagnetIngestTask(payload)
+        const successMessage = `Adult 批量任务已创建：${task.id}`
+
+        setSubmitStatus('success')
+        setSubmitSuccessMessage(successMessage)
+        selectedAdultTaskIdRef.current = task.id
+        setSelectedAdultTaskId(task.id)
+        setMagnetInput('')
+        setToastMessage(successMessage)
+        await loadAdultTasks()
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : '任务创建失败，请稍后重试'
+
+        console.error('adult magnet ingest failed', error)
+
+        setSubmitStatus('error')
+        setSubmitError(message)
+        setSubmitSuccessMessage(null)
+        setToastMessage(message)
+      }
+
       return
     }
 
@@ -1501,45 +1838,68 @@ export function MagnetIngestPage() {
       ? movieTasks.map(toRecentMovieTask)
       : mode === 'series'
         ? seriesTasks.map(toRecentSeriesTask)
-        : animeTasks.map(toRecentAnimeTask)
+        : mode === 'anime'
+          ? animeTasks.map(toRecentAnimeTask)
+          : adultTasks.map(toRecentAdultTask)
   const currentTasksStatus =
     mode === 'movie'
       ? movieTasksStatus
       : mode === 'series'
         ? seriesTasksStatus
-        : animeTasksStatus
+        : mode === 'anime'
+          ? animeTasksStatus
+          : adultTasksStatus
   const currentTasksError =
     mode === 'movie'
       ? movieTasksError
       : mode === 'series'
         ? seriesTasksError
-        : animeTasksError
+        : mode === 'anime'
+          ? animeTasksError
+          : adultTasksError
   const currentSelectedTaskId =
     mode === 'movie'
       ? selectedMovieTaskId
       : mode === 'series'
         ? selectedSeriesTaskId
-        : selectedAnimeTaskId
+        : mode === 'anime'
+          ? selectedAnimeTaskId
+          : selectedAdultTaskId
   const currentTaskLogs =
     mode === 'movie'
       ? movieTaskLogs
       : mode === 'series'
         ? seriesTaskLogs
-        : animeTaskLogs
+        : mode === 'anime'
+          ? animeTaskLogs
+          : adultTaskLogs
   const currentTaskLogsStatus =
     mode === 'movie'
       ? movieTaskLogsStatus
       : mode === 'series'
         ? seriesTaskLogsStatus
-        : animeTaskLogsStatus
+        : mode === 'anime'
+          ? animeTaskLogsStatus
+          : adultTaskLogsStatus
   const currentTaskLogsError =
     mode === 'movie'
       ? movieTaskLogsError
       : mode === 'series'
         ? seriesTaskLogsError
-        : animeTaskLogsError
+        : mode === 'anime'
+          ? animeTaskLogsError
+          : adultTaskLogsError
   const taskModeLabel =
-    mode === 'movie' ? '电影' : mode === 'series' ? '剧集' : '动漫'
+    mode === 'movie'
+      ? '电影'
+      : mode === 'series'
+        ? '剧集'
+        : mode === 'anime'
+          ? '动漫'
+          : 'Adult'
+  const adultPreviewPath = `Adult/${adultCategoryLabel[adultCategory]}/${formatAdultPreviewDate(
+    new Date(),
+  )}`
 
   return (
     <PageContainer
@@ -1551,7 +1911,11 @@ export function MagnetIngestPage() {
           <section className="space-y-3">
             <SectionHeading
               label="磁力链接"
-              title="当前仅支持单条 magnet，提交前会进行最小格式校验。"
+              title={
+                mode === 'adult'
+                  ? 'Adult 支持多条 magnet / ed2k，按换行拆分，单批最多 50 条。'
+                  : '当前仅支持单条 magnet，提交前会进行最小格式校验。'
+              }
             />
 
             <div className="rounded-[28px] border border-slate-200 bg-white/95 shadow-shell">
@@ -1563,7 +1927,11 @@ export function MagnetIngestPage() {
                 }}
                 aria-label="输入磁力链接"
                 spellCheck={false}
-                placeholder="粘贴单条 magnet:? 链接"
+                placeholder={
+                  mode === 'adult'
+                    ? '每行粘贴一条 magnet:? 或 ed2k:// 链接'
+                    : '粘贴单条 magnet:? 链接'
+                }
                 className="min-h-[180px] w-full resize-none rounded-[28px] bg-transparent px-5 py-5 font-mono text-[15px] leading-8 text-slate-900 outline-none placeholder:text-slate-300"
               />
             </div>
@@ -1574,24 +1942,32 @@ export function MagnetIngestPage() {
               }`}
             >
               {magnetValidationMessage ??
-                '仅支持单条 magnet，需以 magnet:? 开头；不会自动拆分多条内容。'}
+                (mode === 'adult'
+                  ? '空行会被忽略；JAV 和 Other 均支持 magnet 与 ed2k，后端会按服务器日期写入当天 Adult 目录。'
+                  : '仅支持单条 magnet，需以 magnet:? 开头；不会自动拆分多条内容。')}
             </p>
           </section>
 
           <section className="space-y-3">
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <SectionHeading
-                label="关联库项目"
+                label={mode === 'adult' ? 'Adult 分类' : '关联库项目'}
                 title={
                   mode === 'movie'
                     ? '使用电影搜索接口查询媒体库项目，并从结果中单选一个电影进行绑定。'
                     : mode === 'series'
                       ? '使用剧集搜索接口查询媒体库项目，并从结果中单选一个剧集进行绑定。'
-                      : '使用 Bangumi 搜索接口查询动漫条目，并从结果中单选一个动漫进行绑定。'
+                      : mode === 'anime'
+                        ? '使用 Bangumi 搜索接口查询动漫条目，并从结果中单选一个动漫进行绑定。'
+                        : '选择 Adult 保存分类，任务将使用当天日期目录和临时隔离目录处理。'
                 }
               />
 
-              <MediaTypeToggle mode={mode} onChange={handleModeChange} />
+              <MediaTypeToggle
+                mode={mode}
+                isAdmin={isAdmin}
+                onChange={handleModeChange}
+              />
             </div>
 
             {mode === 'movie' ? (
@@ -1639,7 +2015,7 @@ export function MagnetIngestPage() {
                   resetSubmitFeedback()
                 }}
               />
-            ) : (
+            ) : mode === 'anime' ? (
               <LibraryLinkPicker
                 mode="anime"
                 keyword={animeKeyword}
@@ -1661,6 +2037,24 @@ export function MagnetIngestPage() {
                   resetSubmitFeedback()
                 }}
               />
+            ) : (
+              <div className="rounded-[28px] border border-slate-200 bg-white/95 p-5 shadow-shell">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <AdultCategoryToggle
+                    category={adultCategory}
+                    onChange={(category) => {
+                      setAdultCategory(category)
+                      resetSubmitFeedback()
+                    }}
+                  />
+                  <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                    目标路径预览：{' '}
+                    <span className="font-mono text-slate-900">
+                      {adultPreviewPath}
+                    </span>
+                  </div>
+                </div>
+              </div>
             )}
           </section>
 
@@ -1705,7 +2099,9 @@ export function MagnetIngestPage() {
                   ? '创建电影任务'
                   : mode === 'series'
                     ? '创建剧集任务'
-                    : '创建动漫整季任务'}
+                    : mode === 'anime'
+                      ? '创建动漫整季任务'
+                      : '创建 Adult 批量任务'}
               </>
             )}
           </Button>
@@ -1739,8 +2135,13 @@ export function MagnetIngestPage() {
                 setSelectedSeriesTaskId(task.id)
                 return
               }
-              selectedAnimeTaskIdRef.current = task.id
-              setSelectedAnimeTaskId(task.id)
+              if (mode === 'anime') {
+                selectedAnimeTaskIdRef.current = task.id
+                setSelectedAnimeTaskId(task.id)
+                return
+              }
+              selectedAdultTaskIdRef.current = task.id
+              setSelectedAdultTaskId(task.id)
             }}
             onViewAll={() => {
               if (mode === 'movie') {
@@ -1753,6 +2154,10 @@ export function MagnetIngestPage() {
               }
               if (mode === 'anime') {
                 void loadAnimeTasks()
+                return
+              }
+              if (mode === 'adult') {
+                void loadAdultTasks()
               }
             }}
           />

@@ -2,6 +2,10 @@ import axios from 'axios'
 
 import { getJavaErrorMessage, javaApiClient } from '@/lib/java-api'
 import type {
+  AdultMagnetIngestTask,
+  AdultMagnetIngestTaskListData,
+  AdultMagnetIngestTaskLog,
+  AdultMagnetIngestTaskLogListData,
   AnimeMagnetIngestTask,
   AnimeMagnetIngestTaskListData,
   AnimeMagnetIngestTaskLog,
@@ -9,6 +13,8 @@ import type {
   AnimeMagnetSearchItem,
   AnimeMagnetSearchResponseData,
   CreateAnimeMagnetIngestTaskPayload,
+  CreateAdultMagnetIngestTaskPayload,
+  CreateAdultMagnetIngestTaskResponse,
   CreateSeriesMagnetIngestPayload,
   CreateSeriesMagnetIngestResponse,
   CreateMovieMagnetIngestPayload,
@@ -26,6 +32,8 @@ import type {
 const JAVA_ANIME_MAGNET_SEARCH_ERROR_MESSAGE = '动漫搜索失败，请稍后重试。'
 const JAVA_ANIME_MAGNET_TASK_ERROR_MESSAGE = '动漫磁力任务处理失败，请稍后重试。'
 const JAVA_MAGNET_TASK_ERROR_MESSAGE = '磁力任务处理失败，请稍后重试。'
+const JAVA_ADULT_MAGNET_TASK_ERROR_MESSAGE =
+  'Adult 磁力任务处理失败，请稍后重试。'
 
 export async function searchAnimeMagnetItems(
   term: string,
@@ -78,6 +86,74 @@ export async function createAnimeMagnetIngestTask(
   } catch (error) {
     throw new Error(
       getJavaErrorMessage(error) || JAVA_ANIME_MAGNET_TASK_ERROR_MESSAGE,
+    )
+  }
+}
+
+export async function createAdultMagnetIngestTask(
+  payload: CreateAdultMagnetIngestTaskPayload,
+): Promise<CreateAdultMagnetIngestTaskResponse> {
+  try {
+    const response = await javaApiClient.post<
+      JavaApiResponse<CreateAdultMagnetIngestTaskResponse>
+    >('/api/v1/magnet-ingest/adult/tasks', payload)
+
+    if (response.data.code !== 200 || !response.data.data) {
+      throw new Error(response.data.message || 'adult magnet task failed')
+    }
+
+    return response.data.data
+  } catch (error) {
+    throw new Error(
+      getJavaErrorMessage(error) || JAVA_ADULT_MAGNET_TASK_ERROR_MESSAGE,
+    )
+  }
+}
+
+export async function listAdultMagnetIngestTasks(): Promise<
+  AdultMagnetIngestTask[]
+> {
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<AdultMagnetIngestTaskListData>
+    >('/api/v1/magnet-ingest/adult/tasks')
+
+    if (
+      response.data.code !== 200 ||
+      !response.data.data ||
+      !Array.isArray(response.data.data.items)
+    ) {
+      throw new Error(response.data.message || 'adult magnet tasks failed')
+    }
+
+    return response.data.data.items
+  } catch (error) {
+    throw new Error(
+      getJavaErrorMessage(error) || JAVA_ADULT_MAGNET_TASK_ERROR_MESSAGE,
+    )
+  }
+}
+
+export async function listAdultMagnetIngestTaskLogs(
+  taskId: string,
+): Promise<AdultMagnetIngestTaskLog[]> {
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<AdultMagnetIngestTaskLogListData>
+    >(`/api/v1/magnet-ingest/adult/tasks/${encodeURIComponent(taskId)}/logs`)
+
+    if (
+      response.data.code !== 200 ||
+      !response.data.data ||
+      !Array.isArray(response.data.data.items)
+    ) {
+      throw new Error(response.data.message || 'adult magnet task logs failed')
+    }
+
+    return response.data.data.items
+  } catch (error) {
+    throw new Error(
+      getJavaErrorMessage(error) || JAVA_ADULT_MAGNET_TASK_ERROR_MESSAGE,
     )
   }
 }

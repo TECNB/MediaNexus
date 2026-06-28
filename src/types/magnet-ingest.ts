@@ -12,7 +12,14 @@ export type CreateSeriesMagnetIngestPayload = {
   season_number: number
 }
 
-export type IngestMode = 'movie' | 'series' | 'anime'
+export type AdultMagnetCategory = 'JAV' | 'OTHER'
+
+export type CreateAdultMagnetIngestTaskPayload = {
+  category: AdultMagnetCategory
+  magnets: string[]
+}
+
+export type IngestMode = 'movie' | 'series' | 'anime' | 'adult'
 
 export type CreateAnimeMagnetIngestTaskPayload = {
   magnet: string
@@ -75,6 +82,27 @@ export type AnimeMagnetIngestTask = {
   temp_path: string
   organized_count: number
   skipped_count: number
+  error_message: string | null
+  created_at: string | null
+  updated_at: string | null
+  finished_at: string | null
+}
+
+export type AdultMagnetIngestTask = {
+  id: string
+  created_by_user_id: number | null
+  category: AdultMagnetCategory
+  status: MagnetIngestTaskStatus
+  stage: string
+  date_folder: string
+  target_path: string
+  magnet_count: number
+  submitted_count: number
+  succeeded_count: number
+  failed_count: number
+  duplicate_count: number
+  kept_count: number
+  deleted_count: number
   error_message: string | null
   created_at: string | null
   updated_at: string | null
@@ -147,6 +175,8 @@ export type MagnetIngestTaskLog = {
 
 export type AnimeMagnetIngestTaskLog = MagnetIngestTaskLog
 
+export type AdultMagnetIngestTaskLog = MagnetIngestTaskLog
+
 export type AnimeMagnetIngestTaskListData = {
   items: AnimeMagnetIngestTask[]
   total: number
@@ -177,6 +207,18 @@ export type SeriesMagnetIngestTaskLogListData = {
   total: number
 }
 
+export type AdultMagnetIngestTaskListData = {
+  items: AdultMagnetIngestTask[]
+  total: number
+}
+
+export type AdultMagnetIngestTaskLogListData = {
+  items: MagnetIngestTaskLog[]
+  total: number
+}
+
 export type CreateMovieMagnetIngestResponse = MovieMagnetIngestTask
 
 export type CreateSeriesMagnetIngestResponse = SeriesMagnetIngestTask
+
+export type CreateAdultMagnetIngestTaskResponse = AdultMagnetIngestTask

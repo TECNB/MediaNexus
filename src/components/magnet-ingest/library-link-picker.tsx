@@ -25,8 +25,10 @@ export type ResourceSearchStatus =
   | 'empty'
   | 'error'
 
+type LibraryLinkMode = Exclude<IngestMode, 'adult'>
+
 type LibraryLinkPickerProps = {
-  mode: IngestMode
+  mode: LibraryLinkMode
   keyword: string
   items: LibraryLinkItem[]
   selectedItem: LibraryLinkItem | null
@@ -42,7 +44,7 @@ type LibraryLinkPickerProps = {
 export type LibraryLinkItem = SearchableResourceItem | AnimeMagnetSearchItem
 
 const pickerCopy: Record<
-  IngestMode,
+  LibraryLinkMode,
   {
     searchPlaceholder: string
     searchAriaLabel: string
@@ -110,7 +112,7 @@ function isAnimeMagnetSearchItem(
   return 'bgm_id' in item
 }
 
-function getItemIcon(mode: IngestMode) {
+function getItemIcon(mode: LibraryLinkMode) {
   return mode === 'series' ? Tv : Clapperboard
 }
 
@@ -158,7 +160,7 @@ function PosterThumbnail({
 }: {
   poster: string | null
   title: string
-  mode: IngestMode
+  mode: LibraryLinkMode
   inverted?: boolean
 }) {
   const Icon = getItemIcon(mode)
