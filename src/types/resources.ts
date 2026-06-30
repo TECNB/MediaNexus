@@ -77,7 +77,8 @@ export type AddMovieResourceResponse = {
 }
 
 export type SeriesSeasonsData = {
-  tvdb_id: number
+  tvdb_id: number | null
+  tmdb_id: number | null
   title: string
   season_count: number
   season_numbers: number[]

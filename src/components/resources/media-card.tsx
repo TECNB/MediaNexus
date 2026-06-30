@@ -15,6 +15,11 @@ import type {
 } from '@/types/resources'
 
 export type MediaCardAddStatus = 'idle' | 'loading' | 'success' | 'error'
+export type MediaCardSeasonStatus =
+  | 'loading'
+  | 'success'
+  | 'empty'
+  | 'error'
 
 type MediaCardProps = {
   item: SearchableResourceItem
@@ -23,7 +28,9 @@ type MediaCardProps = {
   qualityTags?: OpenListQualityTag[]
   selectedQualityTag?: OpenListQualityTag
   seasonOptions?: number[]
-  selectedSeasonNumber?: number
+  selectedSeasonNumber?: number | null
+  seasonStatus?: MediaCardSeasonStatus
+  seasonMessage?: string | null
   onQualityTagChange?: (
     item: SearchableResourceItem,
     qualityTag: OpenListQualityTag,
@@ -60,8 +67,10 @@ export function MediaCard({
   addMessage = null,
   qualityTags = [],
   selectedQualityTag,
-  seasonOptions = [1],
-  selectedSeasonNumber = 1,
+  seasonOptions = [],
+  selectedSeasonNumber = null,
+  seasonStatus,
+  seasonMessage = null,
   onQualityTagChange,
   onSeasonNumberChange,
   onOpenListIngest,
@@ -73,7 +82,14 @@ export function MediaCard({
   const isAddSuccess = addStatus === 'success'
   const hasQualityTags = qualityTags.length > 0
   const activeQualityTag = selectedQualityTag ?? qualityTags[0]
-  const activeSeasonNumber = isSeriesItem ? selectedSeasonNumber : null
+  const activeSeasonStatus = seasonStatus ?? (isSeriesItem ? 'loading' : null)
+  const activeSeasonNumber =
+    isSeriesItem &&
+    activeSeasonStatus === 'success' &&
+    typeof selectedSeasonNumber === 'number' &&
+    seasonOptions.includes(selectedSeasonNumber)
+      ? selectedSeasonNumber
+      : null
   const isIngestDisabled =
     !onOpenListIngest ||
     isAddLoading ||
@@ -100,6 +116,14 @@ export function MediaCard({
   ].filter(Boolean)
   const addFeedbackTone =
     addStatus === 'error' ? 'text-rose-500' : 'text-emerald-600'
+  const seasonStatusLabel =
+    activeSeasonStatus === 'loading'
+      ? '加载中…'
+      : activeSeasonStatus === 'empty'
+        ? '暂无季数'
+        : activeSeasonStatus === 'error'
+          ? '加载失败'
+          : null
 
   return (
     <article className="group overflow-hidden rounded-[24px] bg-white p-3 shadow-[0_20px_40px_rgba(15,23,42,0.035)] md:grid md:grid-cols-[minmax(150px,42%)_minmax(0,1fr)] md:gap-5">
@@ -169,15 +193,23 @@ export function MediaCard({
                         onSeasonNumberChange?.(item, nextSeasonNumber)
                       }
                     }}
-                    disabled={isAddLoading || isAddSuccess}
+                    disabled={
+                      isAddLoading ||
+                      isAddSuccess ||
+                      activeSeasonStatus !== 'success'
+                    }
                     aria-label={`${item.title} 目标季`}
                     className="h-10 w-full appearance-none rounded-xl bg-slate-100 px-3 pr-8 text-xs font-semibold text-slate-700 outline-none transition hover:bg-slate-200 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:cursor-not-allowed disabled:text-slate-400"
                   >
-                    {seasonOptions.map((seasonNumber) => (
-                      <option key={seasonNumber} value={seasonNumber}>
-                        {getSeasonLabel(seasonNumber)}
-                      </option>
-                    ))}
+                    {activeSeasonStatus === 'success' ? (
+                      seasonOptions.map((seasonNumber) => (
+                        <option key={seasonNumber} value={seasonNumber}>
+                          {getSeasonLabel(seasonNumber)}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="">{seasonStatusLabel}</option>
+                    )}
                   </select>
                   <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                 </div>
@@ -216,6 +248,19 @@ export function MediaCard({
               </div>
             </label>
           </div>
+
+          {isSeriesItem && seasonMessage ? (
+            <p
+              className={cn(
+                'text-xs font-medium',
+                activeSeasonStatus === 'error'
+                  ? 'text-rose-500'
+                  : 'text-slate-400',
+              )}
+            >
+              {seasonMessage}
+            </p>
+          ) : null}
 
           <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
             <Button

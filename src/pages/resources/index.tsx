@@ -16,6 +16,7 @@ import {
 import {
   MediaCard,
   type MediaCardAddStatus,
+  type MediaCardSeasonStatus,
 } from '@/components/resources/media-card'
 import { SearchBar } from '@/components/resources/search-bar'
 import {
@@ -75,6 +76,11 @@ type MediaIngestState = {
   status: MediaCardAddStatus
   message: string | null
   startedAt?: number | null
+}
+
+type SeriesSeasonLoadState = {
+  status: MediaCardSeasonStatus
+  message: string | null
 }
 
 type AnimeGroupsState = {
@@ -289,6 +295,10 @@ function releaseCandidateKey(release: ProwlarrRelease, index: number) {
   return `${index}:${release.indexer_id}:${release.download_ref}:${release.title}`
 }
 
+function formatSeasonLabel(seasonNumber: number) {
+  return `S${String(seasonNumber).padStart(2, '0')}`
+}
+
 function formatDynamicRange(tags: string[]) {
   return tags.length > 0
     ? tags.map((tag) => dynamicRangeCopy[tag] ?? tag).join(' / ')
@@ -315,6 +325,12 @@ function createInitialSearchState(): ResourceSearchState {
     items: [],
     errorMessage: null,
   }
+}
+
+function getUserFacingErrorMessage(error: unknown, fallbackMessage: string) {
+  return error instanceof Error && error.message.trim()
+    ? error.message.trim()
+    : fallbackMessage
 }
 
 function formatTaskTime(value: string | null) {
@@ -409,6 +425,9 @@ export function ResourceSearchPage() {
   >({})
   const [seriesSeasonOptions, setSeriesSeasonOptions] = useState<
     Record<string, number[]>
+  >({})
+  const [seriesSeasonLoadStates, setSeriesSeasonLoadStates] = useState<
+    Record<string, SeriesSeasonLoadState>
   >({})
   const [recentIngestState, setRecentIngestState] = useState<RecentIngestState>({
     status: 'idle',
@@ -530,6 +549,7 @@ export function ResourceSearchPage() {
     setQualitySelections({})
     setSeriesSeasonSelections({})
     setSeriesSeasonOptions({})
+    setSeriesSeasonLoadStates({})
     setAnimeGroupsStates({})
     setAnimePreviewStates({})
     setAnimeGroupSelections({})
@@ -578,6 +598,7 @@ export function ResourceSearchPage() {
       setQualitySelections({})
       setSeriesSeasonSelections({})
       setSeriesSeasonOptions({})
+      setSeriesSeasonLoadStates({})
       setAnimeGroupsStates({})
       setAnimePreviewStates({})
       setAnimeGroupSelections({})
@@ -598,6 +619,7 @@ export function ResourceSearchPage() {
     setQualitySelections({})
     setSeriesSeasonSelections({})
     setSeriesSeasonOptions({})
+    setSeriesSeasonLoadStates({})
     setAnimeGroupsStates({})
     setAnimePreviewStates({})
     setAnimeGroupSelections({})
@@ -650,7 +672,10 @@ export function ResourceSearchPage() {
         setSearchState({
           status: 'error',
           items: [],
-          errorMessage: activeCopy.errorMessage,
+          errorMessage: getUserFacingErrorMessage(
+            error,
+            activeCopy.errorMessage,
+          ),
         })
       })
       .finally(() => {
@@ -665,7 +690,7 @@ export function ResourceSearchPage() {
   }
 
   function getSelectedSeasonNumber(item: SeriesSearchItem) {
-    return seriesSeasonSelections[getSeriesIngestKey(item)] ?? 1
+    return seriesSeasonSelections[getSeriesIngestKey(item)] ?? null
   }
 
   function handleQualityTagChange(
@@ -960,12 +985,39 @@ export function ResourceSearchPage() {
     const controller = new AbortController()
     seriesSeasonsControllerRef.current = controller
 
+    setSeriesSeasonLoadStates(
+      items.reduce<Record<string, SeriesSeasonLoadState>>((states, item) => {
+        const hasCatalogIdentity =
+          (typeof item.tmdb_id === 'number' && item.tmdb_id > 0) ||
+          (typeof item.tvdb_id === 'number' && item.tvdb_id > 0)
+        states[getSeriesIngestKey(item)] = hasCatalogIdentity
+          ? {
+              status: 'loading',
+              message: '正在加载可选季数…',
+            }
+          : {
+              status: 'error',
+              message: '缺少可用的剧集目录 ID，无法加载季数。',
+            }
+        return states
+      }, {}),
+    )
+
     items.forEach((item) => {
-      if (typeof item.tvdb_id !== 'number' || item.tvdb_id < 1) {
+      const hasTmdbId = typeof item.tmdb_id === 'number' && item.tmdb_id > 0
+      const hasTvdbId = typeof item.tvdb_id === 'number' && item.tvdb_id > 0
+      if (!hasTmdbId && !hasTvdbId) {
         return
       }
 
-      void getSeriesSeasons(item.tvdb_id, controller.signal)
+      const itemKey = getSeriesIngestKey(item)
+      void getSeriesSeasons(
+        {
+          tmdbId: hasTmdbId ? item.tmdb_id : null,
+          tvdbId: hasTvdbId ? item.tvdb_id : null,
+        },
+        controller.signal,
+      )
         .then((result) => {
           if (
             controller.signal.aborted ||
@@ -973,13 +1025,23 @@ export function ResourceSearchPage() {
           ) {
             return
           }
-          const options = result.season_numbers.filter(
-            (seasonNumber) => seasonNumber > 0,
-          )
+          const options = Array.from(
+            new Set(
+              result.season_numbers.filter(
+                (seasonNumber) => seasonNumber > 0,
+              ),
+            ),
+          ).sort((left, right) => left - right)
           if (options.length === 0) {
+            setSeriesSeasonLoadStates((currentStates) => ({
+              ...currentStates,
+              [itemKey]: {
+                status: 'empty',
+                message: '目录服务暂未提供可选的正片季数。',
+              },
+            }))
             return
           }
-          const itemKey = getSeriesIngestKey(item)
           setSeriesSeasonOptions((currentOptions) => ({
             ...currentOptions,
             [itemKey]: options,
@@ -988,11 +1050,30 @@ export function ResourceSearchPage() {
             ...currentSelections,
             [itemKey]: currentSelections[itemKey] ?? options[0],
           }))
+          setSeriesSeasonLoadStates((currentStates) => ({
+            ...currentStates,
+            [itemKey]: {
+              status: 'success',
+              message: null,
+            },
+          }))
         })
         .catch((error) => {
-          if (!controller.signal.aborted && !isRequestCanceledError(error)) {
-            console.error('series seasons load failed', error)
+          if (controller.signal.aborted || isRequestCanceledError(error)) {
+            return
           }
+          const message =
+            error instanceof Error && error.message.trim()
+              ? error.message.trim()
+              : '剧集季数加载失败，请稍后重试。'
+          setSeriesSeasonLoadStates((currentStates) => ({
+            ...currentStates,
+            [itemKey]: {
+              status: 'error',
+              message,
+            },
+          }))
+          console.error('series seasons load failed', error)
         })
     })
   }
@@ -1344,6 +1425,11 @@ export function ResourceSearchPage() {
     const isNonChineseRelease = !hasChineseText(release.title)
     const matchLabel = releaseMatchLabel(release, selection.query)
     const hasMultipleCandidates = selection.releases.length > 1
+    const selectedSeasonLabel =
+      selection.mediaType === 'series' &&
+      typeof selection.seasonNumber === 'number'
+        ? formatSeasonLabel(selection.seasonNumber)
+        : null
     const languageCopy =
       selection.searchLanguage === 'chinese'
         ? '中文'
@@ -1373,6 +1459,7 @@ export function ResourceSearchPage() {
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
               {selection.mediaType === 'movie' ? '电影' : '剧集'} ·{' '}
               {selection.qualityTag}
+              {selectedSeasonLabel ? ` · ${selectedSeasonLabel}` : ''}
               {hasMultipleCandidates ? ` · ${selection.releases.length} 个推荐` : ''}
             </span>
           </div>
@@ -1433,7 +1520,9 @@ export function ResourceSearchPage() {
           <div className="mt-5 rounded-xl bg-slate-100 px-4 py-4">
             <div className="grid gap-3 text-xs text-slate-500 sm:grid-cols-2">
               <span>
-                当前选择：{selection.qualityTag} /{' '}
+                当前选择：
+                {selectedSeasonLabel ? `${selectedSeasonLabel} / ` : ''}
+                {selection.qualityTag} /{' '}
                 {formatDynamicRange(release.dynamic_range_tags)}
               </span>
               <span>体积：{formatReleaseSize(release.size)}</span>
@@ -1554,12 +1643,24 @@ export function ResourceSearchPage() {
                   selectedQualityTag={getSelectedQualityTag(item)}
                   seasonOptions={
                     isSeriesSearchItem(item)
-                      ? seriesSeasonOptions[getSeriesIngestKey(item)] ?? [1]
+                      ? seriesSeasonOptions[getSeriesIngestKey(item)] ?? []
                       : undefined
                   }
                   selectedSeasonNumber={
                     isSeriesSearchItem(item)
                       ? getSelectedSeasonNumber(item)
+                      : undefined
+                  }
+                  seasonStatus={
+                    isSeriesSearchItem(item)
+                      ? seriesSeasonLoadStates[getSeriesIngestKey(item)]
+                          ?.status
+                      : undefined
+                  }
+                  seasonMessage={
+                    isSeriesSearchItem(item)
+                      ? seriesSeasonLoadStates[getSeriesIngestKey(item)]
+                          ?.message
                       : undefined
                   }
                   onQualityTagChange={handleQualityTagChange}
