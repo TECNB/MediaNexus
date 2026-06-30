@@ -10,6 +10,10 @@ import {
   type AnimeCardSubscribeStatus,
 } from '@/components/resources/anime-card'
 import {
+  AnimeModeSwitch,
+  type AnimeResourceMode,
+} from '@/components/resources/anime-mode-switch'
+import {
   CategorySwitch,
   type ResourceCategoryValue,
 } from '@/components/resources/category-switch'
@@ -59,7 +63,7 @@ import type {
   SeriesSearchItem,
 } from '@/types/resources'
 
-type SearchableCategory = ResourceCategoryValue
+type NonAnimeSearchableCategory = Exclude<ResourceCategoryValue, 'anime'>
 type ResourceSearchResultItem = SearchableResourceItem | AnimeSearchItem
 
 type ResourceSearchStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
@@ -144,18 +148,20 @@ const taskStatusCopy: Record<MagnetIngestTaskStatus, string> = {
   INTERRUPTED: '已中断',
 }
 
+type ResourceSearchCopy = {
+  placeholder: string
+  idleTitle: string
+  idleDescription: string
+  loadingTitle: string
+  loadingDescription: string
+  emptyTitle: string
+  emptyDescription: string
+  errorMessage: string
+}
+
 const searchableCategoryCopy: Record<
-  SearchableCategory,
-  {
-    placeholder: string
-    idleTitle: string
-    idleDescription: string
-    loadingTitle: string
-    loadingDescription: string
-    emptyTitle: string
-    emptyDescription: string
-    errorMessage: string
-  }
+  NonAnimeSearchableCategory,
+  ResourceSearchCopy
 > = {
   movie: {
     placeholder: '搜索电影名称…',
@@ -177,26 +183,60 @@ const searchableCategoryCopy: Record<
     emptyDescription: '换个电视剧名称试试，或检查关键词是否输入正确。',
     errorMessage: '电视剧搜索失败，请稍后重试。',
   },
-  anime: {
-    placeholder: '搜索动漫名称…',
-    idleTitle: '输入动漫名称开始搜索',
-    idleDescription: '当前分类会调用动漫搜索接口。',
-    loadingTitle: '正在搜索动漫…',
-    loadingDescription: '正在获取 Mikan 搜索结果。',
-    emptyTitle: '没有搜索结果',
-    emptyDescription: '换个动漫名称试试，或检查关键词是否输入正确。',
-    errorMessage: '动漫搜索失败，请稍后重试。',
+}
+
+const animeResourceModeCopy: Record<
+  AnimeResourceMode,
+  {
+    description: string
+    search: ResourceSearchCopy
+  }
+> = {
+  'season-ingest': {
+    description: '选择季度和清晰度，自动匹配或手动选择发布资源。',
+    search: {
+      placeholder: '搜索动漫名称…',
+      idleTitle: '输入动漫名称开始搜索',
+      idleDescription: '选择季度和清晰度后可创建整季入库任务。',
+      loadingTitle: '正在搜索动漫…',
+      loadingDescription: '正在获取可入库的动漫目录结果。',
+      emptyTitle: '没有搜索结果',
+      emptyDescription: '换个动漫名称试试，或检查关键词是否输入正确。',
+      errorMessage: '动漫搜索失败，请稍后重试。',
+    },
+  },
+  'follow-subscription': {
+    description: '选择字幕组，通过 Ani-RSS 订阅后续更新。',
+    search: {
+      placeholder: '搜索动漫名称…',
+      idleTitle: '输入动漫名称开始搜索',
+      idleDescription: '选择字幕组后可通过 Ani-RSS 订阅后续更新。',
+      loadingTitle: '正在搜索动漫…',
+      loadingDescription: '正在获取 Mikan 搜索结果。',
+      emptyTitle: '没有搜索结果',
+      emptyDescription: '换个动漫名称试试，或检查关键词是否输入正确。',
+      errorMessage: '动漫搜索失败，请稍后重试。',
+    },
   },
 }
 
 const categorySearchHandlers: Record<
-  SearchableCategory,
+  NonAnimeSearchableCategory,
   (term: string, signal?: AbortSignal) => Promise<ResourceSearchResultItem[]>
 > = {
   movie: async (term, signal) => searchMovies(term, signal),
   tv: async (term, signal) => searchSeries(term, signal),
-  anime: async (term, signal) => searchAnime(term, signal),
 }
+
+const animeModeSearchHandlers: Record<
+  AnimeResourceMode,
+  (term: string, signal?: AbortSignal) => Promise<ResourceSearchResultItem[]>
+> = {
+  'season-ingest': async (term, signal) => searchSeries(term, signal),
+  'follow-subscription': async (term, signal) => searchAnime(term, signal),
+}
+
+const DEFAULT_ANIME_RESOURCE_MODE: AnimeResourceMode = 'season-ingest'
 
 const dynamicRangeCopy: Record<string, string> = {
   dolby_vision: 'Dolby Vision',
@@ -205,12 +245,6 @@ const dynamicRangeCopy: Record<string, string> = {
   hdr: 'HDR',
   hlg: 'HLG',
   sdr: 'SDR',
-}
-
-function isSearchableCategory(
-  category: ResourceCategoryValue,
-): category is SearchableCategory {
-  return category in categorySearchHandlers
 }
 
 function isAnimeSearchItem(
@@ -409,6 +443,8 @@ function EmptyState({
 export function ResourceSearchPage() {
   const navigate = useNavigate()
   const [category, setCategory] = useState<ResourceCategoryValue>('movie')
+  const [animeResourceMode, setAnimeResourceMode] =
+    useState<AnimeResourceMode>(DEFAULT_ANIME_RESOURCE_MODE)
   const [searchText, setSearchText] = useState('')
   const [submittedTerm, setSubmittedTerm] = useState('')
   const [searchState, setSearchState] = useState<ResourceSearchState>(
@@ -457,6 +493,31 @@ export function ResourceSearchPage() {
   const activeAnimeSubscribeKeysRef = useRef<Set<string>>(new Set())
   const animeCardsControllerRef = useRef<AbortController | null>(null)
   const animePreviewRequestIdsRef = useRef<Record<string, number>>({})
+
+  const resetSearchSession = useCallback(() => {
+    latestRequestIdRef.current += 1
+    activeRequestControllerRef.current?.abort()
+    activeRequestControllerRef.current = null
+    seriesSeasonsControllerRef.current?.abort()
+    seriesSeasonsControllerRef.current = null
+    animeCardsControllerRef.current?.abort()
+    animeCardsControllerRef.current = null
+    activeMediaIngestKeysRef.current.clear()
+    activeAnimeSubscribeKeysRef.current.clear()
+    setSearchState(createInitialSearchState())
+    setSubmittedTerm('')
+    setMediaIngestStates({})
+    setQualitySelections({})
+    setSeriesSeasonSelections({})
+    setSeriesSeasonOptions({})
+    setSeriesSeasonLoadStates({})
+    setAnimeGroupsStates({})
+    setAnimePreviewStates({})
+    setAnimeGroupSelections({})
+    setAnimeSubscribeStates({})
+    setAutoReleaseConfirmation(null)
+    animePreviewRequestIdsRef.current = {}
+  }, [])
 
   const loadRecentIngestSummary = useCallback(() => {
     recentIngestRequestIdRef.current += 1
@@ -534,50 +595,36 @@ export function ResourceSearchPage() {
   }, [])
 
   useEffect(() => {
-    latestRequestIdRef.current += 1
-    activeRequestControllerRef.current?.abort()
-    activeRequestControllerRef.current = null
-    seriesSeasonsControllerRef.current?.abort()
-    seriesSeasonsControllerRef.current = null
-    animeCardsControllerRef.current?.abort()
-    animeCardsControllerRef.current = null
-    activeMediaIngestKeysRef.current.clear()
-    activeAnimeSubscribeKeysRef.current.clear()
-    setSearchState(createInitialSearchState())
-    setSubmittedTerm('')
-    setMediaIngestStates({})
-    setQualitySelections({})
-    setSeriesSeasonSelections({})
-    setSeriesSeasonOptions({})
-    setSeriesSeasonLoadStates({})
-    setAnimeGroupsStates({})
-    setAnimePreviewStates({})
-    setAnimeGroupSelections({})
-    setAnimeSubscribeStates({})
-    setAutoReleaseConfirmation(null)
-    animePreviewRequestIdsRef.current = {}
-  }, [category])
+    resetSearchSession()
+    setAnimeResourceMode(DEFAULT_ANIME_RESOURCE_MODE)
+  }, [category, resetSearchSession])
 
-  const isCategorySearchable = isSearchableCategory(category)
-  const activeCategoryCopy = isCategorySearchable
-    ? searchableCategoryCopy[category]
-    : null
-  const isSearching = isCategorySearchable && searchState.status === 'loading'
-  const isSearchSubmitDisabled = !isCategorySearchable || isSearching
-  const activeSearchPlaceholder = activeCategoryCopy?.placeholder ?? '搜索资源…'
+  const activeCategoryCopy =
+    category === 'anime'
+      ? animeResourceModeCopy[animeResourceMode].search
+      : searchableCategoryCopy[category]
+  const isSearching = searchState.status === 'loading'
+  const activeSearchPlaceholder = activeCategoryCopy.placeholder
   const hasActiveTimedIngest = Object.values(mediaIngestStates).some(
     (state) => state.status === 'loading' && typeof state.startedAt === 'number',
   )
   const elapsedNow = useElapsedNow(hasActiveTimedIngest)
 
   function handleSearchSubmit() {
-    if (!isSearchableCategory(category) || searchState.status === 'loading') {
+    if (searchState.status === 'loading') {
       return
     }
 
     const activeCategory = category
-    const activeSearchHandler = categorySearchHandlers[activeCategory]
-    const activeCopy = searchableCategoryCopy[activeCategory]
+    const activeAnimeResourceMode = animeResourceMode
+    const activeSearchHandler =
+      activeCategory === 'anime'
+        ? animeModeSearchHandlers[activeAnimeResourceMode]
+        : categorySearchHandlers[activeCategory]
+    const activeCopy =
+      activeCategory === 'anime'
+        ? animeResourceModeCopy[activeAnimeResourceMode].search
+        : searchableCategoryCopy[activeCategory]
     const keyword = searchText.trim()
     latestRequestIdRef.current += 1
     const requestId = latestRequestIdRef.current
@@ -590,21 +637,7 @@ export function ResourceSearchPage() {
     animeCardsControllerRef.current = null
 
     if (!keyword) {
-      activeMediaIngestKeysRef.current.clear()
-      activeAnimeSubscribeKeysRef.current.clear()
-      setSearchState(createInitialSearchState())
-      setSubmittedTerm('')
-      setMediaIngestStates({})
-      setQualitySelections({})
-      setSeriesSeasonSelections({})
-      setSeriesSeasonOptions({})
-      setSeriesSeasonLoadStates({})
-      setAnimeGroupsStates({})
-      setAnimePreviewStates({})
-      setAnimeGroupSelections({})
-      setAnimeSubscribeStates({})
-      setAutoReleaseConfirmation(null)
-      animePreviewRequestIdsRef.current = {}
+      resetSearchSession()
       return
     }
 
@@ -644,10 +677,19 @@ export function ResourceSearchPage() {
           errorMessage: null,
         })
 
-        if (activeCategory === 'anime' && items.length > 0) {
+        if (
+          activeCategory === 'anime' &&
+          activeAnimeResourceMode === 'follow-subscription' &&
+          items.length > 0
+        ) {
           startAnimeCardSetup(items.filter(isAnimeSearchItem), requestId)
         }
-        if (activeCategory === 'tv' && items.length > 0) {
+        if (
+          (activeCategory === 'tv' ||
+            (activeCategory === 'anime' &&
+              activeAnimeResourceMode === 'season-ingest')) &&
+          items.length > 0
+        ) {
           startSeriesSeasonSetup(
             items.filter(
               (item): item is SeriesSearchItem =>
@@ -682,6 +724,15 @@ export function ResourceSearchPage() {
           activeRequestControllerRef.current = null
         }
       })
+  }
+
+  function handleAnimeResourceModeChange(nextMode: AnimeResourceMode) {
+    if (nextMode === animeResourceMode) {
+      return
+    }
+
+    resetSearchSession()
+    setAnimeResourceMode(nextMode)
   }
 
   function getSelectedQualityTag(item: SearchableResourceItem) {
@@ -719,6 +770,7 @@ export function ResourceSearchPage() {
   ) {
     const itemKey = getMediaIngestKey(item)
     const currentIngestState = mediaIngestStates[itemKey]
+    const searchSessionId = latestRequestIdRef.current
 
     if (
       activeMediaIngestKeysRef.current.has(itemKey) ||
@@ -815,6 +867,10 @@ export function ResourceSearchPage() {
 
     void releaseRequest
       .then(({ release, releases, query, searchLanguage }) => {
+        if (latestRequestIdRef.current !== searchSessionId) {
+          return
+        }
+
         setMediaIngestStates((currentStates) => ({
           ...currentStates,
           [itemKey]: {
@@ -836,6 +892,10 @@ export function ResourceSearchPage() {
         })
       })
       .catch((error) => {
+        if (latestRequestIdRef.current !== searchSessionId) {
+          return
+        }
+
         activeMediaIngestKeysRef.current.delete(itemKey)
         const message =
           error instanceof Error && error.message.trim()
@@ -1284,6 +1344,7 @@ export function ResourceSearchPage() {
 
   function handleAnimeSubscribe(item: AnimeSearchItem) {
     const itemKey = getAnimeCardKey(item)
+    const searchSessionId = latestRequestIdRef.current
     const selectedGroupId = animeGroupSelections[itemKey]
     const group = animeGroupsStates[itemKey]?.groups.find(
       (candidate) => candidate.id === selectedGroupId,
@@ -1316,6 +1377,10 @@ export function ResourceSearchPage() {
       subgroup: group.label,
     })
       .then((result) => {
+        if (latestRequestIdRef.current !== searchSessionId) {
+          return
+        }
+
         setAnimePreviewStates((currentStates) => ({
           ...currentStates,
           [itemKey]: {
@@ -1334,6 +1399,10 @@ export function ResourceSearchPage() {
         setToastMessage(result.message)
       })
       .catch((error) => {
+        if (latestRequestIdRef.current !== searchSessionId) {
+          return
+        }
+
         activeAnimeSubscribeKeysRef.current.delete(itemKey)
         const message =
           error instanceof Error && error.message.trim()
@@ -1557,10 +1626,6 @@ export function ResourceSearchPage() {
   }
 
   function renderSearchContent() {
-    if (!activeCategoryCopy) {
-      return null
-    }
-
     switch (searchState.status) {
       case 'loading':
         return (
@@ -1593,7 +1658,8 @@ export function ResourceSearchPage() {
           <div
             className={cn(
               'mx-auto grid max-w-7xl',
-              category === 'anime'
+              category === 'anime' &&
+                animeResourceMode === 'follow-subscription'
                 ? 'grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
                 : 'grid-cols-1 gap-5 lg:grid-cols-2',
             )}
@@ -1700,9 +1766,20 @@ export function ResourceSearchPage() {
             onSubmit={handleSearchSubmit}
             placeholder={activeSearchPlaceholder}
             isSubmitting={isSearching}
-            submitDisabled={isSearchSubmitDisabled}
+            submitDisabled={isSearching}
           />
           <CategorySwitch value={category} onChange={setCategory} />
+          {category === 'anime' ? (
+            <div className="flex flex-col items-center gap-2 text-center">
+              <AnimeModeSwitch
+                value={animeResourceMode}
+                onChange={handleAnimeResourceModeChange}
+              />
+              <p className="text-sm text-slate-500">
+                {animeResourceModeCopy[animeResourceMode].description}
+              </p>
+            </div>
+          ) : null}
         </div>
 
         {renderRecentIngestSummary()}
