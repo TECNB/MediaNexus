@@ -905,7 +905,7 @@ export function MagnetIngestPage() {
     setSelectedSeasonNumber(null)
     setSeriesSeasonError(null)
 
-    void getSeriesSeasons(tvdbId, controller.signal)
+    void getSeriesSeasons({ tmdbId: null, tvdbId }, controller.signal)
       .then((data) => {
         if (latestSeriesSeasonRequestIdRef.current !== requestId) {
           return

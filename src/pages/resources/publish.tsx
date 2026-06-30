@@ -338,6 +338,11 @@ export function ResourcePublishPage() {
   )
 
   function handleSubmit(release: ProwlarrRelease, key: string) {
+    if (mediaType !== 'movie' && mediaType !== 'series') {
+      return
+    }
+    const activeMediaType = mediaType
+
     setSubmitState((current) => ({
       keys: [...current.keys, key],
       message: null,
@@ -355,7 +360,7 @@ export function ResourcePublishPage() {
     }
 
     const request =
-      mediaType === 'movie'
+      activeMediaType === 'movie'
         ? createMovieReleaseOpenListIngest({
             ...commonPayload,
             year: item!.year as number,
@@ -366,7 +371,7 @@ export function ResourcePublishPage() {
           })
 
     void request
-      .then((task) => navigate(getTaskRoute(mediaType, task.id)))
+      .then((task) => navigate(getTaskRoute(activeMediaType, task.id)))
       .catch((error) => {
         setSubmitState((current) => ({
           keys: current.keys.filter((itemKey) => itemKey !== key),

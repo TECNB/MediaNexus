@@ -1116,7 +1116,7 @@ export function SubtitleManagePage() {
     }
 
     setSeriesSeasonStatus('loading')
-    void getSeriesSeasons(item.tvdbId)
+    void getSeriesSeasons({ tmdbId: null, tvdbId: item.tvdbId })
       .then((data) => {
         if (seasonLatestRequestIdRef.current !== requestId) {
           return

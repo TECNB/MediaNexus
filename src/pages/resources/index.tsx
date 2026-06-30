@@ -610,7 +610,6 @@ export function ResourceSearchPage() {
 
     const controller = new AbortController()
     activeRequestControllerRef.current = controller
-    seriesSeasonsControllerRef.current?.abort()
     seriesSeasonsControllerRef.current = null
 
     activeMediaIngestKeysRef.current.clear()
