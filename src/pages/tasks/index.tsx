@@ -289,6 +289,11 @@ export function TaskCenterPage() {
   })
   const activeLoadControllerRef = useRef<AbortController | null>(null)
   const latestLoadRequestIdRef = useRef(0)
+  const showCreator = user?.role === 'ADMIN'
+  const isAdultProductFilter = productFilter === 'ADULT'
+  const effectiveProductFilter =
+    showCreator || !isAdultProductFilter ? productFilter : 'ALL'
+  const effectiveSourceFilter = isAdultProductFilter ? 'ALL' : sourceFilter
 
   const loadTasks = useCallback(
     async (silent = false) => {
@@ -308,8 +313,8 @@ export function TaskCenterPage() {
         const data = await listOpenListTaskCenterItems(
           {
             view,
-            product_type: productFilter,
-            source_type: sourceFilter,
+            product_type: effectiveProductFilter,
+            source_type: effectiveSourceFilter,
             keyword: debouncedSearch,
             page,
             page_size: pageSize,
@@ -349,7 +354,14 @@ export function TaskCenterPage() {
         }
       }
     },
-    [debouncedSearch, page, pageSize, productFilter, sourceFilter, view],
+    [
+      debouncedSearch,
+      effectiveProductFilter,
+      effectiveSourceFilter,
+      page,
+      pageSize,
+      view,
+    ],
   )
 
   useEffect(() => {
@@ -390,15 +402,32 @@ export function TaskCenterPage() {
   const maxPage = Math.max(1, Math.ceil(total / currentPageSize))
   const rangeStart = total === 0 ? 0 : (currentPage - 1) * currentPageSize + 1
   const rangeEnd = Math.min(total, currentPage * currentPageSize)
-  const showCreator = user?.role === 'ADMIN'
+  const availableProductFilterOptions = showCreator
+    ? productFilterOptions
+    : productFilterOptions.filter((option) => option.value !== 'ADULT')
+  const availableSourceFilterOptions = isAdultProductFilter
+    ? sourceFilterOptions.filter((option) => option.value === 'ALL')
+    : sourceFilterOptions
   const isLoading = pageState.status === 'loading'
   const controlClassName =
     'h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20'
 
+  useEffect(() => {
+    if (!showCreator && productFilter === 'ADULT') {
+      setProductFilter('ALL')
+    }
+  }, [productFilter, showCreator])
+
+  useEffect(() => {
+    if (isAdultProductFilter && sourceFilter !== 'ALL') {
+      setSourceFilter('ALL')
+    }
+  }, [isAdultProductFilter, sourceFilter])
+
   return (
     <PageContainer
       title="任务中心"
-      description="统一查看电影、剧集和动漫整季 OpenList 入库任务，按最近更新时间倒序排列。"
+      description="统一查看电影、剧集、动漫整季和有权查看的 Adult OpenList 入库任务，按最近更新时间倒序排列。"
     >
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <TaskStat
@@ -447,14 +476,17 @@ export function TaskCenterPage() {
               <SlidersHorizontal className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <select
                 value={productFilter}
-                onChange={(event) =>
-                  setProductFilter(
-                    event.target.value as OpenListTaskCenterProductFilter,
-                  )
-                }
+                onChange={(event) => {
+                  const nextProductFilter = event.target
+                    .value as OpenListTaskCenterProductFilter
+                  setProductFilter(nextProductFilter)
+                  if (nextProductFilter === 'ADULT') {
+                    setSourceFilter('ALL')
+                  }
+                }}
                 className={cn(controlClassName, 'w-full pl-9')}
               >
-                {productFilterOptions.map((option) => (
+                {availableProductFilterOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -468,9 +500,10 @@ export function TaskCenterPage() {
                   event.target.value as OpenListTaskCenterSourceFilter,
                 )
               }
+              disabled={isAdultProductFilter}
               className={cn(controlClassName, 'w-full')}
             >
-              {sourceFilterOptions.map((option) => (
+              {availableSourceFilterOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
