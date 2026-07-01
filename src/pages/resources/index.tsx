@@ -108,6 +108,7 @@ type RecentIngestSummary = {
   taskId: string
   title: string
   mediaType: RecentIngestMediaType
+  productType: 'MOVIE' | 'SERIES' | 'ANIME'
   status: MagnetIngestTaskStatus
   qualityTag: string | null
   updatedAt: string | null
@@ -125,6 +126,7 @@ type AutoReleaseConfirmation = {
   item: SearchableResourceItem
   itemKey: string
   mediaType: RecentIngestMediaType
+  taskProductType: 'SERIES' | 'ANIME' | null
   qualityTag: OpenListQualityTag
   seasonNumber: number | null
   release: ProwlarrRelease
@@ -399,6 +401,7 @@ function toRecentMovieTask(task: MovieMagnetIngestTask): RecentIngestSummary {
     taskId: task.id,
     title: `${task.title} (${task.year})`,
     mediaType: 'movie',
+    productType: 'MOVIE',
     status: task.status,
     qualityTag: task.quality_tag ?? task.resolution_tags?.[0] ?? null,
     updatedAt: task.updated_at ?? task.created_at,
@@ -410,6 +413,7 @@ function toRecentSeriesTask(task: SeriesMagnetIngestTask): RecentIngestSummary {
     taskId: task.id,
     title: `${task.series_name} ${task.season_folder}`,
     mediaType: 'series',
+    productType: task.task_product_type === 'ANIME' ? 'ANIME' : 'SERIES',
     status: task.status,
     qualityTag: task.quality_tag ?? task.resolution_tags?.[0] ?? null,
     updatedAt: task.updated_at ?? task.created_at,
@@ -485,6 +489,7 @@ export function ResourceSearchPage() {
   const [autoReleaseConfirmation, setAutoReleaseConfirmation] =
     useState<AutoReleaseConfirmation | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const isAutoReleaseConfirmationOpen = autoReleaseConfirmation !== null
   const latestRequestIdRef = useRef(0)
   const recentIngestRequestIdRef = useRef(0)
   const activeRequestControllerRef = useRef<AbortController | null>(null)
@@ -584,6 +589,22 @@ export function ResourceSearchPage() {
       window.clearTimeout(timeoutId)
     }
   }, [toastMessage])
+
+  useEffect(() => {
+    if (!isAutoReleaseConfirmationOpen) {
+      return
+    }
+
+    const previousBodyOverflow = document.body.style.overflow
+    const previousDocumentOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousDocumentOverflow
+    }
+  }, [isAutoReleaseConfirmationOpen])
 
   useEffect(() => {
     return () => {
@@ -696,6 +717,7 @@ export function ResourceSearchPage() {
                 !isAnimeSearchItem(item) && isSeriesSearchItem(item),
             ),
             requestId,
+            activeCategory === 'anime' ? 'ANIME' : 'SERIES',
           )
         }
       })
@@ -793,9 +815,14 @@ export function ResourceSearchPage() {
 
     let mediaType: RecentIngestMediaType
 
+    const isAnimeSeasonIngest =
+      isSeriesSearchItem(item) && category === 'anime'
+
     if (isSeriesSearchItem(item)) {
       if (typeof seasonNumber !== 'number') {
-        showCardError('请选择剧集目标季数。')
+        showCardError(
+          isAnimeSeasonIngest ? '请选择动漫目标季度。' : '请选择剧集目标季数。',
+        )
         return
       }
 
@@ -811,6 +838,8 @@ export function ResourceSearchPage() {
     }
 
     const seriesItem = isSeriesSearchItem(item) ? item : null
+    const taskProductType =
+      mediaType === 'series' && category === 'anime' ? 'ANIME' : 'SERIES'
     activeMediaIngestKeysRef.current.add(itemKey)
     setMediaIngestStates((currentStates) => ({
       ...currentStates,
@@ -854,7 +883,11 @@ export function ResourceSearchPage() {
             }).then((data) => {
               const release = data.items[0]
               if (!release) {
-                throw new Error('未找到匹配的剧集发布资源。')
+                throw new Error(
+                  isAnimeSeasonIngest
+                    ? '未找到匹配的动漫整季发布资源。'
+                    : '未找到匹配的剧集发布资源。',
+                )
               }
               return {
                 release,
@@ -863,7 +896,13 @@ export function ResourceSearchPage() {
                 searchLanguage: getItemSearchLanguage(seriesItem),
               }
             })
-          : Promise.reject(new Error('请选择剧集目标季数。'))
+          : Promise.reject(
+              new Error(
+                isAnimeSeasonIngest
+                  ? '请选择动漫目标季度。'
+                  : '请选择剧集目标季数。',
+              ),
+            )
 
     void releaseRequest
       .then(({ release, releases, query, searchLanguage }) => {
@@ -882,6 +921,7 @@ export function ResourceSearchPage() {
           item,
           itemKey,
           mediaType,
+          taskProductType: mediaType === 'series' ? taskProductType : null,
           qualityTag,
           seasonNumber: mediaType === 'series' ? seasonNumber : null,
           release,
@@ -967,6 +1007,7 @@ export function ResourceSearchPage() {
         : createSeriesReleaseOpenListIngest({
             ...commonPayload,
             season_number: selection.seasonNumber ?? 1,
+            task_product_type: selection.taskProductType ?? 'SERIES',
           })
 
     setAutoReleaseConfirmation({ ...selection, isSubmitting: true })
@@ -1033,6 +1074,8 @@ export function ResourceSearchPage() {
           mediaType === 'series' && isSeriesSearchItem(item)
             ? seriesSeasonOptions[getSeriesIngestKey(item)] ?? [1]
             : [],
+        taskProductType:
+          mediaType === 'series' && category === 'anime' ? 'ANIME' : 'SERIES',
       } satisfies ResourcePublishPageState,
     })
   }
@@ -1040,6 +1083,7 @@ export function ResourceSearchPage() {
   function startSeriesSeasonSetup(
     items: SeriesSearchItem[],
     searchRequestId: number,
+    taskProductType: 'SERIES' | 'ANIME',
   ) {
     const controller = new AbortController()
     seriesSeasonsControllerRef.current = controller
@@ -1056,7 +1100,10 @@ export function ResourceSearchPage() {
             }
           : {
               status: 'error',
-              message: '缺少可用的剧集目录 ID，无法加载季数。',
+              message:
+                taskProductType === 'ANIME'
+                  ? '缺少可用的动漫目录 ID，无法加载季度。'
+                  : '缺少可用的剧集目录 ID，无法加载季数。',
             }
         return states
       }, {}),
@@ -1124,7 +1171,9 @@ export function ResourceSearchPage() {
           const message =
             error instanceof Error && error.message.trim()
               ? error.message.trim()
-              : '剧集季数加载失败，请稍后重试。'
+              : taskProductType === 'ANIME'
+                ? '动漫季度加载失败，请稍后重试。'
+                : '剧集季数加载失败，请稍后重试。'
           setSeriesSeasonLoadStates((currentStates) => ({
             ...currentStates,
             [itemKey]: {
@@ -1453,7 +1502,13 @@ export function ResourceSearchPage() {
           <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
             <span>最近入库</span>
             <span className="h-1 w-1 rounded-full bg-slate-300" />
-            <span>{item.mediaType === 'movie' ? '电影' : '剧集'}</span>
+            <span>
+              {item.productType === 'MOVIE'
+                ? '电影'
+                : item.productType === 'ANIME'
+                  ? '动漫整季'
+                  : '剧集'}
+            </span>
             {item.qualityTag ? (
               <>
                 <span className="h-1 w-1 rounded-full bg-slate-300" />
@@ -1506,11 +1561,11 @@ export function ResourceSearchPage() {
           : '未识别'
 
     return (
-      <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/40 px-4 py-8 backdrop-blur-sm">
+      <div className="fixed inset-0 z-40 flex items-center justify-center overflow-hidden bg-slate-950/40 px-3 py-3 backdrop-blur-sm sm:px-4 sm:py-8">
         <div
           role="dialog"
           aria-modal="true"
-          className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.22)]"
+          className="max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-2xl bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.22)] sm:max-h-[calc(100dvh-4rem)] sm:p-6"
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -1525,7 +1580,12 @@ export function ResourceSearchPage() {
               </p>
             </div>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-              {selection.mediaType === 'movie' ? '电影' : '剧集'} ·{' '}
+              {selection.mediaType === 'movie'
+                ? '电影'
+                : selection.taskProductType === 'ANIME'
+                  ? '动漫整季'
+                  : '剧集'}{' '}
+              ·{' '}
               {selection.qualityTag}
               {selectedSeasonLabel ? ` · ${selectedSeasonLabel}` : ''}
               {hasMultipleCandidates ? ` · ${selection.releases.length} 个推荐` : ''}
@@ -1712,6 +1772,7 @@ export function ResourceSearchPage() {
                 <MediaCard
                   key={item.id}
                   item={item}
+                  taskProductType={category === 'anime' ? 'ANIME' : 'SERIES'}
                   addStatus={ingestState?.status}
                   addMessage={ingestMessage}
                   qualityTags={OPENLIST_QUALITY_TAGS}
@@ -1766,7 +1827,7 @@ export function ResourceSearchPage() {
   return (
     <PageContainer
       title="资源搜索"
-      description="从资源卡片直接匹配 Prowlarr 发布资源，并通过 OpenList 创建电影或剧集入库任务。"
+      description="从资源卡片匹配 Prowlarr 发布资源，并通过 OpenList 创建电影、剧集或动漫整季入库任务。"
     >
       <div className="space-y-8">
         <div className="flex flex-col items-center gap-5">

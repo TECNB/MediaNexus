@@ -23,6 +23,7 @@ export type MediaCardSeasonStatus =
 
 type MediaCardProps = {
   item: SearchableResourceItem
+  taskProductType?: 'SERIES' | 'ANIME'
   addStatus?: MediaCardAddStatus
   addMessage?: string | null
   qualityTags?: OpenListQualityTag[]
@@ -63,6 +64,7 @@ function getSeasonLabel(seasonNumber: number) {
 
 export function MediaCard({
   item,
+  taskProductType,
   addStatus = 'idle',
   addMessage = null,
   qualityTags = [],
@@ -108,7 +110,16 @@ export function MediaCard({
   )
   const network = isSeriesItem ? item.network?.trim() : null
   const seriesType = isSeriesItem ? item.series_type?.trim() : null
-  const mediaTypeLabel = isSeriesItem ? 'SERIES' : 'MOVIE'
+  const mediaTypeLabel = isSeriesItem
+    ? taskProductType === 'ANIME'
+      ? 'ANIME'
+      : 'SERIES'
+    : 'MOVIE'
+  const ingestActionLabel = isSeriesItem
+    ? taskProductType === 'ANIME'
+      ? '动漫整季入库'
+      : '剧集入库'
+    : '电影入库'
   const mediaMeta = [
     showOriginalTitle ? originalTitle : null,
     item.year ? String(item.year) : null,
@@ -274,11 +285,11 @@ export function MediaCard({
               className="h-10 whitespace-nowrap rounded-xl bg-slate-950 px-4 text-xs font-semibold text-white shadow-none hover:bg-slate-800"
             >
               {isAddLoading ? (
-                '添加中…'
+                '入库中…'
               ) : (
                 <span className="inline-flex items-center gap-2">
                   <CloudUpload className="h-3.5 w-3.5" />
-                  添加
+                  {ingestActionLabel}
                 </span>
               )}
             </Button>

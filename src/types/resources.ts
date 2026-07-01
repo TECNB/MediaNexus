@@ -101,6 +101,7 @@ export type ResourcePublishPageState = {
   qualityTag: OpenListQualityTag
   seasonNumber: number | null
   seasonOptions: number[]
+  taskProductType?: 'SERIES' | 'ANIME'
 }
 
 export type CreateMovieOpenListIngestPayload = {
@@ -116,6 +117,7 @@ export type CreateSeriesOpenListIngestPayload = {
   title: string
   original_title: string | null
   season_number: number
+  task_product_type?: 'SERIES' | 'ANIME'
   quality: OpenListQualityTag
 }
 
@@ -211,4 +213,5 @@ export type CreateMovieReleaseOpenListIngestPayload =
 export type CreateSeriesReleaseOpenListIngestPayload =
   SelectedReleasePayload & {
     season_number: number
+    task_product_type?: 'SERIES' | 'ANIME'
   }

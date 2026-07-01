@@ -168,6 +168,7 @@ export function ResourcePublishPage() {
   const pageState = location.state as ResourcePublishPageState | null
   const item = pageState?.item ?? null
   const mediaType = pageState?.mediaType ?? null
+  const isAnimeSeason = pageState?.taskProductType === 'ANIME'
   const [seasonNumber, setSeasonNumber] = useState(
     pageState?.seasonNumber ?? 1,
   )
@@ -244,7 +245,11 @@ export function ResourcePublishPage() {
               },
               controller.signal,
             )
-          : Promise.reject(new Error('缺少剧集资源信息。'))
+          : Promise.reject(
+              new Error(
+                isAnimeSeason ? '缺少动漫整季资源信息。' : '缺少剧集资源信息。',
+              ),
+            )
 
     void request
       .then((data) => {
@@ -273,7 +278,7 @@ export function ResourcePublishPage() {
       })
 
     return () => controller.abort()
-  }, [item, mediaType, pageState, refreshVersion, seasonNumber])
+  }, [isAnimeSeason, item, mediaType, pageState, refreshVersion, seasonNumber])
 
   const filteredItems = useMemo(
     () =>
@@ -368,6 +373,7 @@ export function ResourcePublishPage() {
         : createSeriesReleaseOpenListIngest({
             ...commonPayload,
             season_number: seasonNumber,
+            task_product_type: pageState?.taskProductType ?? 'SERIES',
           })
 
     void request
@@ -385,8 +391,12 @@ export function ResourcePublishPage() {
 
   return (
     <PageContainer
-      title="发布资源选择"
-      description="从 Prowlarr 返回结果中选择一个具体发布，随后创建 OpenList 入库任务。"
+      title={isAnimeSeason ? '动漫整季发布资源' : '发布资源选择'}
+      description={
+        isAnimeSeason
+          ? '选择匹配当前季度的发布资源，随后创建动漫整季入库任务。'
+          : '从 Prowlarr 返回结果中选择一个具体发布，随后创建 OpenList 入库任务。'
+      }
     >
       <section className="rounded-lg bg-white p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -404,7 +414,9 @@ export function ResourcePublishPage() {
             <p className="mt-1 text-sm text-slate-500">
               {mediaType === 'movie'
                 ? `电影 · ${targetLabel} · 使用电影实体搜索计划`
-                : `剧集 · ${targetLabel} · 使用剧集实体搜索计划`}
+                : isAnimeSeason
+                  ? `动漫整季 · ${targetLabel} · 使用动漫目录搜索计划`
+                  : `剧集 · ${targetLabel} · 使用剧集实体搜索计划`}
             </p>
           </div>
 
@@ -604,7 +616,9 @@ export function ResourcePublishPage() {
                     ) : (
                       <>
                         <CloudUpload className="h-4 w-4" />
-                        使用该发布进行 OpenList 入库
+                        {isAnimeSeason
+                          ? '使用该发布进行动漫整季入库'
+                          : '使用该发布进行 OpenList 入库'}
                       </>
                     )}
                   </Button>

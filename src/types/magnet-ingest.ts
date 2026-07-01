@@ -143,6 +143,7 @@ export type SeriesMagnetIngestTask = {
   title: string
   original_title: string | null
   season_number: number
+  task_product_type?: 'SERIES' | 'ANIME'
   source_type: 'MANUAL_MAGNET' | 'PROWLARR_RELEASE' | string
   release_title: string | null
   release_indexer: string | null

@@ -313,6 +313,9 @@ export function ResourceIngestLogPage() {
   }
 
   const { task, logs } = pageState
+  const isAnimeSeasonTask =
+    supportedMediaType === 'series' &&
+    (task as SeriesMagnetIngestTask).task_product_type === 'ANIME'
   const activeStageIndex = getStageIndex(task)
   const isPolling = !isTerminalStatus(task.status)
   const resolutionTags = task.resolution_tags ?? []
@@ -353,7 +356,12 @@ export function ResourceIngestLogPage() {
                   {taskTitle}
                 </h2>
                 <p className="mt-2 text-sm text-slate-500">
-                  {supportedMediaType === 'movie' ? '电影入库' : '剧集入库'} ·{' '}
+                  {supportedMediaType === 'movie'
+                    ? '电影入库'
+                    : isAnimeSeasonTask
+                      ? '动漫整季入库'
+                      : '剧集入库'}{' '}
+                  ·{' '}
                   {task.original_title || '无原始标题'}
                 </p>
               </div>
