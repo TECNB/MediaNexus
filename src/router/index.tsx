@@ -13,6 +13,7 @@ import { ResourceSearchPage } from '@/pages/resources'
 import { SettingsPage } from '@/pages/settings'
 import { SubtitleManagePage } from '@/pages/subtitles'
 import { TaskCenterPage } from '@/pages/tasks'
+import { TaskCenterDetailPage } from '@/pages/tasks/detail'
 import { UserManagementPage } from '@/pages/users'
 
 export const router = createBrowserRouter([
@@ -36,6 +37,7 @@ export const router = createBrowserRouter([
       },
       { path: 'magnet-ingest', element: <MagnetIngestPage /> },
       { path: 'tasks', element: <TaskCenterPage /> },
+      { path: 'tasks/:taskType/:taskId', element: <TaskCenterDetailPage /> },
       { path: 'subtitles', element: <SubtitleManagePage /> },
       { path: 'emby-watch-rankings', element: <EmbyWatchRankingsPage /> },
       { path: 'users', element: <UserManagementPage /> },
