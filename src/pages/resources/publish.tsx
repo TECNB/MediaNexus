@@ -534,6 +534,7 @@ export function ResourcePublishPage() {
             const isSubmitting = submitState.keys.includes(key)
             const matchLabel = releaseMatchLabel(release)
             const tags = [
+              ...(pageState.mediaType === 'series' ? release.season_tags : []),
               ...release.resolution_tags,
               ...release.dynamic_range_tags.map(
                 (tag) => dynamicTagCopy[tag] ?? tag,

@@ -131,6 +131,7 @@ export type ProwlarrRelease = {
   download_ref: string
   resolution_tags: OpenListQualityTag[]
   dynamic_range_tags: string[]
+  season_tags: string[]
   match_source: string | null
   match_query: string | null
 }

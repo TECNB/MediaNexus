@@ -1570,6 +1570,16 @@ export function ResourceSearchPage() {
                     <span className="rounded-md bg-emerald-50 px-2 py-1 text-emerald-700">
                       命中 {candidateMatchLabel}
                     </span>
+                    {selection.mediaType === 'series'
+                      ? candidate.season_tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-md bg-sky-50 px-2 py-1 text-sky-700"
+                          >
+                            {tag}
+                          </span>
+                        ))
+                      : null}
                     <span className="rounded-md bg-slate-200 px-2 py-1 text-slate-700">
                       {formatReleaseSize(candidate.size)}
                     </span>
