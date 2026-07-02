@@ -1,4 +1,5 @@
 import type { MagnetIngestTaskStatus } from '@/types/magnet-ingest'
+import type { OpenListQualityTag, ProwlarrRelease } from '@/types/resources'
 
 export type OpenListTaskCenterTaskType = 'MOVIE' | 'SERIES' | 'ANIME' | 'ADULT'
 
@@ -40,6 +41,7 @@ export type OpenListTaskCenterItem = {
   source_type: OpenListTaskCenterSourceType
   release_title: string | null
   progress_summary: string
+  attempt_count: number
   detail_path: string
   created_at: string | null
   updated_at: string | null
@@ -86,6 +88,31 @@ export type OpenListTaskCenterProgress = {
   deleted_count: number | null
 }
 
+export type OpenListTaskCenterAttempt = {
+  task_type: OpenListTaskCenterTaskType
+  id: string
+  product_type: OpenListTaskCenterProductType
+  title: string
+  status: MagnetIngestTaskStatus
+  stage: string
+  source_type: OpenListTaskCenterSourceType
+  created_by_user_id: number | null
+  created_by_username: string | null
+  retry_of_task_type: OpenListTaskCenterTaskType | null
+  retry_of_task_id: string | null
+  is_current: boolean
+  detail_path: string
+  created_at: string | null
+  updated_at: string | null
+}
+
+export type OpenListTaskCenterAttemptChain = {
+  attempt_group_id: string
+  current_attempt: OpenListTaskCenterAttempt
+  retry_of: OpenListTaskCenterAttempt | null
+  attempts: OpenListTaskCenterAttempt[]
+}
+
 export type OpenListTaskCenterDetail = {
   task_type: OpenListTaskCenterTaskType
   id: string
@@ -109,7 +136,42 @@ export type OpenListTaskCenterDetail = {
   logs: OpenListTaskCenterLog[]
   is_active: boolean
   pending_explanation: string | null
+  batch_download_links: string[] | null
+  attempt_chain: OpenListTaskCenterAttemptChain
   created_at: string | null
   updated_at: string | null
   finished_at: string | null
 }
+
+export type OpenListManualMagnetRetryResult = {
+  task_type: OpenListTaskCenterTaskType
+  id: string
+  detail_path: string
+}
+
+export type OpenListReleaseRetryContext = {
+  task_type: 'MOVIE' | 'SERIES' | 'ANIME'
+  task_id: string
+  product_type: 'MOVIE' | 'SERIES' | 'ANIME'
+  title: string
+  original_title: string | null
+  year: number | null
+  season_number: number | null
+  quality_tag: OpenListQualityTag | null
+  release_title: string | null
+  release_indexer: string | null
+  release_size: number | null
+  resolution_tags: string[]
+  dynamic_range_tags: string[]
+}
+
+export type OpenListReleaseRetryPayload = Pick<
+  ProwlarrRelease,
+  | 'title'
+  | 'indexer'
+  | 'size'
+  | 'indexer_id'
+  | 'download_ref'
+  | 'resolution_tags'
+  | 'dynamic_range_tags'
+>

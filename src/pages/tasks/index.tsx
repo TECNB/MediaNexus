@@ -15,6 +15,7 @@ import {
 
 import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
+import { SelectControl } from '@/components/ui/form-control'
 import { listOpenListTaskCenterItems } from '@/lib/api/task-center'
 import { isJavaRequestCanceledError } from '@/lib/java-api'
 import { useAuth } from '@/lib/use-auth'
@@ -84,8 +85,8 @@ const sourceFilterOptions: Array<{
   label: string
 }> = [
   { value: 'ALL', label: '全部来源' },
-  { value: 'MANUAL_MAGNET', label: '手动磁力' },
-  { value: 'PROWLARR_RELEASE', label: '发布资源' },
+  { value: 'MANUAL_MAGNET', label: '起点为手动磁力' },
+  { value: 'PROWLARR_RELEASE', label: '起点为发布资源' },
 ]
 
 const sourceTypeCopy: Record<string, string> = {
@@ -191,6 +192,7 @@ function TaskCard({
   const needsAttention = isNeedsAttention(item.status)
   const creatorLabel =
     item.created_by_username ?? `用户 ${item.created_by_user_id ?? '-'}`
+  const attemptCount = item.attempt_count ?? 1
 
   return (
     <article
@@ -219,11 +221,16 @@ function TaskCard({
               {taskStatusCopy[item.status] ?? item.status}
             </span>
             <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
-              {sourceLabel(item.source_type)}
+              当前：{sourceLabel(item.source_type)}
             </span>
             {showCreator ? (
               <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
                 创建者 {creatorLabel}
+              </span>
+            ) : null}
+            {attemptCount > 1 ? (
+              <span className="rounded-md bg-violet-50 px-2 py-1 text-xs font-semibold text-violet-700">
+                共 {attemptCount} 次尝试
               </span>
             ) : null}
           </div>
@@ -462,7 +469,7 @@ export function TaskCenterPage() {
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_180px_180px_120px] xl:min-w-[760px]">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_minmax(150px,180px)_minmax(170px,200px)_minmax(96px,120px)]">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -472,28 +479,26 @@ export function TaskCenterPage() {
                 className={cn(controlClassName, 'w-full pl-9')}
               />
             </label>
-            <label className="relative block">
-              <SlidersHorizontal className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <select
-                value={productFilter}
-                onChange={(event) => {
-                  const nextProductFilter = event.target
-                    .value as OpenListTaskCenterProductFilter
-                  setProductFilter(nextProductFilter)
-                  if (nextProductFilter === 'ADULT') {
-                    setSourceFilter('ALL')
-                  }
-                }}
-                className={cn(controlClassName, 'w-full pl-9')}
-              >
-                {availableProductFilterOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <select
+            <SelectControl
+              value={productFilter}
+              onChange={(event) => {
+                const nextProductFilter = event.target
+                  .value as OpenListTaskCenterProductFilter
+                setProductFilter(nextProductFilter)
+                if (nextProductFilter === 'ADULT') {
+                  setSourceFilter('ALL')
+                }
+              }}
+              leadingIcon={<SlidersHorizontal className="h-4 w-4" />}
+              className="rounded-lg bg-white text-slate-700 shadow-none"
+            >
+              {availableProductFilterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </SelectControl>
+            <SelectControl
               value={sourceFilter}
               onChange={(event) =>
                 setSourceFilter(
@@ -501,25 +506,25 @@ export function TaskCenterPage() {
                 )
               }
               disabled={isAdultProductFilter}
-              className={cn(controlClassName, 'w-full')}
+              className="rounded-lg bg-white text-slate-700 shadow-none"
             >
               {availableSourceFilterOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
               ))}
-            </select>
-            <select
+            </SelectControl>
+            <SelectControl
               value={pageSize}
               onChange={(event) => setPageSize(Number(event.target.value))}
-              className={cn(controlClassName, 'w-full')}
+              className="rounded-lg bg-white text-slate-700 shadow-none"
             >
               {PAGE_SIZE_OPTIONS.map((option) => (
                 <option key={option} value={option}>
                   {option} 条
                 </option>
               ))}
-            </select>
+            </SelectControl>
           </div>
 
           <Button

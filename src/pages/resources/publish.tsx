@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarDays,
-  ChevronDown,
   CloudUpload,
   Database,
   Download,
@@ -16,6 +15,7 @@ import {
 
 import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
+import { SelectControl } from '@/components/ui/form-control'
 import {
   createMovieReleaseOpenListIngest,
   createSeriesReleaseOpenListIngest,
@@ -23,6 +23,10 @@ import {
   searchMovieReleases,
   searchSeriesReleases,
 } from '@/lib/api/resources'
+import {
+  getOpenListReleaseRetryContext,
+  retryOpenListWithSelectedRelease,
+} from '@/lib/api/task-center'
 import { formatElapsedMessage, useElapsedNow } from '@/lib/use-elapsed-time'
 import { cn } from '@/lib/utils'
 import type {
@@ -32,6 +36,7 @@ import type {
   SearchableResourceItem,
   SeriesSearchItem,
 } from '@/types/resources'
+import type { OpenListReleaseRetryContext } from '@/types/task-center'
 
 type ResolutionFilter = 'all' | OpenListQualityTag | 'unknown'
 type DynamicFilter = 'all' | 'dolby_vision' | 'hdr' | 'sdr' | 'unmarked'
@@ -139,6 +144,52 @@ function releaseMatchLabel(release: ProwlarrRelease) {
   return source || query || null
 }
 
+function retryContextPageState(
+  context: OpenListReleaseRetryContext,
+): ResourcePublishPageState {
+  const commonItem = {
+    id: context.task_id,
+    title: context.title,
+    original_title: context.original_title,
+    year: context.year,
+    overview: '',
+    poster: null,
+    tmdb_id: null,
+    imdb_id: null,
+    status: null,
+  }
+  const qualityTag = context.quality_tag ?? '1080p'
+
+  if (context.task_type === 'MOVIE') {
+    return {
+      mediaType: 'movie',
+      item: commonItem,
+      submittedTerm: context.title,
+      qualityTag,
+      seasonNumber: null,
+      seasonOptions: [],
+    }
+  }
+
+  const seasonNumber = context.season_number ?? 1
+  return {
+    mediaType: 'series',
+    item: {
+      ...commonItem,
+      year: null,
+      tvdb_id: null,
+      network: null,
+      series_type: null,
+      status: '',
+    },
+    submittedTerm: context.title,
+    qualityTag,
+    seasonNumber,
+    seasonOptions: [seasonNumber],
+    taskProductType: context.product_type === 'ANIME' ? 'ANIME' : 'SERIES',
+  }
+}
+
 function MissingState() {
   return (
     <PageContainer
@@ -165,7 +216,27 @@ function MissingState() {
 export function ResourcePublishPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const pageState = location.state as ResourcePublishPageState | null
+  const routePageState = location.state as ResourcePublishPageState | null
+  const retryParams = useMemo(() => new URLSearchParams(location.search), [location.search])
+  const retryTaskType = retryParams.get('retry_task_type')
+  const retryTaskId = retryParams.get('retry_task_id')
+  const [retryContextState, setRetryContextState] = useState<{
+    status: 'idle' | 'loading' | 'success' | 'error'
+    context: OpenListReleaseRetryContext | null
+    message: string | null
+  }>({
+    status: retryTaskType && retryTaskId ? 'loading' : 'idle',
+    context: null,
+    message: null,
+  })
+  const pageState = useMemo(
+    () =>
+      routePageState ??
+      (retryContextState.context
+        ? retryContextPageState(retryContextState.context)
+        : null),
+    [retryContextState.context, routePageState],
+  )
   const item = pageState?.item ?? null
   const mediaType = pageState?.mediaType ?? null
   const isAnimeSeason = pageState?.taskProductType === 'ANIME'
@@ -196,6 +267,42 @@ export function ResourcePublishPage() {
     keys: [],
     message: null,
   })
+
+  useEffect(() => {
+    if (typeof pageState?.seasonNumber === 'number') {
+      setSeasonNumber(pageState.seasonNumber)
+    }
+  }, [pageState?.seasonNumber])
+
+  useEffect(() => {
+    if (!retryTaskType || !retryTaskId) {
+      return
+    }
+    const controller = new AbortController()
+    setRetryContextState({ status: 'loading', context: null, message: null })
+    void getOpenListReleaseRetryContext(
+      retryTaskType,
+      retryTaskId,
+      controller.signal,
+    )
+      .then((context) => {
+        setRetryContextState({ status: 'success', context, message: null })
+      })
+      .catch((error) => {
+        if (controller.signal.aborted || isRequestCanceledError(error)) {
+          return
+        }
+        setRetryContextState({
+          status: 'error',
+          context: null,
+          message:
+            error instanceof Error && error.message.trim()
+              ? error.message.trim()
+              : '发布资源恢复上下文加载失败。',
+        })
+      })
+    return () => controller.abort()
+  }, [retryTaskId, retryTaskType])
 
   useEffect(() => {
     if (
@@ -298,6 +405,34 @@ export function ResourcePublishPage() {
     loadElapsedNow,
   )
 
+  if (retryContextState.status === 'loading') {
+    return (
+      <PageContainer title="重新选择发布资源" description="正在恢复原任务上下文。">
+        <div className="rounded-lg bg-white px-8 py-16 text-center">
+          <Loader2 className="mx-auto h-7 w-7 animate-spin text-slate-400" />
+          <p className="mt-4 text-sm font-medium text-slate-500">
+            正在读取标题、季度、质量偏好与原发布信息…
+          </p>
+        </div>
+      </PageContainer>
+    )
+  }
+
+  if (retryContextState.status === 'error') {
+    return (
+      <PageContainer title="重新选择发布资源" description="原任务上下文无法读取。">
+        <div className="rounded-lg bg-white px-8 py-12">
+          <AlertTriangle className="h-8 w-8 text-rose-500" />
+          <p className="mt-4 text-lg font-semibold text-slate-950">无法恢复任务</p>
+          <p className="mt-2 text-sm text-slate-500">{retryContextState.message}</p>
+          <Link to="/tasks" className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-950">
+            <ArrowLeft className="h-4 w-4" />返回任务中心
+          </Link>
+        </div>
+      </PageContainer>
+    )
+  }
+
   if (
     !pageState ||
     !item ||
@@ -364,20 +499,25 @@ export function ResourcePublishPage() {
       dynamic_range_tags: release.dynamic_range_tags,
     }
 
-    const request =
-      activeMediaType === 'movie'
+    const request = retryContextState.context
+      ? retryOpenListWithSelectedRelease(
+          retryContextState.context.task_type,
+          retryContextState.context.task_id,
+          release,
+        ).then((task) => task.detail_path)
+      : activeMediaType === 'movie'
         ? createMovieReleaseOpenListIngest({
             ...commonPayload,
             year: item!.year as number,
-          })
+          }).then((task) => getTaskRoute(activeMediaType, task.id))
         : createSeriesReleaseOpenListIngest({
             ...commonPayload,
             season_number: seasonNumber,
             task_product_type: pageState?.taskProductType ?? 'SERIES',
-          })
+          }).then((task) => getTaskRoute(activeMediaType, task.id))
 
     void request
-      .then((task) => navigate(getTaskRoute(activeMediaType, task.id)))
+      .then((detailPath) => navigate(detailPath))
       .catch((error) => {
         setSubmitState((current) => ({
           keys: current.keys.filter((itemKey) => itemKey !== key),
@@ -391,7 +531,13 @@ export function ResourcePublishPage() {
 
   return (
     <PageContainer
-      title={isAnimeSeason ? '动漫整季发布资源' : '发布资源选择'}
+      title={
+        retryContextState.context
+          ? '重新选择发布资源'
+          : isAnimeSeason
+            ? '动漫整季发布资源'
+            : '发布资源选择'
+      }
       description={
         isAnimeSeason
           ? '选择匹配当前季度的发布资源，随后创建动漫整季入库任务。'
@@ -402,11 +548,15 @@ export function ResourcePublishPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <Link
-              to="/resources"
+              to={
+                retryContextState.context
+                  ? `/tasks/${retryContextState.context.task_type.toLowerCase()}/${encodeURIComponent(retryContextState.context.task_id)}`
+                  : '/resources'
+              }
               className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-950"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              返回资源搜索
+              {retryContextState.context ? '返回原任务' : '返回资源搜索'}
             </Link>
             <h2 className="mt-3 truncate text-2xl font-semibold text-slate-950">
               {item.title}
@@ -422,21 +572,20 @@ export function ResourcePublishPage() {
 
           <div className="flex items-center gap-3">
             {mediaType === 'series' && isSeriesItem ? (
-              <label className="relative">
-                <select
+              <label>
+                <SelectControl
                   value={seasonNumber}
                   onChange={(event) =>
                     setSeasonNumber(Number(event.target.value))
                   }
-                  className="h-10 appearance-none rounded-lg bg-slate-100 px-3 pr-8 text-sm font-semibold text-slate-700 outline-none"
+                  className="rounded-lg bg-slate-100 font-semibold text-slate-700 shadow-none hover:bg-slate-200"
                 >
                   {seasonOptions.map((season) => (
                     <option key={season} value={season}>
                       {getSeasonLabel(season)}
                     </option>
                   ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                </SelectControl>
               </label>
             ) : null}
             <Button
@@ -457,6 +606,24 @@ export function ResourcePublishPage() {
           </div>
         </div>
       </section>
+
+      {retryContextState.context ? (
+        <section className="rounded-lg bg-amber-50 p-5 text-amber-900">
+          <p className="text-sm font-semibold">当前发布来源</p>
+          <p className="mt-2 break-words text-sm">
+            {retryContextState.context.release_title ||
+              '当前尝试没有可用的发布来源摘要'}
+          </p>
+          <p className="mt-1 text-xs text-amber-700">
+            {retryContextState.context.release_indexer || '索引器未知'} ·{' '}
+            {formatSize(retryContextState.context.release_size)} · 偏好{' '}
+            {retryContextState.context.quality_tag || '未记录'}
+          </p>
+          <p className="mt-3 text-xs leading-5 text-amber-800">
+            选择新发布后会创建关联的新任务尝试，原任务状态、日志和来源不会变化。
+          </p>
+        </section>
+      ) : null}
 
       <section className="rounded-lg bg-white p-5">
         <div className="grid gap-5 xl:grid-cols-2">
@@ -533,10 +700,14 @@ export function ResourcePublishPage() {
         <div className="rounded-lg bg-white px-8 py-14 text-center">
           <Database className="mx-auto h-8 w-8 text-slate-300" />
           <p className="mt-4 font-semibold text-slate-950">
-            当前筛选下没有发布资源
+            {loadState.items.length === 0
+              ? '没有候选发布资源'
+              : '当前筛选下没有发布资源'}
           </p>
           <p className="mt-2 text-sm text-slate-500">
-            可以重置筛选或刷新当前查询。
+            {loadState.items.length === 0
+              ? '当前标题与季度没有搜索到候选；可以返回原任务改用手动 magnet。'
+              : '可以重置筛选或刷新当前查询。'}
           </p>
         </div>
       ) : (

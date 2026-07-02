@@ -1,21 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
   Circle,
   CloudUpload,
+  GitBranch,
   Loader2,
+  RotateCcw,
+  Send,
   TerminalSquare,
 } from 'lucide-react'
 
 import { PageContainer } from '@/components/layout/page-container'
-import { getOpenListTaskCenterDetail } from '@/lib/api/task-center'
+import { Button } from '@/components/ui/button'
+import {
+  getOpenListTaskCenterDetail,
+  replaceOpenListManualMagnet,
+  retryOpenListAdultBatch,
+  reuseOriginalOpenListManualMagnet,
+} from '@/lib/api/task-center'
 import { isJavaRequestCanceledError } from '@/lib/java-api'
 import { cn } from '@/lib/utils'
 import type { MagnetIngestTaskStatus } from '@/types/magnet-ingest'
 import type {
+  OpenListTaskCenterAttempt,
   OpenListTaskCenterDetail,
   OpenListTaskCenterProductType,
 } from '@/types/task-center'
@@ -28,6 +38,8 @@ type PageState = {
   message: string | null
 }
 
+type RetrySubmitAction = 'reuse' | 'replace'
+
 const DETAIL_POLL_INTERVAL_MS = 2000
 const supportedTaskTypes = new Set(['movie', 'series', 'anime', 'adult'])
 
@@ -36,6 +48,12 @@ const terminalStatuses = new Set<MagnetIngestTaskStatus>([
   'PARTIAL_SUCCESS',
   'FAILED',
   'INTERRUPTED',
+])
+
+const recoverableStatuses = new Set<MagnetIngestTaskStatus>([
+  'FAILED',
+  'INTERRUPTED',
+  'PARTIAL_SUCCESS',
 ])
 
 const taskStatusCopy: Record<MagnetIngestTaskStatus, string> = {
@@ -153,8 +171,116 @@ function StatBlock({ label, value }: { label: string; value: string }) {
   )
 }
 
+function AttemptSourceLabel({
+  attempt,
+  attempts,
+}: {
+  attempt: OpenListTaskCenterAttempt
+  attempts: OpenListTaskCenterAttempt[]
+}) {
+  if (!attempt.retry_of_task_type || !attempt.retry_of_task_id) {
+    return null
+  }
+
+  const sourceIndex = attempts.findIndex(
+    (candidate) =>
+      candidate.task_type === attempt.retry_of_task_type &&
+      candidate.id === attempt.retry_of_task_id,
+  )
+
+  if (sourceIndex < 0) {
+    return null
+  }
+
+  return (
+    <span className="text-xs font-medium text-slate-500">
+      来源：第 {sourceIndex + 1} 次
+    </span>
+  )
+}
+
+function AttemptChain({ detail }: { detail: OpenListTaskCenterDetail }) {
+  const attempts = detail.attempt_chain.attempts
+
+  return (
+    <section className="rounded-[28px] bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.035)]">
+      <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+        <GitBranch className="h-4 w-4" />
+        任务尝试链
+      </div>
+      <div className="mt-4 space-y-3">
+        {attempts.map((attempt, index) => (
+          <Link
+            key={`${attempt.task_type}:${attempt.id}`}
+            to={attempt.detail_path}
+            className={cn(
+              'block rounded-2xl border px-4 py-3 transition',
+              attempt.is_current
+                ? 'border-slate-950 bg-slate-50'
+                : 'border-slate-100 bg-white hover:border-slate-300',
+            )}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-semibold text-slate-500">
+                第 {index + 1} 次
+              </span>
+              {attempt.is_current ? (
+                <span className="rounded-full bg-slate-950 px-2 py-0.5 text-[11px] font-semibold text-white">
+                  当前
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-2 line-clamp-2 text-sm font-semibold text-slate-950">
+              {attempt.title}
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-slate-500">
+                {productTypeCopy[attempt.product_type]} ·{' '}
+                {taskStatusCopy[attempt.status] ?? attempt.status}
+              </span>
+              <AttemptSourceLabel attempt={attempt} attempts={attempts} />
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function canRetryManualMagnet(detail: OpenListTaskCenterDetail) {
+  return (
+    (detail.source_type === 'MANUAL_MAGNET' ||
+      detail.source_type === 'PROWLARR_RELEASE') &&
+    detail.task_type !== 'ADULT' &&
+    recoverableStatuses.has(detail.status)
+  )
+}
+
+function canSelectProwlarrRelease(detail: OpenListTaskCenterDetail) {
+  return (
+    (detail.task_type === 'MOVIE' ||
+      detail.task_type === 'SERIES' ||
+      detail.task_type === 'ANIME') &&
+    recoverableStatuses.has(detail.status)
+  )
+}
+
+function canRetryAdultBatch(detail: OpenListTaskCenterDetail) {
+  return (
+    detail.task_type === 'ADULT' && recoverableStatuses.has(detail.status)
+  )
+}
+
+function parseAdultBatchLinks(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((link) => link.trim())
+    .filter(Boolean)
+}
+
 export function TaskCenterDetailPage() {
   const { taskType, taskId } = useParams()
+  const navigate = useNavigate()
   const normalizedTaskType = normalizeTaskType(taskType)
   const [isPageVisible, setIsPageVisible] = useState(
     () => document.visibilityState === 'visible',
@@ -164,6 +290,14 @@ export function TaskCenterDetailPage() {
     detail: null,
     message: null,
   })
+  const [retryMagnet, setRetryMagnet] = useState('')
+  const [retryError, setRetryError] = useState<string | null>(null)
+  const [retrySubmitAction, setRetrySubmitAction] =
+    useState<RetrySubmitAction | null>(null)
+  const [adultBatchLinks, setAdultBatchLinks] = useState('')
+  const [adultBatchError, setAdultBatchError] = useState<string | null>(null)
+  const [isAdultBatchSubmitting, setIsAdultBatchSubmitting] = useState(false)
+  const initializedAdultBatchTaskRef = useRef<string | null>(null)
   const activeLoadControllerRef = useRef<AbortController | null>(null)
   const latestLoadRequestIdRef = useRef(0)
 
@@ -269,6 +403,131 @@ export function TaskCenterDetailPage() {
     return () => window.clearTimeout(timeoutId)
   }, [isPageVisible, loadDetail, pageState.detail, pageState.status])
 
+  useEffect(() => {
+    const detail = pageState.detail
+    if (!detail || !canRetryAdultBatch(detail)) {
+      return
+    }
+    const taskKey = `${detail.task_type}:${detail.id}`
+    if (initializedAdultBatchTaskRef.current === taskKey) {
+      return
+    }
+    initializedAdultBatchTaskRef.current = taskKey
+    setAdultBatchLinks(detail.batch_download_links?.join('\n') ?? '')
+    setAdultBatchError(null)
+  }, [pageState.detail])
+
+  const handleReuseOriginalMagnet = async () => {
+    const currentDetail = pageState.detail
+    if (!currentDetail) {
+      return
+    }
+    setRetryError(null)
+    setRetrySubmitAction('reuse')
+    try {
+      const response = await reuseOriginalOpenListManualMagnet(
+        currentDetail.task_type,
+        currentDetail.id,
+      )
+      navigate(response.detail_path)
+    } catch (error) {
+      setRetryError(
+        error instanceof Error && error.message.trim()
+          ? error.message.trim()
+          : '创建重试任务失败，请稍后重试。',
+      )
+    } finally {
+      setRetrySubmitAction(null)
+    }
+  }
+
+  const handleReplaceMagnet = async () => {
+    const currentDetail = pageState.detail
+    if (!currentDetail) {
+      return
+    }
+    const magnet = retryMagnet.trim()
+    if (!magnet.toLowerCase().startsWith('magnet:?')) {
+      setRetryError('magnet 链接需以 magnet:? 开头。')
+      return
+    }
+    if (!/[?&]xt=urn:btih:[a-z0-9]+/i.test(magnet)) {
+      setRetryError('magnet 链接缺少 btih hash。')
+      return
+    }
+
+    setRetryError(null)
+    setRetrySubmitAction('replace')
+    try {
+      const response = await replaceOpenListManualMagnet(
+        currentDetail.task_type,
+        currentDetail.id,
+        magnet,
+      )
+      navigate(response.detail_path)
+    } catch (error) {
+      setRetryError(
+        error instanceof Error && error.message.trim()
+          ? error.message.trim()
+          : '创建重试任务失败，请稍后重试。',
+      )
+    } finally {
+      setRetrySubmitAction(null)
+    }
+  }
+
+  const handleAdultBatchRetry = async () => {
+    const currentDetail = pageState.detail
+    if (!currentDetail || !canRetryAdultBatch(currentDetail)) {
+      return
+    }
+    const downloadLinks = parseAdultBatchLinks(adultBatchLinks)
+    if (downloadLinks.length === 0) {
+      setAdultBatchError('请至少填写一条 magnet 或 ed2k 下载链接。')
+      return
+    }
+    if (downloadLinks.length > 50) {
+      setAdultBatchError('单批最多提交 50 条下载链接。')
+      return
+    }
+    const invalidLink = downloadLinks.find((link) => {
+      const normalized = link.toLowerCase()
+      if (normalized.startsWith('ed2k://')) {
+        return false
+      }
+      return !(
+        normalized.startsWith('magnet:?') &&
+        /[?&]xt=urn:btih:[a-z0-9]+/i.test(link)
+      )
+    })
+    if (invalidLink) {
+      setAdultBatchError(
+        invalidLink.toLowerCase().startsWith('magnet:?')
+          ? 'magnet 链接缺少 btih hash。'
+          : '下载链接需以 magnet:? 或 ed2k:// 开头。',
+      )
+      return
+    }
+
+    setAdultBatchError(null)
+    setIsAdultBatchSubmitting(true)
+    try {
+      const response = await retryOpenListAdultBatch(
+        currentDetail.id,
+        downloadLinks,
+      )
+      navigate(response.detail_path)
+    } catch (error) {
+      setAdultBatchError(
+        error instanceof Error && error.message.trim()
+          ? error.message.trim()
+          : '整批重新提交失败，请稍后重试。',
+      )
+    } finally {
+      setIsAdultBatchSubmitting(false)
+    }
+  }
+
   if (pageState.status === 'loading') {
     return (
       <PageContainer
@@ -312,6 +571,10 @@ export function TaskCenterDetailPage() {
   const detail = pageState.detail
   const activeStageIndex = getStageIndex(detail)
   const isPolling = !isTerminalStatus(detail.status)
+  const showManualMagnetRetry = canRetryManualMagnet(detail)
+  const showReleaseSelection = canSelectProwlarrRelease(detail)
+  const showAdultBatchRetry = canRetryAdultBatch(detail)
+  const retrySubmitting = retrySubmitAction !== null
 
   return (
     <PageContainer
@@ -402,6 +665,176 @@ export function TaskCenterDetailPage() {
             </div>
           </section>
 
+          {showManualMagnetRetry ? (
+            <section className="rounded-[28px] bg-white p-6 shadow-[0_18px_40px_rgba(15,23,42,0.035)]">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                    处理此任务
+                  </p>
+                  <h3 className="mt-2 text-lg font-semibold text-slate-950">
+                    恢复此任务
+                  </h3>
+                </div>
+                <StatusPill status={detail.status} />
+              </div>
+
+              <div className="mt-5 rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold text-slate-500">
+                  失败证据
+                </p>
+                <p className="mt-2 break-words text-sm leading-6 text-slate-700">
+                  {detail.error_message ||
+                    detail.last_warning_or_error_log?.message ||
+                    '暂无错误信息。'}
+                </p>
+                {detail.last_warning_or_error_log?.detail ? (
+                  <p className="mt-2 break-words font-mono text-xs leading-5 text-slate-500">
+                    {detail.last_warning_or_error_log.detail}
+                  </p>
+                ) : null}
+              </div>
+
+              {retryError ? (
+                <div className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+                  {retryError}
+                </div>
+              ) : null}
+
+              {showReleaseSelection ? (
+                <div className="mt-5 rounded-2xl border border-slate-200 p-4">
+                  <p className="text-sm font-semibold text-slate-950">
+                    重新选择发布资源
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                    重新搜索并选择发布来源；确认后会创建同一尝试链中的新任务。
+                  </p>
+                  <Link
+                    to={`/resources/publish?retry_task_type=${detail.task_type.toLowerCase()}&retry_task_id=${encodeURIComponent(detail.id)}`}
+                    className="mt-3 inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    重新选择发布资源
+                  </Link>
+                </div>
+              ) : null}
+
+              <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+                <div>
+                  <label
+                    htmlFor="manual-magnet-retry"
+                    className="text-sm font-semibold text-slate-950"
+                  >
+                    {showReleaseSelection ? '手动提供 magnet' : '新 magnet'}
+                  </label>
+                  <textarea
+                    id="manual-magnet-retry"
+                    value={retryMagnet}
+                    onChange={(event) => setRetryMagnet(event.target.value)}
+                    rows={4}
+                    className="mt-2 min-h-[112px] w-full resize-y rounded-2xl border border-slate-200 bg-white px-4 py-3 font-mono text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-slate-950"
+                    placeholder="magnet:?xt=urn:btih:..."
+                    disabled={retrySubmitting}
+                  />
+                </div>
+                <div className="flex flex-col gap-3 lg:pt-7">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="justify-center rounded-xl"
+                    onClick={handleReuseOriginalMagnet}
+                    disabled={retrySubmitting}
+                  >
+                    {retrySubmitAction === 'reuse' ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-4 w-4" />
+                    )}
+                    沿用当前 magnet
+                  </Button>
+                  <Button
+                    type="button"
+                    className="justify-center rounded-xl"
+                    onClick={handleReplaceMagnet}
+                    disabled={retrySubmitting}
+                  >
+                    {retrySubmitAction === 'replace' ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                    {showReleaseSelection
+                      ? '手动 magnet 重试'
+                      : '使用新 magnet'}
+                  </Button>
+                </div>
+              </div>
+            </section>
+          ) : null}
+
+          {showAdultBatchRetry ? (
+            <section className="rounded-[28px] bg-white p-6 shadow-[0_18px_40px_rgba(15,23,42,0.035)]">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                    处理此任务
+                  </p>
+                  <h3 className="mt-2 text-lg font-semibold text-slate-950">
+                    Adult 整批重新提交
+                  </h3>
+                </div>
+                <StatusPill status={detail.status} />
+              </div>
+
+              <div className="mt-5 rounded-2xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+                本期会把下方全部链接作为一个新批次重新提交，不提供单条失败链接重试。你可以删除死种或替换来源，原任务和统计不会被修改。
+              </div>
+
+              {detail.batch_download_links === null ? (
+                <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">
+                  该历史任务没有保存完整原始链接，无法自动回填。请手动填写希望重新提交的完整批次；系统不会根据 hash 拼造链接。
+                </div>
+              ) : null}
+
+              {adultBatchError ? (
+                <div className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+                  {adultBatchError}
+                </div>
+              ) : null}
+
+              <label
+                htmlFor="adult-batch-retry"
+                className="mt-5 block text-sm font-semibold text-slate-950"
+              >
+                新批次下载链接（每行一条，最多 50 条）
+              </label>
+              <textarea
+                id="adult-batch-retry"
+                value={adultBatchLinks}
+                onChange={(event) => setAdultBatchLinks(event.target.value)}
+                rows={10}
+                className="mt-2 min-h-[240px] w-full resize-y rounded-2xl border border-slate-200 bg-white px-4 py-3 font-mono text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-slate-950"
+                placeholder={'magnet:?xt=urn:btih:...\ned2k://|file|...'}
+                disabled={isAdultBatchSubmitting}
+              />
+              <div className="mt-4 flex justify-end">
+                <Button
+                  type="button"
+                  className="rounded-xl"
+                  onClick={handleAdultBatchRetry}
+                  disabled={isAdultBatchSubmitting}
+                >
+                  {isAdultBatchSubmitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                  整批重新提交
+                </Button>
+              </div>
+            </section>
+          ) : null}
+
           <section className="overflow-hidden rounded-[28px] bg-slate-950 shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
             <div className="flex items-center justify-between px-5 py-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-white">
@@ -451,6 +884,8 @@ export function TaskCenterDetailPage() {
               任务会在 OpenList 离线下载完成后整理媒体文件和字幕，并把结果写回日志。
             </p>
           </section>
+
+          <AttemptChain detail={detail} />
 
           {detail.error_message ? (
             <section className="rounded-[28px] bg-rose-50 p-5 text-rose-700">
