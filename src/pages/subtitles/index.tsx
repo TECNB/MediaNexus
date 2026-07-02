@@ -11,6 +11,7 @@ import {
 
 import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
+import { SelectControl } from '@/components/ui/form-control'
 import {
   getSeriesSeasons,
   isRequestCanceledError,
@@ -1364,10 +1365,11 @@ export function SubtitleManagePage() {
                     正在加载季列表...
                   </div>
                 ) : seriesSeasonOptions.length > 0 ? (
-                  <select
+                  <SelectControl
                     id="subtitle-season-number"
                     value={selectedSeasonNumber}
-                    className="mt-3 h-10 w-full rounded-[14px] border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200/60"
+                    wrapperClassName="mt-3"
+                    className="rounded-[14px] text-slate-900"
                     onChange={(event) =>
                       setSelectedSeasonNumber(Number(event.target.value))
                     }
@@ -1377,7 +1379,7 @@ export function SubtitleManagePage() {
                         Season {seasonNumber}
                       </option>
                     ))}
-                  </select>
+                  </SelectControl>
                 ) : (
                   <input
                     id="subtitle-season-number"

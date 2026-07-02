@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronDown, CloudUpload, Loader2 } from 'lucide-react'
+import { CloudUpload, Loader2 } from 'lucide-react'
 
 import {
   LibraryLinkPicker,
@@ -13,6 +13,7 @@ import {
 } from '@/components/magnet-ingest/status-cards'
 import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
+import { SelectControl } from '@/components/ui/form-control'
 import {
   createAdultMagnetIngestTask,
   createAnimeMagnetIngestTask,
@@ -191,28 +192,25 @@ function TargetSeasonSelect({
 
   return (
     <div className="space-y-2">
-      <div className="relative">
-        <select
-          value={value ?? ''}
-          onChange={(event) => onChange(Number(event.target.value))}
-          aria-label="选择目标季数"
-          disabled={isDisabled}
-          className="h-14 w-full appearance-none rounded-[20px] border border-slate-200 bg-white px-5 pr-14 text-base font-medium text-slate-950 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200/60 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-        >
-          <option value="" disabled>
-            {placeholder}
-          </option>
-          {options.map((seasonNumber) => {
-            return (
-              <option key={seasonNumber} value={seasonNumber}>
-                {`第 ${seasonNumber} 季`}
-              </option>
-            )
-          })}
-        </select>
-
-        <ChevronDown className="pointer-events-none absolute right-5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-      </div>
+      <SelectControl
+        value={value ?? ''}
+        onChange={(event) => onChange(Number(event.target.value))}
+        aria-label="选择目标季数"
+        disabled={isDisabled}
+        className="h-14 rounded-[20px] px-5 pr-14 text-base text-slate-950"
+        chevronClassName="right-5 h-5 w-5"
+      >
+        <option value="" disabled>
+          {placeholder}
+        </option>
+        {options.map((seasonNumber) => {
+          return (
+            <option key={seasonNumber} value={seasonNumber}>
+              {`第 ${seasonNumber} 季`}
+            </option>
+          )
+        })}
+      </SelectControl>
 
       {status === 'loading' ? (
         <p className="text-sm text-slate-500">正在拉取当前剧集的可用季数...</p>

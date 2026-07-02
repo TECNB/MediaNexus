@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
+import { SelectControl } from '@/components/ui/form-control'
 import {
   Tooltip,
   TooltipContent,
@@ -526,8 +527,8 @@ function UserManagementPageContent() {
                   ))}
                 </div>
 
-                <select
-                  className="h-10 rounded-xl bg-slate-100 px-3 text-sm font-medium text-slate-700 outline-none ring-1 ring-transparent transition focus:bg-white focus:ring-slate-300"
+                <SelectControl
+                  className="bg-slate-100 text-slate-700 shadow-none hover:bg-slate-200 focus:ring-slate-300"
                   onChange={(event) => {
                     setSort(event.target.value as AdminUserSort)
                     setPage(1)
@@ -539,7 +540,7 @@ function UserManagementPageContent() {
                       {item.label}
                     </option>
                   ))}
-                </select>
+                </SelectControl>
               </div>
             </div>
           </div>

@@ -1,12 +1,8 @@
 import { useState } from 'react'
-import {
-  ArrowRight,
-  ChevronDown,
-  Clapperboard,
-  CloudUpload,
-} from 'lucide-react'
+import { ArrowRight, Clapperboard, CloudUpload } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { SelectControl } from '@/components/ui/form-control'
 import { cn } from '@/lib/utils'
 import type {
   OpenListQualityTag,
@@ -195,35 +191,32 @@ export function MediaCard({
                 <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
                   目标季
                 </span>
-                <div className="relative">
-                  <select
-                    value={activeSeasonNumber ?? ''}
-                    onChange={(event) => {
-                      const nextSeasonNumber = Number(event.target.value)
-                      if (Number.isInteger(nextSeasonNumber)) {
-                        onSeasonNumberChange?.(item, nextSeasonNumber)
-                      }
-                    }}
-                    disabled={
-                      isAddLoading ||
-                      isAddSuccess ||
-                      activeSeasonStatus !== 'success'
+                <SelectControl
+                  value={activeSeasonNumber ?? ''}
+                  onChange={(event) => {
+                    const nextSeasonNumber = Number(event.target.value)
+                    if (Number.isInteger(nextSeasonNumber)) {
+                      onSeasonNumberChange?.(item, nextSeasonNumber)
                     }
-                    aria-label={`${item.title} 目标季`}
-                    className="h-10 w-full appearance-none rounded-xl bg-slate-100 px-3 pr-8 text-xs font-semibold text-slate-700 outline-none transition hover:bg-slate-200 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:cursor-not-allowed disabled:text-slate-400"
-                  >
-                    {activeSeasonStatus === 'success' ? (
-                      seasonOptions.map((seasonNumber) => (
-                        <option key={seasonNumber} value={seasonNumber}>
-                          {getSeasonLabel(seasonNumber)}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="">{seasonStatusLabel}</option>
-                    )}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                </div>
+                  }}
+                  disabled={
+                    isAddLoading ||
+                    isAddSuccess ||
+                    activeSeasonStatus !== 'success'
+                  }
+                  aria-label={`${item.title} 目标季`}
+                  className="bg-slate-100 text-xs font-semibold text-slate-700 shadow-none hover:bg-slate-200 focus:bg-white focus:ring-slate-900/10"
+                >
+                  {activeSeasonStatus === 'success' ? (
+                    seasonOptions.map((seasonNumber) => (
+                      <option key={seasonNumber} value={seasonNumber}>
+                        {getSeasonLabel(seasonNumber)}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">{seasonStatusLabel}</option>
+                  )}
+                </SelectControl>
               </label>
             ) : null}
 
@@ -231,32 +224,28 @@ export function MediaCard({
               <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
                 分辨率
               </span>
-              <div className="relative">
-                <select
-                  value={activeQualityTag ?? ''}
-                  onChange={(event) => {
-                    const nextQualityTag =
-                      event.target.value as OpenListQualityTag
-                    if (qualityTags.includes(nextQualityTag)) {
-                      onQualityTagChange?.(item, nextQualityTag)
-                    }
-                  }}
-                  disabled={isAddLoading || isAddSuccess || !hasQualityTags}
-                  aria-label={`${item.title} 分辨率`}
-                  className="h-10 w-full appearance-none rounded-xl bg-slate-100 px-3 pr-8 text-xs font-semibold text-slate-700 outline-none transition hover:bg-slate-200 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:cursor-not-allowed disabled:text-slate-400"
-                >
-                  {hasQualityTags ? (
-                    qualityTags.map((qualityTag) => (
-                      <option key={qualityTag} value={qualityTag}>
-                        {qualityTag}
-                      </option>
-                    ))
-                  ) : (
-                    <option value="">分辨率</option>
-                  )}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-              </div>
+              <SelectControl
+                value={activeQualityTag ?? ''}
+                onChange={(event) => {
+                  const nextQualityTag = event.target.value as OpenListQualityTag
+                  if (qualityTags.includes(nextQualityTag)) {
+                    onQualityTagChange?.(item, nextQualityTag)
+                  }
+                }}
+                disabled={isAddLoading || isAddSuccess || !hasQualityTags}
+                aria-label={`${item.title} 分辨率`}
+                className="bg-slate-100 text-xs font-semibold text-slate-700 shadow-none hover:bg-slate-200 focus:bg-white focus:ring-slate-900/10"
+              >
+                {hasQualityTags ? (
+                  qualityTags.map((qualityTag) => (
+                    <option key={qualityTag} value={qualityTag}>
+                      {qualityTag}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">分辨率</option>
+                )}
+              </SelectControl>
             </label>
           </div>
 

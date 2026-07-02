@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { ChevronDown, Clapperboard } from 'lucide-react'
+import { Clapperboard } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { SelectControl } from '@/components/ui/form-control'
 import { cn } from '@/lib/utils'
 import type {
   AnimeSearchItem,
@@ -119,33 +120,30 @@ export function AnimeCard({
 
         <div className="space-y-2">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="relative min-w-0 flex-1">
-              <select
-                value={activeSelectedGroupId}
-                onChange={(event) => {
-                  if (event.target.value) {
-                    onGroupChange?.(item, event.target.value)
-                  }
-                }}
-                disabled={selectDisabled}
-                aria-label={`${item.title} 字幕组`}
-                className="h-9 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-8 text-xs font-medium text-slate-600 outline-none transition hover:border-slate-300 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/60 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-              >
-                {hasGroups ? (
-                  groups.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.label}
-                    </option>
-                  ))
-                ) : (
-                  <option value="">
-                    {isGroupsLoading ? '字幕组加载中' : '字幕组'}
+            <SelectControl
+              value={activeSelectedGroupId}
+              onChange={(event) => {
+                if (event.target.value) {
+                  onGroupChange?.(item, event.target.value)
+                }
+              }}
+              disabled={selectDisabled}
+              aria-label={`${item.title} 字幕组`}
+              wrapperClassName="min-w-0 flex-1"
+              className="h-9 text-xs text-slate-600"
+            >
+              {hasGroups ? (
+                groups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.label}
                   </option>
-                )}
-              </select>
-
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-            </div>
+                ))
+              ) : (
+                <option value="">
+                  {isGroupsLoading ? '字幕组加载中' : '字幕组'}
+                </option>
+              )}
+            </SelectControl>
 
             <Button
               type="button"

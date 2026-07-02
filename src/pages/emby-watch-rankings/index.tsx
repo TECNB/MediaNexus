@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  CalendarDays,
   CalendarRange,
   Hash,
   Lightbulb,
@@ -13,6 +12,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
+import { DateControl } from '@/components/ui/form-control'
 import { getEmbyWatchRankings } from '@/lib/api/emby-watch-rankings'
 import { isJavaRequestCanceledError } from '@/lib/java-api'
 import { useAuth } from '@/lib/use-auth'
@@ -513,25 +513,22 @@ function EmbyWatchRankingPageContent() {
         </div>
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
           {period === 'month' ? (
-            <label className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              <CalendarRange className="h-4 w-4 text-slate-400" />
-              <input
-                className="bg-transparent font-medium text-slate-950 outline-none"
-                onChange={(event) => setMonth(event.target.value)}
-                type="month"
-                value={month}
-              />
-            </label>
+            <DateControl
+              icon={<CalendarRange className="h-4 w-4" />}
+              onChange={(event) => setMonth(event.target.value)}
+              type="month"
+              value={month}
+              wrapperClassName="w-full md:w-auto"
+              className="min-w-[9.5rem] bg-slate-50 shadow-none"
+            />
           ) : (
-            <label className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              <CalendarDays className="h-4 w-4 text-slate-400" />
-              <input
-                className="bg-transparent font-medium text-slate-950 outline-none"
-                onChange={(event) => setDate(event.target.value)}
-                type="date"
-                value={date}
-              />
-            </label>
+            <DateControl
+              onChange={(event) => setDate(event.target.value)}
+              type="date"
+              value={date}
+              wrapperClassName="w-full md:w-auto"
+              className="min-w-[9.5rem] bg-slate-50 shadow-none"
+            />
           )}
           <label className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
             <Hash className="h-4 w-4 text-slate-400" />
