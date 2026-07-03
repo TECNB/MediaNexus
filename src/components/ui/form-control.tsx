@@ -10,7 +10,15 @@ import {
 
 import { cn } from '@/lib/utils'
 
-type SelectControlProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
+type TriggerBlurProps = {
+  onBlur?: React.FocusEventHandler<HTMLButtonElement>
+}
+
+type SelectControlProps = Omit<
+  React.SelectHTMLAttributes<HTMLSelectElement>,
+  'onBlur'
+> &
+  TriggerBlurProps & {
   wrapperClassName?: string
   leadingIcon?: React.ReactNode
   leadingIconClassName?: string
@@ -195,7 +203,7 @@ const SelectControl = React.forwardRef<HTMLButtonElement, SelectControlProps>(
           disabled={props.disabled}
           id={props.id}
           name={props.name}
-          onBlur={props.onBlur as React.FocusEventHandler<HTMLButtonElement>}
+          onBlur={props.onBlur}
           onClick={() => {
             if (!props.disabled) {
               setIsOpen((value) => !value)
@@ -287,8 +295,9 @@ SelectControl.displayName = 'SelectControl'
 
 type DateControlProps = Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
-  'type'
+  'type' | 'onBlur'
 > & {
+  onBlur?: React.FocusEventHandler<HTMLButtonElement>
   type?: 'date' | 'month'
   wrapperClassName?: string
   icon?: React.ReactNode
@@ -467,7 +476,7 @@ const DateControl = React.forwardRef<HTMLButtonElement, DateControlProps>(
           disabled={props.disabled}
           id={props.id}
           name={props.name}
-          onBlur={props.onBlur as React.FocusEventHandler<HTMLButtonElement>}
+          onBlur={props.onBlur}
           onClick={() => {
             if (!props.disabled) {
               setIsOpen((value) => !value)
