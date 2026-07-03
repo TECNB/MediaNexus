@@ -77,7 +77,7 @@ function isSeriesSearchItem(
 }
 
 function getTaskRoute(mediaType: 'movie' | 'series', taskId: string) {
-  return `/resources/ingest/${mediaType}/${encodeURIComponent(taskId)}`
+  return `/tasks/${mediaType}/${encodeURIComponent(taskId)}`
 }
 
 function getSeasonLabel(seasonNumber: number) {
@@ -571,6 +571,9 @@ export function ResourcePublishPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <Button asChild variant="outline">
+              <Link to="/tasks">查看全部任务</Link>
+            </Button>
             {mediaType === 'series' && isSeriesItem ? (
               <label>
                 <SelectControl

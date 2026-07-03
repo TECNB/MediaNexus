@@ -7,7 +7,7 @@ import { DashboardPage } from '@/pages/dashboard'
 import { EmbyWatchRankingsPage } from '@/pages/emby-watch-rankings'
 import { HelpPage } from '@/pages/help'
 import { MagnetIngestPage } from '@/pages/magnet-ingest'
-import { ResourceIngestLogPage } from '@/pages/resources/ingest-log'
+import { LegacyResourceIngestRedirect } from '@/pages/resources/legacy-ingest-redirect'
 import { ResourcePublishPage } from '@/pages/resources/publish'
 import { ResourceSearchPage } from '@/pages/resources'
 import { SettingsPage } from '@/pages/settings'
@@ -33,7 +33,7 @@ export const router = createBrowserRouter([
       { path: 'resources/publish', element: <ResourcePublishPage /> },
       {
         path: 'resources/ingest/:mediaType/:taskId',
-        element: <ResourceIngestLogPage />,
+        element: <LegacyResourceIngestRedirect />,
       },
       { path: 'magnet-ingest', element: <MagnetIngestPage /> },
       { path: 'tasks', element: <TaskCenterPage /> },

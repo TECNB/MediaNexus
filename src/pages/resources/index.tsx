@@ -288,7 +288,7 @@ function getAnimeCardKey(item: AnimeSearchItem) {
 }
 
 function getTaskRoute(mediaType: RecentIngestMediaType, taskId: string) {
-  return `/resources/ingest/${mediaType}/${encodeURIComponent(taskId)}`
+  return `/tasks/${mediaType}/${encodeURIComponent(taskId)}`
 }
 
 function getPublishRoute() {
@@ -396,10 +396,44 @@ function getTaskTimeValue(value: string | null) {
   return Number.isNaN(time) ? 0 : time
 }
 
+function containsChineseText(value: string) {
+  return /[\u4e00-\u9fff]/.test(value)
+}
+
+function preferredChineseText(...values: Array<string | null | undefined>) {
+  let fallback: string | null = null
+
+  for (const value of values) {
+    const candidate = value?.trim()
+    if (!candidate) {
+      continue
+    }
+    fallback ??= candidate
+    if (containsChineseText(candidate)) {
+      return candidate
+    }
+  }
+
+  return fallback
+}
+
+function movieDisplayTitle(task: MovieMagnetIngestTask) {
+  const title =
+    preferredChineseText(task.title, task.original_title) ?? '电影任务'
+  return `${title} (${task.year})`
+}
+
+function seriesDisplayTitle(task: SeriesMagnetIngestTask) {
+  const title =
+    preferredChineseText(task.title, task.series_name, task.original_title) ??
+    '剧集任务'
+  return `${title} ${task.season_folder}`
+}
+
 function toRecentMovieTask(task: MovieMagnetIngestTask): RecentIngestSummary {
   return {
     taskId: task.id,
-    title: `${task.title} (${task.year})`,
+    title: movieDisplayTitle(task),
     mediaType: 'movie',
     productType: 'MOVIE',
     status: task.status,
@@ -411,7 +445,7 @@ function toRecentMovieTask(task: MovieMagnetIngestTask): RecentIngestSummary {
 function toRecentSeriesTask(task: SeriesMagnetIngestTask): RecentIngestSummary {
   return {
     taskId: task.id,
-    title: `${task.series_name} ${task.season_folder}`,
+    title: seriesDisplayTitle(task),
     mediaType: 'series',
     productType: task.task_product_type === 'ANIME' ? 'ANIME' : 'SERIES',
     status: task.status,
@@ -1530,8 +1564,14 @@ export function ResourceSearchPage() {
             to={getTaskRoute(item.mediaType, item.taskId)}
             className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-slate-200"
           >
-            查看日志
+            查看任务详情
             <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+          <Link
+            to="/tasks"
+            className="text-xs font-semibold text-slate-500 transition hover:text-slate-950"
+          >
+            查看全部任务
           </Link>
         </div>
       </div>
@@ -1830,6 +1870,15 @@ export function ResourceSearchPage() {
       description="从资源卡片匹配 Prowlarr 发布资源，并通过 OpenList 创建电影、剧集或动漫整季入库任务。"
     >
       <div className="space-y-8">
+        <div className="flex justify-end">
+          <Link
+            to="/tasks"
+            className="text-sm font-semibold text-slate-600 transition hover:text-slate-950"
+          >
+            查看全部任务
+          </Link>
+        </div>
+
         <div className="flex flex-col items-center gap-5">
           <SearchBar
             value={searchText}

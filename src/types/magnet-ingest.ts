@@ -76,6 +76,8 @@ export type AnimeMagnetIngestTask = {
   stage: string
   bgm_id: string
   title: string
+  name_cn: string | null
+  name: string | null
   season_number: number
   magnet_hash: string
   save_path: string

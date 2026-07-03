@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CloudUpload, Loader2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ArrowRight, CloudUpload, Loader2 } from 'lucide-react'
 
 import {
   LibraryLinkPicker,
@@ -60,6 +61,10 @@ import type { MovieSearchItem, SeriesSearchItem } from '@/types/resources'
 
 type SubmitStatus = 'idle' | 'loading' | 'success' | 'error'
 type SeriesSeasonStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
+type CreatedTaskTarget = {
+  taskType: IngestMode
+  taskId: string
+}
 
 const TASK_LOG_POLL_INTERVAL_MS = 2000
 const TASK_LIST_POLL_INTERVAL_MS = 5000
@@ -483,11 +488,51 @@ function formatTaskTime(value: string | null) {
   })
 }
 
+function containsChineseText(value: string) {
+  return /[\u4e00-\u9fff]/.test(value)
+}
+
+function preferredChineseText(...values: Array<string | null | undefined>) {
+  let fallback: string | null = null
+
+  for (const value of values) {
+    const candidate = value?.trim()
+    if (!candidate) {
+      continue
+    }
+    fallback ??= candidate
+    if (containsChineseText(candidate)) {
+      return candidate
+    }
+  }
+
+  return fallback
+}
+
+function movieDisplayTitle(task: MovieMagnetIngestTask) {
+  const title =
+    preferredChineseText(task.title, task.original_title) ?? '电影任务'
+  return `${title} (${task.year})`
+}
+
+function seriesDisplayTitle(task: SeriesMagnetIngestTask) {
+  const title =
+    preferredChineseText(task.title, task.series_name, task.original_title) ??
+    '剧集任务'
+  return `${title} ${task.season_folder}`
+}
+
+function animeDisplayTitle(task: AnimeMagnetIngestTask) {
+  const title =
+    preferredChineseText(task.name_cn, task.title, task.name) ?? '动漫任务'
+  return `${title} 第 ${task.season_number} 季`
+}
+
 function toRecentAnimeTask(task: AnimeMagnetIngestTask): RecentIngestTask {
   return {
     id: task.id,
     name: task.magnet_hash,
-    libraryTitle: `${task.title} 第 ${task.season_number} 季`,
+    libraryTitle: animeDisplayTitle(task),
     status: toRecentTaskStatus(task.status),
     time: formatTaskTime(task.updated_at ?? task.created_at),
   }
@@ -509,7 +554,7 @@ function toRecentMovieTask(task: MovieMagnetIngestTask): RecentIngestTask {
   return {
     id: task.id,
     name: task.magnet_hash,
-    libraryTitle: `${task.title} (${task.year})`,
+    libraryTitle: movieDisplayTitle(task),
     status: toRecentTaskStatus(task.status),
     time: formatTaskTime(task.updated_at ?? task.created_at),
   }
@@ -519,7 +564,7 @@ function toRecentSeriesTask(task: SeriesMagnetIngestTask): RecentIngestTask {
   return {
     id: task.id,
     name: task.magnet_hash,
-    libraryTitle: `${task.series_name} ${task.season_folder}`,
+    libraryTitle: seriesDisplayTitle(task),
     status: toRecentTaskStatus(task.status),
     time: formatTaskTime(task.updated_at ?? task.created_at),
   }
@@ -585,6 +630,8 @@ export function MagnetIngestPage() {
   const [submitSuccessMessage, setSubmitSuccessMessage] = useState<string | null>(
     null,
   )
+  const [createdTaskTarget, setCreatedTaskTarget] =
+    useState<CreatedTaskTarget | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [movieTasks, setMovieTasks] = useState<MovieMagnetIngestTask[]>([])
   const [movieTasksStatus, setMovieTasksStatus] =
@@ -1315,6 +1362,7 @@ export function MagnetIngestPage() {
     setSubmitStatus('idle')
     setSubmitError(null)
     setSubmitSuccessMessage(null)
+    setCreatedTaskTarget(null)
   }
 
   function resetMovieModeState() {
@@ -1630,6 +1678,7 @@ export function MagnetIngestPage() {
 
         setSubmitStatus('success')
         setSubmitSuccessMessage(successMessage)
+        setCreatedTaskTarget({ taskType: 'adult', taskId: task.id })
         selectedAdultTaskIdRef.current = task.id
         setSelectedAdultTaskId(task.id)
         setMagnetInput('')
@@ -1703,6 +1752,7 @@ export function MagnetIngestPage() {
 
         setSubmitStatus('success')
         setSubmitSuccessMessage(successMessage)
+        setCreatedTaskTarget({ taskType: 'series', taskId: task.id })
         selectedSeriesTaskIdRef.current = task.id
         setSelectedSeriesTaskId(task.id)
         setMagnetInput('')
@@ -1759,6 +1809,7 @@ export function MagnetIngestPage() {
 
         setSubmitStatus('success')
         setSubmitSuccessMessage(successMessage)
+        setCreatedTaskTarget({ taskType: 'anime', taskId: task.id })
         selectedAnimeTaskIdRef.current = task.id
         setSelectedAnimeTaskId(task.id)
         setMagnetInput('')
@@ -1811,6 +1862,7 @@ export function MagnetIngestPage() {
 
       setSubmitStatus('success')
       setSubmitSuccessMessage(successMessage)
+      setCreatedTaskTarget({ taskType: 'movie', taskId: task.id })
       selectedMovieTaskIdRef.current = task.id
       setSelectedMovieTaskId(task.id)
       setMagnetInput('')
@@ -1904,8 +1956,8 @@ export function MagnetIngestPage() {
       title="手动磁力入库"
       description="直接粘贴高质量磁力链接，将其绑定至媒体库结构并推送至云端离线下载。"
     >
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.72fr)_320px]">
-        <div className="space-y-6">
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.72fr)_320px]">
+        <div className="min-w-0 space-y-6">
           <section className="space-y-3">
             <SectionHeading
               label="磁力链接"
@@ -2109,8 +2161,30 @@ export function MagnetIngestPage() {
           ) : null}
 
           {submitStatus === 'success' && submitSuccessMessage ? (
-            <p className="text-sm text-emerald-600">{submitSuccessMessage}</p>
+            <div className="flex flex-col gap-3 rounded-2xl bg-emerald-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-medium text-emerald-700">
+                {submitSuccessMessage}
+              </p>
+              {createdTaskTarget ? (
+                <Link
+                  to={`/tasks/${createdTaskTarget.taskType}/${encodeURIComponent(createdTaskTarget.taskId)}`}
+                  className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-emerald-800 transition hover:text-emerald-950"
+                >
+                  查看任务详情
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              ) : null}
+            </div>
           ) : null}
+
+          <div className="flex justify-end">
+            <Link
+              to="/tasks"
+              className="text-sm font-semibold text-slate-600 transition hover:text-slate-950"
+            >
+              查看全部任务
+            </Link>
+          </div>
 
           <RecentTasksTable
             tasks={currentRecentTasks}
@@ -2166,7 +2240,7 @@ export function MagnetIngestPage() {
 
         </div>
 
-        <aside className="space-y-5">
+        <aside className="min-w-0 space-y-5">
           <TaskLogsCard
             logs={currentTaskLogs}
             status={currentTaskLogsStatus}
