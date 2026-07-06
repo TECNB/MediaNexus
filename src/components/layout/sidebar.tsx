@@ -26,11 +26,14 @@ type NavigationItem = {
 }
 
 const primaryItems: NavigationItem[] = [
-  { icon: LayoutGrid, label: '控制台', to: '/dashboard' },
   { icon: Search, label: '资源搜索', to: '/resources' },
   { icon: Zap, label: '手动磁力入库', to: '/magnet-ingest' },
   { icon: SquareCheckBig, label: '任务中心', to: '/tasks' },
   { icon: Captions, label: '字幕管理', to: '/subtitles' },
+]
+
+const adminPrimaryItems: NavigationItem[] = [
+  { icon: LayoutGrid, label: '控制台', to: '/dashboard' },
 ]
 
 const secondaryItems: NavigationItem[] = [
@@ -64,6 +67,10 @@ function SidebarLink({ icon: Icon, label, to }: NavigationItem) {
 
 export function Sidebar() {
   const { user } = useAuth()
+  const visiblePrimaryItems =
+    user?.role === 'ADMIN'
+      ? [...adminPrimaryItems, ...primaryItems]
+      : primaryItems
   const visibleSecondaryItems =
     user?.role === 'ADMIN' ? [...adminItems, ...secondaryItems] : secondaryItems
 
@@ -75,7 +82,7 @@ export function Sidebar() {
         <ScrollArea className="flex-1">
           <div className="flex h-full flex-col justify-between px-3 pb-4">
             <nav className="space-y-1">
-              {primaryItems.map((item) => (
+              {visiblePrimaryItems.map((item) => (
                 <SidebarLink key={item.to} {...item} />
               ))}
             </nav>

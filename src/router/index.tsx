@@ -28,7 +28,14 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: <Navigate to="/resources" replace /> },
-      { path: 'dashboard', element: <DashboardPage /> },
+      {
+        path: 'dashboard',
+        element: (
+          <ProtectedRoute requiredRole="ADMIN">
+            <DashboardPage />
+          </ProtectedRoute>
+        ),
+      },
       { path: 'resources', element: <ResourceSearchPage /> },
       { path: 'resources/publish', element: <ResourcePublishPage /> },
       {

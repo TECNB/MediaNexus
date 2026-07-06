@@ -17,9 +17,15 @@ function ProtectedRouteLoading() {
   )
 }
 
-export function ProtectedRoute({ children }: { children: ReactNode }) {
+export function ProtectedRoute({
+  children,
+  requiredRole,
+}: {
+  children: ReactNode
+  requiredRole?: 'ADMIN'
+}) {
   const location = useLocation()
-  const { status } = useAuth()
+  const { status, user } = useAuth()
 
   if (status === 'loading') {
     return <ProtectedRouteLoading />
@@ -27,6 +33,10 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (status === 'unauthenticated') {
     return <Navigate replace state={{ from: location }} to="/login" />
+  }
+
+  if (requiredRole === 'ADMIN' && user?.role !== 'ADMIN') {
+    return <Navigate replace to="/resources" />
   }
 
   return children
