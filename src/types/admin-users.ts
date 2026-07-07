@@ -19,6 +19,8 @@ export type AdminUsageStatus =
   | 'EXCEEDED'
   | 'UNLIMITED'
 
+export type AdminRegistrationCodeSource = 'DATABASE' | 'CONFIG' | 'NONE'
+
 export type AdminUserUsageBreakdown = {
   magnet_ingest_create: number
   anime_subscribe_create: number
@@ -55,6 +57,11 @@ export type AdminUserSummary = {
 
 export type AdminDefaultQuota = {
   daily_content_create_limit: number
+}
+
+export type AdminRegistrationCode = {
+  registration_code: string | null
+  source: AdminRegistrationCodeSource
 }
 
 export type AdminUserQuotaUpdatePayload = {

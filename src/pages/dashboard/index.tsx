@@ -3,12 +3,14 @@ import type { ReactNode } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
+  Copy,
   Database,
   Eye,
   ExternalLink,
   Film,
   FolderOpen,
   HardDrive,
+  KeyRound,
   Layers,
   Loader2,
   Play,
@@ -30,9 +32,14 @@ import {
   previewAdultOtherCollections,
   syncAdultOtherCollections,
 } from '@/lib/api/adult-other-collections'
+import {
+  generateAdminRegistrationCode,
+  getAdminRegistrationCode,
+} from '@/lib/api/admin-registration-code'
 import { refreshAutoSymlink } from '@/lib/api/autosymlink'
 import { isJavaRequestCanceledError } from '@/lib/java-api'
 import { cn } from '@/lib/utils'
+import type { AdminRegistrationCodeSource } from '@/types/admin-users'
 import type {
   AutoSymlinkRefreshResult,
   AutoSymlinkRefreshTarget,
@@ -47,6 +54,7 @@ import type {
 
 type LoadStatus = 'idle' | 'loading' | 'success' | 'error'
 type SubmitAction = 'preview' | 'sync' | 'cleanupPreview' | 'cleanup'
+type RegistrationCodeStatus = 'idle' | 'loading' | 'saving'
 
 const DEFAULT_MIN_ITEM_COUNT = 2
 
@@ -183,6 +191,16 @@ function autoSymlinkTargetLabel(target: AutoSymlinkRefreshTarget) {
   return (
     autoSymlinkTargets.find((item) => item.target === target)?.label ?? target
   )
+}
+
+function registrationCodeSourceLabel(source: AdminRegistrationCodeSource) {
+  if (source === 'DATABASE') {
+    return '数据库生效'
+  }
+  if (source === 'CONFIG') {
+    return '环境配置生效'
+  }
+  return '未开放'
 }
 
 function signedDelta(value: number | null) {
@@ -539,6 +557,12 @@ export function DashboardPage() {
     String(DEFAULT_MIN_ITEM_COUNT),
   )
   const [selectedSourceFolderPath, setSelectedSourceFolderPath] = useState('')
+  const [registrationCode, setRegistrationCode] = useState('')
+  const [registrationCodeSource, setRegistrationCodeSource] =
+    useState<AdminRegistrationCodeSource>('NONE')
+  const [registrationCodeStatus, setRegistrationCodeStatus] =
+    useState<RegistrationCodeStatus>('idle')
+  const [registrationCodeCopied, setRegistrationCodeCopied] = useState(false)
 
   const selectedRun = currentRun ?? latestRun
   const selectedSourceFolder = selectedSourceFolderPath
@@ -603,6 +627,31 @@ export function DashboardPage() {
     void loadLatestRun(controller.signal)
     return () => controller.abort()
   }, [loadLatestRun])
+
+  const loadRegistrationCode = useCallback(async (signal?: AbortSignal) => {
+    setRegistrationCodeStatus('loading')
+    try {
+      const data = await getAdminRegistrationCode(signal)
+      setRegistrationCode(data.registration_code ?? '')
+      setRegistrationCodeSource(data.source)
+      setRegistrationCodeCopied(false)
+    } catch (error) {
+      if (isJavaRequestCanceledError(error)) {
+        return
+      }
+      setErrorMessage(
+        error instanceof Error ? error.message : '注册码数据加载失败',
+      )
+    } finally {
+      setRegistrationCodeStatus('idle')
+    }
+  }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void loadRegistrationCode(controller.signal)
+    return () => controller.abort()
+  }, [loadRegistrationCode])
 
   useEffect(() => {
     if (!toastMessage) {
@@ -683,6 +732,43 @@ export function DashboardPage() {
     },
     [],
   )
+
+  const generateRegistrationCode = useCallback(async () => {
+    if (
+      registrationCode &&
+      !window.confirm('生成新注册码后，旧注册码会立即失效。确定继续吗？')
+    ) {
+      return
+    }
+    setRegistrationCodeStatus('saving')
+    setErrorMessage(null)
+    try {
+      const data = await generateAdminRegistrationCode()
+      setRegistrationCode(data.registration_code ?? '')
+      setRegistrationCodeSource(data.source)
+      setRegistrationCodeCopied(false)
+      setToastMessage('新注册码已生成并启用')
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : '注册码生成失败',
+      )
+    } finally {
+      setRegistrationCodeStatus('idle')
+    }
+  }, [registrationCode])
+
+  const copyRegistrationCode = useCallback(async () => {
+    if (!registrationCode) {
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(registrationCode)
+      setRegistrationCodeCopied(true)
+      setToastMessage('注册码已复制')
+    } catch {
+      setErrorMessage('注册码复制失败，请手动复制。')
+    }
+  }, [registrationCode])
 
   return (
     <PageContainer
@@ -924,6 +1010,52 @@ export function DashboardPage() {
             </div>
           </OperationPanel>
         </div>
+
+        <OperationPanel icon={KeyRound} title="注册码">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_16rem] xl:items-start">
+            <div className="min-w-0">
+              <div className="flex min-h-16 items-center rounded-lg bg-slate-950 px-5 py-4">
+                <p className="break-all font-mono text-xl font-semibold leading-8 tracking-[0.12em] text-white sm:text-2xl">
+                  {registrationCodeStatus === 'loading'
+                    ? '加载中'
+                    : registrationCode || '未开放注册'}
+                </p>
+              </div>
+              <p className="mt-3 text-xs leading-5 text-slate-500">
+                {registrationCodeSourceLabel(registrationCodeSource)}。生成新注册码会写入后端数据库，并立即作为注册页校验值。
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <Button
+                className="h-11 w-full"
+                disabled={registrationCodeStatus !== 'idle'}
+                onClick={() => void generateRegistrationCode()}
+                type="button"
+              >
+                {registrationCodeStatus === 'saving' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                生成并启用
+              </Button>
+              <Button
+                className="h-11 w-full"
+                disabled={!registrationCode || registrationCodeStatus !== 'idle'}
+                onClick={() => void copyRegistrationCode()}
+                type="button"
+                variant="outline"
+              >
+                {registrationCodeCopied ? (
+                  <CheckCircle2 className="h-4 w-4" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+                {registrationCodeCopied ? '已复制' : '复制'}
+              </Button>
+            </div>
+          </div>
+        </OperationPanel>
 
         {errorMessage ? (
           <div className="flex items-start gap-3 rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-100">
