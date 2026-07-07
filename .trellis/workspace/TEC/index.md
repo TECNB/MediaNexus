@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 2
-- **Last Active**: 2026-07-07
+- **Total Sessions**: 1
+- **Last Active**: 2026-06-30
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~73 | Active |
+| `journal-1.md` | ~40 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,7 +29,6 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
-| 2 | 2026-07-07 | 收敛字幕管理页面 | `4ba99a5` | `master` |
 | 1 | 2026-06-30 | 实现动漫整季入库与追更订阅切换 | `61f9f8f` | `master` |
 <!-- @@@/auto:session-history -->
 
