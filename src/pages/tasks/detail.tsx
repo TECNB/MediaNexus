@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type UIEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -17,6 +17,7 @@ import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
 import {
   getOpenListTaskCenterDetail,
+  listOpenListTaskCenterLogs,
   replaceOpenListManualMagnet,
   retryOpenListAdultBatch,
   reuseOriginalOpenListManualMagnet,
@@ -27,6 +28,7 @@ import type { MagnetIngestTaskStatus } from '@/types/magnet-ingest'
 import type {
   OpenListTaskCenterAttempt,
   OpenListTaskCenterDetail,
+  OpenListTaskCenterLog,
   OpenListTaskCenterProductType,
 } from '@/types/task-center'
 
@@ -41,6 +43,7 @@ type PageState = {
 type RetrySubmitAction = 'reuse' | 'replace'
 
 const DETAIL_POLL_INTERVAL_MS = 2000
+const LOG_PAGE_SIZE = 100
 const supportedTaskTypes = new Set(['movie', 'series', 'anime', 'adult'])
 
 const terminalStatuses = new Set<MagnetIngestTaskStatus>([
@@ -110,6 +113,39 @@ function formatTime(value: string | null) {
     minute: '2-digit',
     second: '2-digit',
   })
+}
+
+function taskIdentity(detail: OpenListTaskCenterDetail) {
+  return `${detail.task_type}:${detail.id}`
+}
+
+function isSameTask(
+  current: OpenListTaskCenterDetail | null,
+  incoming: OpenListTaskCenterDetail,
+) {
+  return current !== null && taskIdentity(current) === taskIdentity(incoming)
+}
+
+function firstLogId(logs: OpenListTaskCenterLog[]) {
+  return logs.length > 0 ? logs[0].id : null
+}
+
+function lastLogId(logs: OpenListTaskCenterLog[]) {
+  return logs.length > 0 ? logs[logs.length - 1].id : null
+}
+
+function mergeLogs(
+  current: OpenListTaskCenterLog[],
+  incoming: OpenListTaskCenterLog[],
+) {
+  const byId = new Map<number, OpenListTaskCenterLog>()
+  for (const log of current) {
+    byId.set(log.id, log)
+  }
+  for (const log of incoming) {
+    byId.set(log.id, log)
+  }
+  return Array.from(byId.values()).sort((left, right) => left.id - right.id)
 }
 
 function getTerminalStage(detail: OpenListTaskCenterDetail) {
@@ -300,6 +336,15 @@ export function TaskCenterDetailPage() {
   const initializedAdultBatchTaskRef = useRef<string | null>(null)
   const activeLoadControllerRef = useRef<AbortController | null>(null)
   const latestLoadRequestIdRef = useRef(0)
+  const detailRef = useRef<OpenListTaskCenterDetail | null>(null)
+  const logScrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const initialLogScrollTaskRef = useRef<string | null>(null)
+  const loadingOlderLogsRef = useRef(false)
+  const [isLoadingOlderLogs, setIsLoadingOlderLogs] = useState(false)
+
+  useEffect(() => {
+    detailRef.current = pageState.detail
+  }, [pageState.detail])
 
   const loadDetail = useCallback(
     async (silent = false) => {
@@ -325,19 +370,94 @@ export function TaskCenterDetailPage() {
       }))
 
       try {
+        const previousDetail = detailRef.current
+        const shouldPreserveLogs =
+          silent &&
+          previousDetail !== null &&
+          previousDetail.id === taskId &&
+          previousDetail.task_type.toLowerCase() === normalizedTaskType
         const detail = await getOpenListTaskCenterDetail(
           normalizedTaskType,
           taskId,
           controller.signal,
+          shouldPreserveLogs ? 0 : LOG_PAGE_SIZE,
         )
         if (latestLoadRequestIdRef.current !== requestId) {
           return
         }
+        const nextDetail =
+          shouldPreserveLogs && isSameTask(previousDetail, detail)
+            ? {
+                ...detail,
+                logs: previousDetail.logs,
+                logs_has_older: previousDetail.logs_has_older,
+                logs_has_newer: previousDetail.logs_has_newer,
+                last_warning_or_error_log:
+                  previousDetail.last_warning_or_error_log,
+              }
+            : detail
+        detailRef.current = nextDetail
         setPageState({
           status: 'success',
-          detail,
+          detail: nextDetail,
           message: null,
         })
+
+        const afterId =
+          shouldPreserveLogs && previousDetail
+            ? lastLogId(previousDetail.logs)
+            : null
+        const logParams = shouldPreserveLogs
+          ? afterId !== null
+            ? { afterId, limit: LOG_PAGE_SIZE }
+            : { limit: LOG_PAGE_SIZE }
+          : null
+        if (logParams !== null) {
+          const container = logScrollContainerRef.current
+          const shouldStickToBottom = container
+            ? container.scrollHeight - container.scrollTop - container.clientHeight < 80
+            : false
+          const logPage = await listOpenListTaskCenterLogs(
+            normalizedTaskType,
+            taskId,
+            logParams,
+            controller.signal,
+          )
+          if (
+            latestLoadRequestIdRef.current !== requestId ||
+            logPage.logs.length === 0
+          ) {
+            return
+          }
+          setPageState((current) => {
+            if (!current.detail || !isSameTask(current.detail, detail)) {
+              return current
+            }
+            const mergedDetail = {
+              ...current.detail,
+              logs: mergeLogs(current.detail.logs, logPage.logs),
+              logs_has_older:
+                current.detail.logs.length > 0
+                  ? current.detail.logs_has_older
+                  : logPage.has_older,
+              logs_has_newer: logPage.has_newer,
+            }
+            detailRef.current = mergedDetail
+            return {
+              status: 'success',
+              detail: mergedDetail,
+              message: null,
+            }
+          })
+          if (shouldStickToBottom) {
+            window.requestAnimationFrame(() => {
+              const currentContainer = logScrollContainerRef.current
+              if (currentContainer) {
+                currentContainer.scrollTop = currentContainer.scrollHeight
+              }
+            })
+          }
+        }
       } catch (error) {
         if (
           isJavaRequestCanceledError(error) ||
@@ -402,6 +522,98 @@ export function TaskCenterDetailPage() {
 
     return () => window.clearTimeout(timeoutId)
   }, [isPageVisible, loadDetail, pageState.detail, pageState.status])
+
+  useEffect(() => {
+    const detail = pageState.detail
+    const container = logScrollContainerRef.current
+    if (!detail || !container) {
+      return
+    }
+    const key = taskIdentity(detail)
+    if (initialLogScrollTaskRef.current === key) {
+      return
+    }
+    initialLogScrollTaskRef.current = key
+    window.requestAnimationFrame(() => {
+      container.scrollTop = container.scrollHeight
+    })
+  }, [pageState.detail])
+
+  const loadOlderLogs = useCallback(async () => {
+    const currentDetail = detailRef.current
+    if (
+      !normalizedTaskType ||
+      !taskId ||
+      !currentDetail ||
+      !currentDetail.logs_has_older ||
+      loadingOlderLogsRef.current
+    ) {
+      return
+    }
+    const beforeId = firstLogId(currentDetail.logs)
+    if (beforeId === null) {
+      return
+    }
+
+    const container = logScrollContainerRef.current
+    const previousScrollHeight = container?.scrollHeight ?? 0
+    const previousScrollTop = container?.scrollTop ?? 0
+    loadingOlderLogsRef.current = true
+    setIsLoadingOlderLogs(true)
+    try {
+      const logPage = await listOpenListTaskCenterLogs(
+        normalizedTaskType,
+        taskId,
+        { beforeId, limit: LOG_PAGE_SIZE },
+      )
+      setPageState((current) => {
+        if (!current.detail || !isSameTask(current.detail, currentDetail)) {
+          return current
+        }
+        const mergedDetail = {
+          ...current.detail,
+          logs: mergeLogs(logPage.logs, current.detail.logs),
+          logs_has_older: logPage.has_older,
+        }
+        detailRef.current = mergedDetail
+        return {
+          status: 'success',
+          detail: mergedDetail,
+          message: null,
+        }
+      })
+      window.requestAnimationFrame(() => {
+        const currentContainer = logScrollContainerRef.current
+        if (!currentContainer) {
+          return
+        }
+        currentContainer.scrollTop =
+          currentContainer.scrollHeight - previousScrollHeight + previousScrollTop
+      })
+    } catch (error) {
+      if (!isJavaRequestCanceledError(error)) {
+        setPageState((current) => ({
+          ...current,
+          message:
+            error instanceof Error && error.message.trim()
+              ? error.message.trim()
+              : '历史日志加载失败，请稍后重试。',
+        }))
+      }
+    } finally {
+      loadingOlderLogsRef.current = false
+      setIsLoadingOlderLogs(false)
+    }
+  }, [normalizedTaskType, taskId])
+
+  const handleLogsScroll = useCallback(
+    (event: UIEvent<HTMLDivElement>) => {
+      if (event.currentTarget.scrollTop <= 24) {
+        void loadOlderLogs()
+      }
+    },
+    [loadOlderLogs],
+  )
 
   useEffect(() => {
     const detail = pageState.detail
@@ -835,35 +1047,69 @@ export function TaskCenterDetailPage() {
             </section>
           ) : null}
 
-          <section className="overflow-hidden rounded-[28px] bg-slate-950 shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
-            <div className="flex items-center justify-between px-5 py-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                <TerminalSquare className="h-4 w-4" />
-                实时任务日志
+          <section className="overflow-hidden rounded-[28px] border border-slate-900 bg-[#111214] shadow-[0_24px_50px_rgba(15,23,42,0.2)]">
+            <div className="flex items-center justify-between border-b border-white/5 bg-white/5 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-zinc-600" />
+                <span className="h-2.5 w-2.5 rounded-full bg-zinc-600" />
+                <span className="h-2.5 w-2.5 rounded-full bg-zinc-600" />
               </div>
-              <span className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-300">
+              <span className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
+                <TerminalSquare className="h-3.5 w-3.5" />
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
                 {isPolling ? '轮询中' : '已停止'}
               </span>
             </div>
 
-            <div className="max-h-[420px] overflow-auto px-5 pb-5 font-mono text-xs leading-6">
+            <div
+              ref={logScrollContainerRef}
+              onScroll={handleLogsScroll}
+              className="task-log-scrollbar max-h-[420px] min-h-[260px] overflow-y-auto px-4 py-4 font-mono text-[12px] leading-6"
+            >
+              {detail.logs_has_older ? (
+                <div className="flex justify-center pb-3">
+                  <button
+                    type="button"
+                    className="inline-flex h-7 items-center gap-2 rounded-full border border-zinc-700 px-3 text-[11px] font-semibold text-zinc-300 transition hover:border-zinc-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={loadOlderLogs}
+                    disabled={isLoadingOlderLogs}
+                  >
+                    {isLoadingOlderLogs ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : null}
+                    加载更早日志
+                  </button>
+                </div>
+              ) : null}
               {detail.logs.length > 0 ? (
                 detail.logs.map((log) => (
-                  <div key={log.id} className="text-slate-300">
-                    <span className="text-slate-500">
+                  <div key={log.id} className="text-zinc-300">
+                    <span className="text-zinc-600">
                       [{formatTime(log.created_at)}]
                     </span>{' '}
-                    <span className="text-sky-300">{log.level}</span>{' '}
-                    <span className="text-emerald-300">{log.stage}</span>{' '}
+                    <span
+                      className={cn(
+                        'font-semibold',
+                        log.level === 'ERROR'
+                          ? 'text-rose-300'
+                          : log.level === 'WARN'
+                            ? 'text-amber-300'
+                            : 'text-emerald-300',
+                      )}
+                    >
+                      {log.level}
+                    </span>{' '}
+                    <span className="text-zinc-600">[{log.stage}]</span>{' '}
                     <span>{log.message}</span>
                     {log.detail ? (
-                      <span className="text-slate-500"> · {log.detail}</span>
+                      <span className="block break-all pl-4 text-zinc-500">
+                        {log.detail}
+                      </span>
                     ) : null}
                   </div>
                 ))
               ) : (
-                <p className="text-slate-500">暂无日志。</p>
+                <p className="text-zinc-500">暂无日志。</p>
               )}
             </div>
           </section>

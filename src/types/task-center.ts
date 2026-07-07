@@ -134,6 +134,8 @@ export type OpenListTaskCenterDetail = {
   error_message: string | null
   last_warning_or_error_log: OpenListTaskCenterLog | null
   logs: OpenListTaskCenterLog[]
+  logs_has_older: boolean
+  logs_has_newer: boolean
   is_active: boolean
   pending_explanation: string | null
   batch_download_links: string[] | null
@@ -141,6 +143,14 @@ export type OpenListTaskCenterDetail = {
   created_at: string | null
   updated_at: string | null
   finished_at: string | null
+}
+
+export type OpenListTaskCenterLogsData = {
+  logs: OpenListTaskCenterLog[]
+  has_older: boolean
+  has_newer: boolean
+  min_log_id: number | null
+  max_log_id: number | null
 }
 
 export type OpenListManualMagnetRetryResult = {

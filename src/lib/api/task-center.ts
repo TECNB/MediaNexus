@@ -11,6 +11,7 @@ import type {
   OpenListTaskCenterDetail,
   OpenListTaskCenterListData,
   OpenListTaskCenterListParams,
+  OpenListTaskCenterLogsData,
   OpenListTaskCenterTaskType,
 } from '@/types/task-center'
 
@@ -60,6 +61,7 @@ export async function getOpenListTaskCenterDetail(
   taskType: OpenListTaskCenterTaskType | string,
   taskId: string,
   signal?: AbortSignal,
+  logLimit?: number,
 ): Promise<OpenListTaskCenterDetail> {
   try {
     const response = await javaApiClient.get<
@@ -68,7 +70,12 @@ export async function getOpenListTaskCenterDetail(
       `/api/v1/task-center/openlist-ingest/tasks/${encodeURIComponent(
         taskType.toLowerCase(),
       )}/${encodeURIComponent(taskId)}`,
-      { signal },
+      {
+        params: {
+          log_limit: logLimit,
+        },
+        signal,
+      },
     )
 
     if (
@@ -77,6 +84,52 @@ export async function getOpenListTaskCenterDetail(
       !Array.isArray(response.data.data.logs)
     ) {
       throw new Error(response.data.message || 'task center detail fetch failed')
+    }
+
+    return response.data.data
+  } catch (error) {
+    if (isJavaRequestCanceledError(error)) {
+      throw error
+    }
+    throw new Error(
+      getJavaErrorMessage(error) || JAVA_TASK_CENTER_ERROR_MESSAGE,
+    )
+  }
+}
+
+export async function listOpenListTaskCenterLogs(
+  taskType: OpenListTaskCenterTaskType | string,
+  taskId: string,
+  params: {
+    beforeId?: number
+    afterId?: number
+    limit?: number
+  } = {},
+  signal?: AbortSignal,
+): Promise<OpenListTaskCenterLogsData> {
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<OpenListTaskCenterLogsData>
+    >(
+      `/api/v1/task-center/openlist-ingest/tasks/${encodeURIComponent(
+        taskType.toLowerCase(),
+      )}/${encodeURIComponent(taskId)}/logs`,
+      {
+        params: {
+          before_id: params.beforeId,
+          after_id: params.afterId,
+          limit: params.limit,
+        },
+        signal,
+      },
+    )
+
+    if (
+      response.data.code !== 200 ||
+      !response.data.data ||
+      !Array.isArray(response.data.data.logs)
+    ) {
+      throw new Error(response.data.message || 'task center logs fetch failed')
     }
 
     return response.data.data
