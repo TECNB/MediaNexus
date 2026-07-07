@@ -5,10 +5,16 @@ import {
   CheckCircle2,
   Database,
   Eye,
+  ExternalLink,
+  Film,
+  FolderOpen,
+  HardDrive,
   Layers,
   Loader2,
   Play,
   RefreshCw,
+  Search,
+  Server,
   Trash2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -43,6 +49,58 @@ type LoadStatus = 'idle' | 'loading' | 'success' | 'error'
 type SubmitAction = 'preview' | 'sync' | 'cleanupPreview' | 'cleanup'
 
 const DEFAULT_MIN_ITEM_COUNT = 2
+
+type AdminQuickLink = {
+  description: string
+  icon: LucideIcon
+  id: string
+  label: string
+  tone: string
+  url: string
+}
+
+const adminQuickLinks: AdminQuickLink[] = [
+  {
+    description: '媒体库后台',
+    icon: Film,
+    id: 'emby',
+    label: 'Emby',
+    tone: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    url: 'http://107.172.224.11:8096',
+  },
+  {
+    description: '索引器管理',
+    icon: Search,
+    id: 'prowlarr',
+    label: 'Prowlarr',
+    tone: 'bg-sky-50 text-sky-700 ring-sky-200',
+    url: 'http://107.172.46.215:9696',
+  },
+  {
+    description: '网盘文件与离线任务',
+    icon: FolderOpen,
+    id: 'openlist',
+    label: 'OpenList',
+    tone: 'bg-violet-50 text-violet-700 ring-violet-200',
+    url: 'http://107.172.46.215:5244',
+  },
+  {
+    description: 'CloudDrive2',
+    icon: HardDrive,
+    id: 'cd2',
+    label: 'CD2',
+    tone: 'bg-cyan-50 text-cyan-700 ring-cyan-200',
+    url: 'http://107.172.224.11:19798',
+  },
+  {
+    description: 'AutoSymlink',
+    icon: Server,
+    id: 'as',
+    label: 'AS',
+    tone: 'bg-amber-50 text-amber-700 ring-amber-200',
+    url: 'http://107.172.224.11:8095',
+  },
+]
 
 const autoSymlinkTargets: Array<{
   label: string
@@ -276,6 +334,54 @@ function OperationPanel({
         {action}
       </div>
       {children}
+    </section>
+  )
+}
+
+function AdminQuickLinksPanel() {
+  return (
+    <section className="rounded-lg bg-white p-5 shadow-shell ring-1 ring-slate-200">
+      <div className="mb-5 flex items-center gap-3">
+        <span className="rounded-lg bg-slate-100 p-2 text-slate-700">
+          <ExternalLink className="h-5 w-5" />
+        </span>
+        <h2 className="text-base font-semibold text-slate-950">快捷入口</h2>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {adminQuickLinks.map((item) => {
+          const Icon = item.icon
+
+          return (
+            <Button
+              asChild
+              className="h-auto min-h-20 justify-start whitespace-normal px-4 py-3 text-left"
+              key={item.id}
+              variant="outline"
+            >
+              <a href={item.url} rel="noreferrer" target="_blank">
+                <span
+                  className={cn(
+                    'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ring-1',
+                    item.tone,
+                  )}
+                >
+                  <Icon className="h-5 w-5" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-semibold text-slate-950">
+                    {item.label}
+                  </span>
+                  <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">
+                    {item.description}
+                  </span>
+                </span>
+                <ExternalLink className="ml-auto h-4 w-4 shrink-0 text-slate-400" />
+              </a>
+            </Button>
+          )
+        })}
+      </div>
     </section>
   )
 }
@@ -584,6 +690,8 @@ export function DashboardPage() {
       description="管理 Adult-Other Collection 同步与后续系统能力。"
     >
       <div className="space-y-6">
+        <AdminQuickLinksPanel />
+
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard
             icon={Layers}
