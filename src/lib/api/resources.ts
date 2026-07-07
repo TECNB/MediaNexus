@@ -33,6 +33,8 @@ type JavaApiResponse<TData> = {
   data: TData | null
 }
 
+const PROWLARR_RELEASE_REQUEST_TIMEOUT_MS = 120_000
+
 function getAxiosErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
     const message = error.response?.data?.message
@@ -251,6 +253,7 @@ export async function searchProwlarrReleases(
     >('/api/v1/resources/releases/search', {
       params,
       signal,
+      timeout: PROWLARR_RELEASE_REQUEST_TIMEOUT_MS,
     })
 
     if (
@@ -278,7 +281,9 @@ export async function recommendMovieRelease(
   try {
     const response = await javaApiClient.post<
       JavaApiResponse<ProwlarrReleaseRecommendationData>
-    >('/api/v1/resources/movies/releases/recommendation', payload)
+    >('/api/v1/resources/movies/releases/recommendation', payload, {
+      timeout: PROWLARR_RELEASE_REQUEST_TIMEOUT_MS,
+    })
 
     const data = response.data.data
     const items = Array.isArray(data?.items)
@@ -313,7 +318,10 @@ export async function searchMovieReleases(
   try {
     const response = await javaApiClient.post<
       JavaApiResponse<ProwlarrReleaseSearchData>
-    >('/api/v1/resources/movies/releases/search', payload, { signal })
+    >('/api/v1/resources/movies/releases/search', payload, {
+      signal,
+      timeout: PROWLARR_RELEASE_REQUEST_TIMEOUT_MS,
+    })
 
     if (
       response.data.code !== 200 ||
@@ -340,7 +348,9 @@ export async function recommendSeriesRelease(
   try {
     const response = await javaApiClient.post<
       JavaApiResponse<ProwlarrReleaseRecommendationData>
-    >('/api/v1/resources/series/releases/recommendation', payload)
+    >('/api/v1/resources/series/releases/recommendation', payload, {
+      timeout: PROWLARR_RELEASE_REQUEST_TIMEOUT_MS,
+    })
 
     const data = response.data.data
     const items = Array.isArray(data?.items)
@@ -375,7 +385,10 @@ export async function searchSeriesReleases(
   try {
     const response = await javaApiClient.post<
       JavaApiResponse<ProwlarrReleaseSearchData>
-    >('/api/v1/resources/series/releases/search', payload, { signal })
+    >('/api/v1/resources/series/releases/search', payload, {
+      signal,
+      timeout: PROWLARR_RELEASE_REQUEST_TIMEOUT_MS,
+    })
 
     if (
       response.data.code !== 200 ||
