@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -153,13 +153,13 @@ function stageLabel(stage: string) {
 
 function TaskStat({
   label,
-  value,
+  description,
   tone,
   active,
   onClick,
 }: {
   label: string
-  value: number
+  description: string
   tone: string
   active: boolean
   onClick: () => void
@@ -177,7 +177,7 @@ function TaskStat({
       )}
     >
       <p className="text-xs font-semibold text-slate-500">{label}</p>
-      <p className={cn('mt-2 text-2xl font-semibold', tone)}>{value}</p>
+      <p className={cn('mt-2 text-sm font-semibold', tone)}>{description}</p>
     </button>
   )
 }
@@ -394,15 +394,6 @@ export function TaskCenterPage() {
   }, [loadTasks])
 
   const data = pageState.data
-  const summary = useMemo(
-    () => ({
-      total: data?.all_count ?? 0,
-      inProgress: data?.in_progress_count ?? 0,
-      needsAttention: data?.needs_attention_count ?? 0,
-      succeeded: data?.succeeded_count ?? 0,
-    }),
-    [data],
-  )
   const total = data?.total ?? 0
   const currentPage = data?.page ?? page
   const currentPageSize = data?.page_size ?? pageSize
@@ -439,28 +430,28 @@ export function TaskCenterPage() {
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <TaskStat
           label="全部任务"
-          value={summary.total}
+          description="完整列表"
           tone="text-slate-950"
           active={view === 'ALL'}
           onClick={() => setView('ALL')}
         />
         <TaskStat
           label="进行中"
-          value={summary.inProgress}
+          description="正在执行"
           tone="text-sky-700"
           active={view === 'IN_PROGRESS'}
           onClick={() => setView('IN_PROGRESS')}
         />
         <TaskStat
           label="需要处理"
-          value={summary.needsAttention}
+          description="失败或中断"
           tone="text-rose-700"
           active={view === 'NEEDS_ATTENTION'}
           onClick={() => setView('NEEDS_ATTENTION')}
         />
         <TaskStat
           label="已完成"
-          value={summary.succeeded}
+          description="成功完成"
           tone="text-emerald-700"
           active={view === 'SUCCEEDED'}
           onClick={() => setView('SUCCEEDED')}
@@ -547,7 +538,7 @@ export function TaskCenterPage() {
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : pageState.status === 'error' ? (
               <AlertTriangle className="h-4 w-4 text-rose-600" />
-            ) : summary.needsAttention > 0 ? (
+            ) : view === 'NEEDS_ATTENTION' ? (
               <Clock3 className="h-4 w-4 text-amber-600" />
             ) : (
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
