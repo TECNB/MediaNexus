@@ -5,7 +5,6 @@ import {
   FileText,
   RefreshCcw,
   Search,
-  Trash2,
   Upload,
 } from 'lucide-react'
 
@@ -788,7 +787,7 @@ function UploadResultSummary({
           目标目录：{response.target_path}
         </p>
         <p className="mt-1 text-xs text-emerald-700/90">
-          已上传 {response.files.length} 个字幕文件，当前等待 AS 后续迁移。
+          已上传 {response.files.length} 个字幕文件，已触发 AS 刷新流程，当前等待迁移。
         </p>
       </div>
     )
@@ -1237,7 +1236,7 @@ export function SubtitleManagePage() {
       }
 
       void refreshUploadHistory(response.id)
-      showToast('上传成功，等待 AS 迁移')
+      showToast('上传成功，已触发 AS 刷新')
     } catch (error) {
       const message =
         error instanceof Error && error.message.trim()
@@ -1259,8 +1258,8 @@ export function SubtitleManagePage() {
 
   return (
     <PageContainer
-      title="资源编目"
-      description="上传字幕到电影或剧集源目录，自动重命名后等待 AS 迁移。"
+      title="字幕管理"
+      description="上传字幕到电影或剧集源目录，自动重命名并触发 AS 刷新。"
     >
       <div className="space-y-5">
         <div className="flex items-center gap-2 text-xs text-slate-400">
@@ -1479,38 +1478,6 @@ export function SubtitleManagePage() {
               </div>
             </section>
 
-            <section className="rounded-[28px] border border-slate-200 bg-white/95 p-5 shadow-shell">
-              <div className="space-y-1">
-                <h3 className="text-sm font-semibold text-slate-950">
-                  快捷操作
-                </h3>
-                <p className="text-sm text-slate-500">
-                  当前按钮只保留演示态交互反馈。
-                </p>
-              </div>
-
-              <div className="mt-5 grid gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-12 rounded-2xl border-slate-200 bg-slate-50/70 text-slate-950 hover:bg-white"
-                  onClick={showDemoToast}
-                >
-                  <RefreshCcw className="h-4 w-4" />
-                  Force Emby Scan
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-12 rounded-2xl border-slate-200 bg-slate-50/70 text-slate-950 hover:bg-white"
-                  onClick={showDemoToast}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Clear Temp Cache
-                </Button>
-              </div>
-            </section>
           </aside>
         </div>
       </div>
