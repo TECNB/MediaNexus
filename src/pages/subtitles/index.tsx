@@ -10,6 +10,11 @@ import {
 } from 'lucide-react'
 
 import { PageContainer } from '@/components/layout/page-container'
+import {
+  OperationalLogPanel,
+  type OperationalLogEntry,
+  type OperationalLogStatus,
+} from '@/components/operation-log/operational-log-panel'
 import { Button } from '@/components/ui/button'
 import { SelectControl } from '@/components/ui/form-control'
 import {
@@ -26,7 +31,6 @@ import {
 import { cn } from '@/lib/utils'
 import type { MovieSearchItem, SeriesSearchItem } from '@/types/resources'
 import type {
-  SubtitleUploadLog,
   SubtitleUploadResponse,
   SubtitleUploadStatus,
 } from '@/types/subtitles'
@@ -41,14 +45,6 @@ type RecentProcessRecord = {
   project: string
   status: ProcessStatus
   time: string
-}
-
-type LogTone = 'default' | 'muted' | 'success' | 'warning' | 'info'
-
-type SystemLogRecord = {
-  timestamp: string
-  message: string
-  tone?: LogTone
 }
 
 type SubtitleAssociationItem = {
@@ -70,6 +66,16 @@ type LastUploadResult = {
 
 const demoToastMessage = '演示模式：当前仅展示前端搜索与选择交互'
 const supportedSubtitleUploadExtensions = ['srt', 'ass', 'sup', 'zip']
+const subtitleLogStageLabels: Record<string, string> = {
+  created: '已创建',
+  target_checking: '检查目录',
+  planning: '规划文件',
+  uploading: '上传中',
+  uploaded: '已上传',
+  waiting_for_as: '等待 AS',
+  failed: '失败',
+}
+const subtitleTerminalLogStages = new Set(['waiting_for_as', 'failed'])
 
 const processStatusMeta: Record<
   ProcessStatus,
@@ -99,14 +105,6 @@ const processStatusMeta: Record<
     badgeClassName: 'bg-rose-50 text-rose-700',
     dotClassName: 'bg-rose-500',
   },
-}
-
-const logToneClassName: Record<LogTone, string> = {
-  default: 'text-zinc-300',
-  muted: 'text-zinc-500',
-  success: 'text-emerald-400/85',
-  warning: 'text-amber-400/85',
-  info: 'text-sky-400/85',
 }
 
 function formatFileSize(size: number) {
@@ -183,34 +181,6 @@ function getAssociationProjectLabel(
   return baseLabel
 }
 
-function getCurrentLogTimestamp() {
-  return new Intl.DateTimeFormat('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(new Date())
-}
-
-function formatLogTimestamp(value: string | null) {
-  if (!value) {
-    return getCurrentLogTimestamp()
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return getCurrentLogTimestamp()
-  }
-
-  return new Intl.DateTimeFormat('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(date)
-}
-
 function formatRecordTime(value: string | null) {
   if (!value) {
     return '刚刚'
@@ -262,65 +232,49 @@ function buildRecentProcessRecord(
   }
 }
 
-function mapLogTone(log: SubtitleUploadLog): LogTone {
-  if (log.level === 'ERROR') {
-    return 'warning'
-  }
-
-  if (log.level === 'WARN') {
-    return 'warning'
-  }
-
-  if (log.stage === 'waiting_for_as') {
-    return 'success'
-  }
-
-  if (log.stage === 'target_checking' || log.stage === 'planning') {
-    return 'info'
-  }
-
-  return 'default'
-}
-
-function buildSystemLogRecords(logs: SubtitleUploadLog[]): SystemLogRecord[] {
-  return logs.map((log) => ({
-    timestamp: formatLogTimestamp(log.created_at),
-    message: log.detail ? `${log.message}: ${log.detail}` : log.message,
-    tone: mapLogTone(log),
-  }))
-}
-
 function buildUploadSuccessLogs(
   fileName: string,
   item: SubtitleAssociationItem,
   response: SubtitleUploadResponse,
-): SystemLogRecord[] {
-  const timestamp = getCurrentLogTimestamp()
+): OperationalLogEntry[] {
+  const createdAt = new Date().toISOString()
 
   return [
     {
-      timestamp,
-      message: `SUCCESS: Uploaded ${fileName}`,
-      tone: 'success',
+      id: `${response.id}-uploaded`,
+      level: 'INFO',
+      stage: 'uploaded',
+      message: `已上传 ${fileName}`,
+      detail: null,
+      created_at: createdAt,
     },
     {
-      timestamp,
-      message: `Target: ${response.target_path}`,
-      tone: 'info',
+      id: `${response.id}-target`,
+      level: 'INFO',
+      stage: 'uploaded',
+      message: '字幕文件已写入目标目录',
+      detail: response.target_path,
+      created_at: createdAt,
     },
     {
-      timestamp,
+      id: `${response.id}-waiting-for-as`,
+      level: 'INFO',
+      stage: 'waiting_for_as',
       message: `已保存 ${response.files.length} 个字幕文件：${getAssociationProjectLabel(item, response.season_number)}`,
-      tone: 'muted',
+      detail: null,
+      created_at: createdAt,
     },
   ]
 }
 
-function buildUploadFailureLog(message: string): SystemLogRecord {
+function buildUploadFailureLog(message: string): OperationalLogEntry {
   return {
-    timestamp: getCurrentLogTimestamp(),
-    message: `ERROR: ${message}`,
-    tone: 'warning',
+    id: `upload-failed-${Date.now()}`,
+    level: 'ERROR',
+    stage: 'failed',
+    message,
+    detail: null,
+    created_at: new Date().toISOString(),
   }
 }
 
@@ -859,8 +813,15 @@ export function SubtitleManagePage() {
     useState<LastUploadResult | null>(null)
   const [recentProcessRecords, setRecentProcessRecords] =
     useState<RecentProcessRecord[]>([])
-  const [systemLogRecords, setSystemLogRecords] =
-    useState<SystemLogRecord[]>([])
+  const [systemLogRecords, setSystemLogRecords] = useState<
+    OperationalLogEntry[]
+  >([])
+  const [systemLogStatus, setSystemLogStatus] =
+    useState<OperationalLogStatus>('loading')
+  const [systemLogError, setSystemLogError] = useState<string | null>(null)
+  const [selectedLogUploadId, setSelectedLogUploadId] = useState<string | null>(
+    null,
+  )
   const [associationKeyword, setAssociationKeyword] = useState('')
   const [associationOpen, setAssociationOpen] = useState(false)
   const [associationStatus, setAssociationStatus] =
@@ -904,6 +865,9 @@ export function SubtitleManagePage() {
   }, [])
 
   async function refreshUploadHistory(preferredUploadId?: string) {
+    setSystemLogStatus('loading')
+    setSystemLogError(null)
+
     try {
       const uploads = await listSubtitleUploads()
       setRecentProcessRecords(uploads.map(buildRecentProcessRecord))
@@ -912,33 +876,46 @@ export function SubtitleManagePage() {
         uploads.find((upload) => upload.id === preferredUploadId) ?? uploads[0]
 
       if (!selectedUpload) {
+        setSelectedLogUploadId(null)
         setSystemLogRecords([])
+        setSystemLogStatus('empty')
         return
       }
 
+      setSelectedLogUploadId(selectedUpload.id)
       const logs = await listSubtitleUploadLogs(selectedUpload.id)
-      setSystemLogRecords(buildSystemLogRecords(logs))
+      setSystemLogRecords(logs)
+      setSystemLogStatus(logs.length > 0 ? 'success' : 'empty')
     } catch (error) {
       const message =
         error instanceof Error && error.message.trim()
           ? error.message.trim()
           : '字幕上传记录加载失败'
 
-      setSystemLogRecords([buildUploadFailureLog(message)])
+      setSystemLogRecords([])
+      setSystemLogError(message)
+      setSystemLogStatus('error')
     }
   }
 
   async function refreshUploadLogs(uploadId: string) {
+    setSelectedLogUploadId(uploadId)
+    setSystemLogStatus('loading')
+    setSystemLogError(null)
+
     try {
       const logs = await listSubtitleUploadLogs(uploadId)
-      setSystemLogRecords(buildSystemLogRecords(logs))
+      setSystemLogRecords(logs)
+      setSystemLogStatus(logs.length > 0 ? 'success' : 'empty')
     } catch (error) {
       const message =
         error instanceof Error && error.message.trim()
           ? error.message.trim()
           : '字幕上传日志加载失败'
 
-      setSystemLogRecords([buildUploadFailureLog(message)])
+      setSystemLogRecords([])
+      setSystemLogError(message)
+      setSystemLogStatus('error')
     }
   }
 
@@ -1240,10 +1217,19 @@ export function SubtitleManagePage() {
         },
         ...currentRecords,
       ])
-      setSystemLogRecords((currentLogs) => [
-        ...buildUploadSuccessLogs(uploadedFileName, selectedAssociationItem, response),
-        ...currentLogs,
-      ].slice(0, 12))
+      setSystemLogRecords((currentLogs) =>
+        [
+          ...currentLogs,
+          ...buildUploadSuccessLogs(
+            uploadedFileName,
+            selectedAssociationItem,
+            response,
+          ),
+        ].slice(-12),
+      )
+      setSelectedLogUploadId(response.id)
+      setSystemLogError(null)
+      setSystemLogStatus('success')
       setSelectedFile(null)
 
       if (fileInputRef.current) {
@@ -1262,10 +1248,11 @@ export function SubtitleManagePage() {
 
       setUploadStatus('error')
       setUploadErrorMessage(message)
-      setSystemLogRecords((currentLogs) => [
-        buildUploadFailureLog(message),
-        ...currentLogs,
-      ].slice(0, 12))
+      setSystemLogRecords((currentLogs) =>
+        [...currentLogs, buildUploadFailureLog(message)].slice(-12),
+      )
+      setSystemLogError(null)
+      setSystemLogStatus('success')
       showToast(message)
     }
   }
@@ -1444,40 +1431,20 @@ export function SubtitleManagePage() {
           </div>
 
           <aside className="space-y-5">
-            <section className="overflow-hidden rounded-[28px] border border-slate-900 bg-[#111214] shadow-[0_24px_50px_rgba(15,23,42,0.2)]">
-              <div className="flex items-center justify-between border-b border-white/5 bg-white/5 px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-zinc-600" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-zinc-600" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-zinc-600" />
-                </div>
-                <span className="text-[10px] font-medium uppercase tracking-[0.28em] text-zinc-500">
-                  System Logs
-                </span>
-              </div>
-
-              <div className="space-y-2 px-4 py-4 font-mono text-[12px] leading-5 text-zinc-300">
-                {systemLogRecords.length === 0 ? (
-                  <p className="text-zinc-500">
-                    <span className="text-zinc-600">
-                      [{getCurrentLogTimestamp()}]
-                    </span>{' '}
-                    暂无上传日志
-                  </p>
-                ) : null}
-                {systemLogRecords.map((record) => (
-                  <p
-                    key={`${record.timestamp}-${record.message}`}
-                    className={logToneClassName[record.tone ?? 'default']}
-                  >
-                    <span className="text-zinc-600">[{record.timestamp}]</span>{' '}
-                    {record.message}
-                  </p>
-                ))}
-
-                <p className="text-zinc-600">|</p>
-              </div>
-            </section>
+            <OperationalLogPanel
+              title="字幕上传日志"
+              monitorLabel="字幕监控"
+              logs={systemLogRecords}
+              status={systemLogStatus}
+              error={systemLogError}
+              emptyLogsMessage="暂无上传日志。"
+              loadingMessage="正在加载字幕上传日志..."
+              errorFallbackMessage="字幕上传日志加载失败"
+              stageLabels={subtitleLogStageLabels}
+              terminalStages={subtitleTerminalLogStages}
+              scrollKey={selectedLogUploadId}
+              contentClassName="min-h-[280px]"
+            />
 
             <section className="rounded-[28px] border border-slate-200 bg-white/95 p-5 shadow-shell">
               <div className="space-y-1">
