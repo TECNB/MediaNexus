@@ -94,6 +94,19 @@ function formatCompactDuration(seconds: number) {
   return `${Math.floor(seconds)}s`
 }
 
+function splitEpisodeLabel(value: string | null) {
+  if (!value) {
+    return { title: '-', episodeLabel: null }
+  }
+
+  const match = value.match(/^(.*?)\s+(S\d{2,}E\d{2,})$/i)
+  if (!match) {
+    return { title: value, episodeLabel: null }
+  }
+
+  return { title: match[1], episodeLabel: match[2].toUpperCase() }
+}
+
 function formatDateTime(value: string | null) {
   if (!value) {
     return '-'
@@ -266,45 +279,61 @@ function UserRankingTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {users.map((user, index) => (
-            <tr
-              className="transition-colors hover:bg-slate-50/80"
-              key={user.emby_user_id}
-            >
-              <td className="py-4 pr-3 font-medium text-slate-400">
-                {user.rank}
-              </td>
-              <td className="py-4 pr-4">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold',
-                      getAvatarTone(index),
-                    )}
-                  >
-                    {getInitials(user.user_name)}
+          {users.map((user, index) => {
+            const { title, episodeLabel } = splitEpisodeLabel(
+              user.last_item_name,
+            )
+
+            return (
+              <tr
+                className="transition-colors hover:bg-slate-50/80"
+                key={user.emby_user_id}
+              >
+                <td className="py-4 pr-3 font-medium text-slate-400">
+                  {user.rank}
+                </td>
+                <td className="py-4 pr-4">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        'flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold',
+                        getAvatarTone(index),
+                      )}
+                    >
+                      {getInitials(user.user_name)}
+                    </div>
+                    <span className="font-semibold text-slate-950">
+                      {user.user_name}
+                    </span>
                   </div>
-                  <span className="font-semibold text-slate-950">
-                    {user.user_name}
-                  </span>
-                </div>
-              </td>
-              <td className="py-4 pr-4 font-semibold text-slate-950">
-                {formatCompactDuration(user.watch_seconds)}
-              </td>
-              <td className="py-4 pr-4 text-slate-500">
-                {user.play_count} 次
-              </td>
-              <td className="py-4 pr-4 text-slate-500">
-                {period === 'month'
-                  ? formatDateTime(user.last_watched_at)
-                  : formatTime(user.last_watched_at)}
-              </td>
-              <td className="max-w-[240px] truncate py-4 text-slate-500">
-                {user.last_item_name ?? '-'}
-              </td>
-            </tr>
-          ))}
+                </td>
+                <td className="py-4 pr-4 font-semibold text-slate-950">
+                  {formatCompactDuration(user.watch_seconds)}
+                </td>
+                <td className="py-4 pr-4 text-slate-500">
+                  {user.play_count} 次
+                </td>
+                <td className="py-4 pr-4 text-slate-500">
+                  {period === 'month'
+                    ? formatDateTime(user.last_watched_at)
+                    : formatTime(user.last_watched_at)}
+                </td>
+                <td className="max-w-[240px] py-4 text-slate-500">
+                  <div
+                    className="flex min-w-0 items-center gap-2"
+                    title={user.last_item_name ?? undefined}
+                  >
+                    <span className="min-w-0 truncate">{title}</span>
+                    {episodeLabel ? (
+                      <span className="shrink-0 rounded-md bg-sky-50 px-1.5 py-0.5 font-mono text-xs font-semibold text-sky-700 ring-1 ring-inset ring-sky-200">
+                        {episodeLabel}
+                      </span>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
