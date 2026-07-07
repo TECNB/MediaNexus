@@ -7,10 +7,10 @@ import {
   Circle,
   CloudUpload,
   Loader2,
-  TerminalSquare,
 } from 'lucide-react'
 
 import { PageContainer } from '@/components/layout/page-container'
+import { OperationalLogPanel } from '@/components/operation-log/operational-log-panel'
 import {
   getMovieMagnetIngestTask,
   getSeriesMagnetIngestTask,
@@ -452,38 +452,14 @@ export function ResourceIngestLogPage() {
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-[28px] bg-slate-950 shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
-            <div className="flex items-center justify-between px-5 py-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                <TerminalSquare className="h-4 w-4" />
-                实时任务日志
-              </div>
-              <span className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-300">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                {isPolling ? '轮询中' : '已停止'}
-              </span>
-            </div>
-
-            <div className="max-h-[420px] overflow-auto px-5 pb-5 font-mono text-xs leading-6">
-              {logs.length > 0 ? (
-                logs.map((log) => (
-                  <div key={log.id} className="text-slate-300">
-                    <span className="text-slate-500">
-                      [{formatTime(log.created_at)}]
-                    </span>{' '}
-                    <span className="text-sky-300">{log.level}</span>{' '}
-                    <span className="text-emerald-300">{log.stage}</span>{' '}
-                    <span>{log.message}</span>
-                    {log.detail ? (
-                      <span className="text-slate-500"> · {log.detail}</span>
-                    ) : null}
-                  </div>
-                ))
-              ) : (
-                <p className="text-slate-500">暂无日志。</p>
-              )}
-            </div>
-          </section>
+          <OperationalLogPanel
+            logs={logs}
+            status={logs.length > 0 ? 'success' : 'empty'}
+            title="任务日志"
+            monitorLabel={isPolling ? '轮询中' : '已停止'}
+            emptyLogsMessage="暂无日志。"
+            scrollKey={task.id}
+          />
         </div>
 
         <aside className="space-y-4">

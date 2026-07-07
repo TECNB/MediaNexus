@@ -10,10 +10,10 @@ import {
   Loader2,
   RotateCcw,
   Send,
-  TerminalSquare,
 } from 'lucide-react'
 
 import { PageContainer } from '@/components/layout/page-container'
+import { OperationalLogPanel } from '@/components/operation-log/operational-log-panel'
 import { Button } from '@/components/ui/button'
 import {
   getOpenListTaskCenterDetail,
@@ -1047,26 +1047,17 @@ export function TaskCenterDetailPage() {
             </section>
           ) : null}
 
-          <section className="overflow-hidden rounded-[28px] border border-slate-900 bg-[#111214] shadow-[0_24px_50px_rgba(15,23,42,0.2)]">
-            <div className="flex items-center justify-between border-b border-white/5 bg-white/5 px-4 py-3">
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-zinc-600" />
-                <span className="h-2.5 w-2.5 rounded-full bg-zinc-600" />
-                <span className="h-2.5 w-2.5 rounded-full bg-zinc-600" />
-              </div>
-              <span className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
-                <TerminalSquare className="h-3.5 w-3.5" />
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                {isPolling ? '轮询中' : '已停止'}
-              </span>
-            </div>
-
-            <div
-              ref={logScrollContainerRef}
-              onScroll={handleLogsScroll}
-              className="task-log-scrollbar max-h-[420px] min-h-[260px] overflow-y-auto px-4 py-4 font-mono text-[12px] leading-6"
-            >
-              {detail.logs_has_older ? (
+          <OperationalLogPanel
+            logs={detail.logs}
+            status={detail.logs.length > 0 ? 'success' : 'empty'}
+            title="任务日志"
+            monitorLabel={isPolling ? '轮询中' : '已停止'}
+            emptyLogsMessage="暂无日志。"
+            scrollContainerRef={logScrollContainerRef}
+            onLogsScroll={handleLogsScroll}
+            scrollKey={taskIdentity(detail)}
+            beforeLogs={
+              detail.logs_has_older ? (
                 <div className="flex justify-center pb-3">
                   <button
                     type="button"
@@ -1080,39 +1071,9 @@ export function TaskCenterDetailPage() {
                     加载更早日志
                   </button>
                 </div>
-              ) : null}
-              {detail.logs.length > 0 ? (
-                detail.logs.map((log) => (
-                  <div key={log.id} className="text-zinc-300">
-                    <span className="text-zinc-600">
-                      [{formatTime(log.created_at)}]
-                    </span>{' '}
-                    <span
-                      className={cn(
-                        'font-semibold',
-                        log.level === 'ERROR'
-                          ? 'text-rose-300'
-                          : log.level === 'WARN'
-                            ? 'text-amber-300'
-                            : 'text-emerald-300',
-                      )}
-                    >
-                      {log.level}
-                    </span>{' '}
-                    <span className="text-zinc-600">[{log.stage}]</span>{' '}
-                    <span>{log.message}</span>
-                    {log.detail ? (
-                      <span className="block break-all pl-4 text-zinc-500">
-                        {log.detail}
-                      </span>
-                    ) : null}
-                  </div>
-                ))
-              ) : (
-                <p className="text-zinc-500">暂无日志。</p>
-              )}
-            </div>
-          </section>
+              ) : null
+            }
+          />
         </div>
 
         <aside className="space-y-4">
