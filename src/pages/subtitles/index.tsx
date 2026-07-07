@@ -524,21 +524,21 @@ function MediaAssociationCombobox({
   return (
     <section
       ref={containerRef}
-      className="relative rounded-[26px] border border-slate-200 bg-white/95 p-4 shadow-shell"
+      className="relative min-w-0 rounded-[26px] border border-slate-200 bg-white/95 p-4 shadow-shell"
     >
       <div className="space-y-3">
-        <div className="flex items-center justify-between gap-4">
-          <div className="space-y-0.5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0 space-y-0.5">
             <h3 className="text-sm font-semibold text-slate-950">
               关联库中项目
             </h3>
             <p className="text-xs text-slate-400">Link to Library Item</p>
           </div>
 
-          <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">
+          <div className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 md:w-auto">
             <span
               className={cn(
-                'text-[11px] transition-colors',
+                'min-w-0 text-[11px] transition-colors',
                 isManualMode ? 'text-slate-400' : 'text-slate-900',
               )}
             >
@@ -568,7 +568,7 @@ function MediaAssociationCombobox({
 
             <span
               className={cn(
-                'text-[11px] transition-colors',
+                'min-w-0 text-[11px] transition-colors',
                 isManualMode ? 'text-slate-900' : 'text-slate-400',
               )}
             >
@@ -663,7 +663,7 @@ function RecentSubtitleTable({
   onSelectRecord,
 }: RecentSubtitleTableProps) {
   return (
-    <section className="rounded-[26px] border border-slate-200 bg-white/95 p-4 shadow-shell">
+    <section className="min-w-0 rounded-[26px] border border-slate-200 bg-white/95 p-4 shadow-shell">
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-0.5">
           <h3 className="text-sm font-semibold text-slate-950">最近处理</h3>
@@ -685,7 +685,7 @@ function RecentSubtitleTable({
 
       <div className="mt-3 overflow-hidden rounded-[20px] border border-slate-200">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-left">
+          <table className="min-w-[760px] divide-y divide-slate-200 text-left">
             <thead className="bg-slate-50/90">
               <tr className="text-[11px] text-slate-400">
                 <th className="px-4 py-2.5 font-medium">文件名</th>
@@ -1261,18 +1261,18 @@ export function SubtitleManagePage() {
       title="字幕管理"
       description="上传字幕到电影或剧集源目录，自动重命名并触发 AS 刷新。"
     >
-      <div className="space-y-5">
+      <div className="min-w-0 space-y-5">
         <div className="flex items-center gap-2 text-xs text-slate-400">
           <span className="font-medium text-slate-500">字幕管理</span>
           <ChevronRight className="h-3.5 w-3.5" />
           <span>Subtitle Workspace</span>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="space-y-4">
-            <section className="rounded-[26px] border border-slate-200 bg-white/95 p-4 shadow-shell">
+        <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0 space-y-4">
+            <section className="min-w-0 rounded-[26px] border border-slate-200 bg-white/95 p-4 shadow-shell">
               <div
-                className="group rounded-[22px] border border-dashed border-slate-300 bg-[linear-gradient(180deg,rgba(248,250,252,0.82),rgba(255,255,255,0.98))] px-6 py-8 text-center transition-all duration-200 hover:border-slate-900 hover:shadow-[0_18px_40px_rgba(15,23,42,0.05)]"
+                className="group rounded-[22px] border border-dashed border-slate-300 bg-[linear-gradient(180deg,rgba(248,250,252,0.82),rgba(255,255,255,0.98))] px-4 py-8 text-center transition-all duration-200 hover:border-slate-900 hover:shadow-[0_18px_40px_rgba(15,23,42,0.05)] sm:px-6"
                 onClick={openFilePicker}
                 onKeyDown={handleUploadZoneKeyDown}
                 role="button"
@@ -1312,7 +1312,7 @@ export function SubtitleManagePage() {
                     </span>
                   </div>
                 ) : (
-                  <p className="mt-4 text-xs text-slate-400">
+                  <p className="mx-auto mt-4 max-w-full text-xs leading-5 text-slate-400">
                     请选择字幕文件后，再关联库中项目并提交上传。
                   </p>
                 )}
@@ -1429,7 +1429,7 @@ export function SubtitleManagePage() {
             />
           </div>
 
-          <aside className="space-y-5">
+          <aside className="min-w-0 space-y-5">
             <OperationalLogPanel
               title="字幕上传日志"
               monitorLabel="字幕监控"
