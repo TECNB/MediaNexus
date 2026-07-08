@@ -327,6 +327,102 @@ function releaseMatchLabel(release: ProwlarrRelease, fallbackQuery: string) {
   return query || source || '-'
 }
 
+function normalizeReleaseTitleText(value: string | null | undefined) {
+  if (!value?.trim()) {
+    return ''
+  }
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .replace(/[^0-9a-z\u4e00-\u9fff\u3040-\u30ff]+/g, '')
+}
+
+function releaseTitleMatches(releaseTitle: string, title: string | null) {
+  const normalizedTitle = normalizeReleaseTitleText(title)
+  if (!normalizedTitle) {
+    return false
+  }
+  return normalizeReleaseTitleText(releaseTitle).includes(normalizedTitle)
+}
+
+type ReleaseTitleTendency = 'display' | 'original' | 'identifier'
+
+function getReleaseTitleTendency(
+  release: ProwlarrRelease,
+  item: SearchableResourceItem,
+): ReleaseTitleTendency {
+  const normalizedTitle = normalizeReleaseTitleText(item.title)
+  const normalizedOriginalTitle = normalizeReleaseTitleText(item.original_title)
+
+  if (releaseTitleMatches(release.title, item.title)) {
+    return 'display'
+  }
+  if (
+    normalizedOriginalTitle &&
+    normalizedOriginalTitle !== normalizedTitle &&
+    releaseTitleMatches(release.title, item.original_title)
+  ) {
+    return 'original'
+  }
+  if (release.match_source?.trim() === '展示标题') {
+    return 'display'
+  }
+  if (release.match_source?.trim() === '原始标题') {
+    return 'original'
+  }
+  return 'identifier'
+}
+
+function releaseTendencyLabel(
+  tendency: ReleaseTitleTendency,
+  item: SearchableResourceItem,
+) {
+  if (tendency === 'display') {
+    return hasChineseText(item.title) ? '中文标题候选' : '展示标题候选'
+  }
+  if (tendency === 'original') {
+    return '原文标题候选'
+  }
+  return 'ID 命中候选'
+}
+
+function releaseSortFocus(indexInTendency: number) {
+  if (indexInTendency === 0) {
+    return '容量优先'
+  }
+  if (indexInTendency === 1) {
+    return '做种优先'
+  }
+  return '综合排序'
+}
+
+function buildReleaseCandidateReasons(selection: AutoReleaseConfirmation) {
+  const tendencyCounts: Record<ReleaseTitleTendency, number> = {
+    display: 0,
+    original: 0,
+    identifier: 0,
+  }
+
+  return selection.releases.map((release) => {
+    const tendency = getReleaseTitleTendency(release, selection.item)
+    const indexInTendency = tendencyCounts[tendency]
+    tendencyCounts[tendency] += 1
+
+    const tendencyLabel = releaseTendencyLabel(tendency, selection.item)
+    const sortFocus = releaseSortFocus(indexInTendency)
+    const size = formatReleaseSize(release.size)
+    const seeders = release.seeders ?? '—'
+
+    return {
+      tendencyLabel,
+      sortFocus,
+      badge: `${tendencyLabel} · ${sortFocus}`,
+      detail: `${sortFocus}：${size}，做种 ${seeders}`,
+    }
+  })
+}
+
 function releaseCandidateKey(release: ProwlarrRelease, index: number) {
   return `${index}:${release.indexer_id}:${release.download_ref}:${release.title}`
 }
@@ -1585,6 +1681,10 @@ export function ResourceSearchPage() {
 
     const selection = autoReleaseConfirmation
     const release = selection.release
+    const candidateReasons = buildReleaseCandidateReasons(selection)
+    const selectedReleaseIndex = selection.releases.indexOf(release)
+    const selectedReason =
+      candidateReasons[selectedReleaseIndex >= 0 ? selectedReleaseIndex : 0]
     const isNonChineseRelease = !hasChineseText(release.title)
     const matchLabel = releaseMatchLabel(release, selection.query)
     const hasMultipleCandidates = selection.releases.length > 1
@@ -1618,6 +1718,9 @@ export function ResourceSearchPage() {
               <p className="mt-2 text-sm text-slate-500">
                 命中：{matchLabel} · 搜索词语种：{languageCopy}
               </p>
+              <p className="mt-1 text-sm leading-6 text-slate-500">
+                推荐按标题倾向分组：先列中文或展示标题候选，再列原文标题候选；每组优先给出容量更大的版本和做种更多的版本。
+              </p>
             </div>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
               {selection.mediaType === 'movie'
@@ -1641,6 +1744,7 @@ export function ResourceSearchPage() {
           <div className="mt-5 space-y-3">
             {selection.releases.map((candidate, index) => {
               const isSelected = candidate === release
+              const candidateReason = candidateReasons[index]
               const candidateMatchLabel = releaseMatchLabel(
                 candidate,
                 selection.query,
@@ -1663,10 +1767,13 @@ export function ResourceSearchPage() {
                       {candidate.title}
                     </p>
                     <span className="shrink-0 rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-slate-600">
-                      推荐 {index + 1}
+                      {candidateReason.badge}
                     </span>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
+                    <span className="rounded-md bg-indigo-50 px-2 py-1 text-indigo-700">
+                      {candidateReason.detail}
+                    </span>
                     <span className="rounded-md bg-emerald-50 px-2 py-1 text-emerald-700">
                       命中 {candidateMatchLabel}
                     </span>
@@ -1697,6 +1804,7 @@ export function ResourceSearchPage() {
 
           <div className="mt-5 rounded-xl bg-slate-100 px-4 py-4">
             <div className="grid gap-3 text-xs text-slate-500 sm:grid-cols-2">
+              <span>推荐依据：{selectedReason.detail}</span>
               <span>
                 当前选择：
                 {selectedSeasonLabel ? `${selectedSeasonLabel} / ` : ''}
