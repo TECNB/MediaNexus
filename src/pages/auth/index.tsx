@@ -115,6 +115,15 @@ function AuthShell({ title, description, children, footerNote }: AuthShellProps)
             {footerNote}
           </p>
         ) : null}
+
+        <div className="mt-6 text-center">
+          <Link
+            className="text-sm font-medium text-black underline-offset-4 transition-all hover:underline"
+            to="/docs"
+          >
+            查看使用说明
+          </Link>
+        </div>
       </main>
 
       <footer className="py-6 text-center">

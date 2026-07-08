@@ -4,8 +4,8 @@ import { ProtectedRoute } from '@/components/auth/protected-route'
 import { AdminLayout } from '@/layouts/admin-layout'
 import { LoginPage, RegisterPage } from '@/pages/auth'
 import { DashboardPage } from '@/pages/dashboard'
+import { DocsPage } from '@/pages/docs'
 import { EmbyWatchRankingsPage } from '@/pages/emby-watch-rankings'
-import { HelpPage } from '@/pages/help'
 import { MagnetIngestPage } from '@/pages/magnet-ingest'
 import { LegacyResourceIngestRedirect } from '@/pages/resources/legacy-ingest-redirect'
 import { ResourcePublishPage } from '@/pages/resources/publish'
@@ -17,6 +17,8 @@ import { TaskCenterDetailPage } from '@/pages/tasks/detail'
 import { UserManagementPage } from '@/pages/users'
 
 export const router = createBrowserRouter([
+  { path: '/docs', element: <DocsPage /> },
+  { path: '/help', element: <Navigate to="/docs" replace /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
   {
@@ -49,7 +51,6 @@ export const router = createBrowserRouter([
       { path: 'emby-watch-rankings', element: <EmbyWatchRankingsPage /> },
       { path: 'users', element: <UserManagementPage /> },
       { path: 'settings', element: <SettingsPage /> },
-      { path: 'help', element: <HelpPage /> },
       { path: '*', element: <Navigate to="/resources" replace /> },
     ],
   },
