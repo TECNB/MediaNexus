@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   AlertTriangle,
   Activity,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Copy,
   Database,
   Eye,
@@ -27,6 +29,7 @@ import { Button } from '@/components/ui/button'
 import { SelectControl } from '@/components/ui/form-control'
 import {
   cleanupAdultOtherCollections,
+  getAdultOtherAutomationRunDetails,
   getAdultOtherCollectionSourceFolders,
   getAdultOtherAutomationRuns,
   getLatestAdultOtherCollectionSyncRun,
@@ -182,6 +185,34 @@ const automationStageLabels: Record<string, string> = {
   FAILED: '失败',
 }
 
+const automationItemStatusLabels: Record<string, string> = {
+  WAITING_PRIMARY: '等待封面',
+  NATURAL_READY: '神医自然完成',
+  REFRESHED: '定向刷新成功',
+  MISSING: '仍缺封面',
+  SKIPPED: '已跳过',
+  UNRESOLVED: '未查询到',
+}
+
+const automationCollectionStatusLabels: Record<string, string> = {
+  IMAGE_READY: '合集封面完成',
+  IMAGE_MISSING: '仍缺合集封面',
+  SKIPPED: '未处理',
+}
+
+function automationDetailStatusStyle(status: string) {
+  if (status === 'MISSING' || status === 'IMAGE_MISSING' || status === 'UNRESOLVED') {
+    return 'bg-rose-50 text-rose-700 ring-rose-200'
+  }
+  if (status === 'WAITING_PRIMARY') {
+    return 'bg-blue-50 text-blue-700 ring-blue-200'
+  }
+  if (status === 'SKIPPED') {
+    return 'bg-amber-50 text-amber-700 ring-amber-200'
+  }
+  return 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+}
+
 function AutomationRunsPanel({
   error,
   loading,
@@ -193,6 +224,76 @@ function AutomationRunsPanel({
   onRefresh: () => void
   runs: AdultOtherAutomationRun[]
 }) {
+  const [expandedRunIds, setExpandedRunIds] = useState<Set<string>>(new Set())
+  const [runDetails, setRunDetails] = useState<Record<string, AdultOtherAutomationRun>>({})
+  const [detailLoadingRunIds, setDetailLoadingRunIds] = useState<Set<string>>(new Set())
+  const [detailErrors, setDetailErrors] = useState<Record<string, string>>({})
+
+  const loadRunDetails = useCallback((runId: string) => {
+    setDetailLoadingRunIds((current) => new Set(current).add(runId))
+    setDetailErrors((current) => {
+      const next = { ...current }
+      delete next[runId]
+      return next
+    })
+    void getAdultOtherAutomationRunDetails(runId)
+      .then((details) => {
+        setRunDetails((current) => ({ ...current, [runId]: details }))
+      })
+      .catch((detailError: unknown) => {
+        setDetailErrors((current) => ({
+          ...current,
+          [runId]: detailError instanceof Error ? detailError.message : '自动化明细加载失败',
+        }))
+      })
+      .finally(() => {
+        setDetailLoadingRunIds((current) => {
+          const next = new Set(current)
+          next.delete(runId)
+          return next
+        })
+      })
+  }, [])
+
+  useEffect(() => {
+    for (const run of runs) {
+      const details = runDetails[run.id]
+      if (
+        expandedRunIds.has(run.id) &&
+        details &&
+        !detailLoadingRunIds.has(run.id) &&
+        details.status === 'RUNNING' &&
+        run.status !== 'RUNNING'
+      ) {
+        loadRunDetails(run.id)
+      }
+    }
+  }, [
+    detailLoadingRunIds,
+    expandedRunIds,
+    loadRunDetails,
+    runDetails,
+    runs,
+  ])
+
+  const toggleRun = (run: AdultOtherAutomationRun) => {
+    const runId = run.id
+    const expanding = !expandedRunIds.has(runId)
+    setExpandedRunIds((current) => {
+      const next = new Set(current)
+      if (next.has(runId)) {
+        next.delete(runId)
+      } else {
+        next.add(runId)
+      }
+      return next
+    })
+    if (!expanding || (runDetails[runId] && run.status !== 'RUNNING')) {
+      return
+    }
+    loadRunDetails(runId)
+  }
+
   return (
     <section className="overflow-hidden rounded-lg bg-white shadow-shell ring-1 ring-slate-200">
       <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
@@ -223,7 +324,7 @@ function AutomationRunsPanel({
         <div className="px-5 py-8 text-sm text-slate-500">暂无自动化记录。</div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] text-left">
+          <table className="w-full min-w-[1040px] text-left">
             <thead className="bg-slate-50 text-xs font-medium text-slate-500">
               <tr>
                 <th className="px-4 py-3">时间</th>
@@ -231,11 +332,20 @@ function AutomationRunsPanel({
                 <th className="px-4 py-3">状态 / 阶段</th>
                 <th className="px-4 py-3">视频封面</th>
                 <th className="px-4 py-3">合集</th>
+                <th className="px-4 py-3 text-right">明细</th>
               </tr>
             </thead>
             <tbody>
-              {runs.map((run) => (
-                <tr className="border-t border-slate-100" key={run.id}>
+              {runs.map((run) => {
+                const expanded = expandedRunIds.has(run.id)
+                const details = runDetails[run.id]
+                const items = details?.items ?? []
+                const collections = details?.collections ?? []
+                const detailLoading = detailLoadingRunIds.has(run.id)
+                const detailError = detailErrors[run.id]
+                return (
+                <Fragment key={run.id}>
+                <tr className="border-t border-slate-100">
                   <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">
                     {formatDateTime(run.startedAt)}
                   </td>
@@ -278,8 +388,95 @@ function AutomationRunsPanel({
                       </>
                     ) : `删除空合集 ${run.deletedCollectionCount}`}
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    <Button
+                      aria-expanded={expanded}
+                      aria-label={`${expanded ? '收起' : '展开'}${formatDateTime(run.startedAt)}自动化明细`}
+                      onClick={() => toggleRun(run)}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      {detailLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : expanded ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
+                      {details ? items.length + collections.length : '查看'}
+                    </Button>
+                  </td>
                 </tr>
-              ))}
+                {expanded ? (
+                  <tr className="border-t border-slate-100 bg-slate-50/70">
+                    <td className="px-5 py-5" colSpan={6}>
+                      {detailLoading && !details ? (
+                        <p className="flex items-center gap-2 text-sm text-slate-500">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          正在加载运行明细
+                        </p>
+                      ) : detailError ? (
+                        <p className="text-sm text-rose-700">{detailError}</p>
+                      ) : items.length === 0 && collections.length === 0 ? (
+                        <p className="text-sm text-slate-500">该运行暂无媒体或合集明细，旧记录不会自动补录。</p>
+                      ) : (
+                        <div className="grid gap-6 lg:grid-cols-2">
+                          <div>
+                            <h3 className="text-xs font-semibold text-slate-700">媒体明细 · {items.length}</h3>
+                            <div className="mt-3 divide-y divide-slate-200 border-y border-slate-200">
+                              {items.map((item) => (
+                                <div className="flex items-start justify-between gap-4 py-3" key={item.embyItemId}>
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium text-slate-900" title={item.itemName ?? item.embyItemId}>
+                                      {item.itemName ?? item.embyItemId}
+                                    </p>
+                                    <p className="mt-1 truncate text-xs text-slate-500" title={item.itemPath ?? undefined}>
+                                      {item.collectionName ?? '未识别合集'} · {item.embyItemId}
+                                    </p>
+                                    {item.itemPath ? (
+                                      <p className="mt-1 truncate text-xs text-slate-400" title={item.itemPath}>
+                                        {item.itemPath}
+                                      </p>
+                                    ) : null}
+                                    {item.message ? <p className="mt-1 text-xs text-rose-600">{item.message}</p> : null}
+                                  </div>
+                                  <span className={cn('shrink-0 rounded-md px-2 py-1 text-xs font-medium ring-1', automationDetailStatusStyle(item.status))}>
+                                    {automationItemStatusLabels[item.status] ?? item.status}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <h3 className="text-xs font-semibold text-slate-700">合集明细 · {collections.length}</h3>
+                            <div className="mt-3 divide-y divide-slate-200 border-y border-slate-200">
+                              {collections.map((collection) => (
+                                <div className="flex items-start justify-between gap-4 py-3" key={`${collection.collectionName}-${collection.embyCollectionId ?? 'pending'}`}>
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium text-slate-900" title={collection.collectionName}>
+                                      {collection.collectionName}
+                                    </p>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      {actionLabels[collection.action] ?? collection.action} · 新增成员 {collection.addedItemCount}
+                                    </p>
+                                    {collection.message ? <p className="mt-1 text-xs text-rose-600">{collection.message}</p> : null}
+                                  </div>
+                                  <span className={cn('shrink-0 rounded-md px-2 py-1 text-xs font-medium ring-1', automationDetailStatusStyle(collection.status))}>
+                                    {automationCollectionStatusLabels[collection.status] ?? collection.status}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ) : null}
+                </Fragment>
+                )
+              })}
             </tbody>
           </table>
         </div>

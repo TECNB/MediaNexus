@@ -16,6 +16,34 @@ export type AdultOtherCollectionSyncMode =
 
 export type AdultOtherCollectionSyncStatus = 'RUNNING' | 'SUCCEEDED' | 'FAILED'
 
+export type AdultOtherAutomationItem = {
+  embyItemId: string
+  itemName: string | null
+  itemPath: string | null
+  collectionName: string | null
+  primaryBefore: boolean
+  refreshRequested: boolean
+  primaryAfter: boolean
+  status:
+    | 'WAITING_PRIMARY'
+    | 'NATURAL_READY'
+    | 'REFRESHED'
+    | 'MISSING'
+    | 'SKIPPED'
+    | 'UNRESOLVED'
+  message: string | null
+}
+
+export type AdultOtherAutomationCollection = {
+  embyCollectionId: string | null
+  collectionName: string
+  action: AdultOtherCollectionSyncAction
+  addedItemCount: number
+  imageReady: boolean
+  status: 'IMAGE_READY' | 'IMAGE_MISSING' | 'SKIPPED'
+  message: string | null
+}
+
 export type AdultOtherAutomationRun = {
   id: string
   triggerType: 'NEW_ITEMS' | 'DELETIONS'
@@ -35,6 +63,8 @@ export type AdultOtherAutomationRun = {
   message: string | null
   startedAt: string
   finishedAt: string | null
+  items: AdultOtherAutomationItem[]
+  collections: AdultOtherAutomationCollection[]
 }
 
 export type AdultOtherCollectionSourceFolderChangeStatus =
