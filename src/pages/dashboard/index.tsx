@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   AlertTriangle,
+  Activity,
   CheckCircle2,
   Copy,
   Database,
@@ -27,6 +28,7 @@ import { SelectControl } from '@/components/ui/form-control'
 import {
   cleanupAdultOtherCollections,
   getAdultOtherCollectionSourceFolders,
+  getAdultOtherAutomationRuns,
   getLatestAdultOtherCollectionSyncRun,
   previewAdultOtherCollectionCleanup,
   previewAdultOtherCollections,
@@ -45,6 +47,8 @@ import type {
   AutoSymlinkRefreshTarget,
 } from '@/types/autosymlink'
 import type {
+  AdultOtherAutomationRun,
+  AdultOtherCollectionInventory,
   AdultOtherCollectionSourceFolder,
   AdultOtherCollectionSourceFolderChangeStatus,
   AdultOtherCollectionSyncAction,
@@ -57,6 +61,15 @@ type SubmitAction = 'preview' | 'sync' | 'cleanupPreview' | 'cleanup'
 type RegistrationCodeStatus = 'idle' | 'loading' | 'saving'
 
 const DEFAULT_MIN_ITEM_COUNT = 2
+const EMPTY_COLLECTION_INVENTORY: AdultOtherCollectionInventory = {
+  sourceFolderCount: 0,
+  groupCount: 0,
+  healthyGroupCount: 0,
+  pendingCreateGroupCount: 0,
+  pendingMemberGroupCount: 0,
+  skippedGroupCount: 0,
+  sourceFolders: [],
+}
 
 type AdminQuickLink = {
   description: string
@@ -150,12 +163,129 @@ const sourceFolderChangeStyles: Record<
   AdultOtherCollectionSourceFolderChangeStatus,
   string
 > = {
-  NEVER_SYNCED: 'bg-slate-100 text-slate-600 ring-slate-200',
-  UNCHANGED: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  INCREASED: 'bg-blue-50 text-blue-700 ring-blue-200',
-  DECREASED: 'bg-amber-50 text-amber-700 ring-amber-200',
-  CHANGED: 'bg-cyan-50 text-cyan-700 ring-cyan-200',
-  MISSING: 'bg-rose-50 text-rose-700 ring-rose-200',
+  HEALTHY: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  PENDING_CREATE: 'bg-blue-50 text-blue-700 ring-blue-200',
+  PENDING_MEMBERS: 'bg-amber-50 text-amber-700 ring-amber-200',
+  MIXED: 'bg-rose-50 text-rose-700 ring-rose-200',
+}
+
+const automationStageLabels: Record<string, string> = {
+  SCOPING: '确认媒体范围',
+  RECONCILING: '首次合集对账',
+  WAITING_PRIMARY: '等待神医生成封面',
+  REFRESHING_PRIMARY: '定向补全视频封面',
+  VERIFYING_PRIMARY: '确认视频封面',
+  FINAL_RECONCILING: '最终合集对账与封面',
+  CLEANING_COLLECTIONS: '清理空合集',
+  COMPLETED: '已完成',
+  IGNORED: '已忽略',
+  FAILED: '失败',
+}
+
+function AutomationRunsPanel({
+  error,
+  loading,
+  onRefresh,
+  runs,
+}: {
+  error: string | null
+  loading: boolean
+  onRefresh: () => void
+  runs: AdultOtherAutomationRun[]
+}) {
+  return (
+    <section className="overflow-hidden rounded-lg bg-white shadow-shell ring-1 ring-slate-200">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+        <div className="flex items-center gap-3">
+          <span className="rounded-lg bg-blue-50 p-2 text-blue-700">
+            <Activity className="h-5 w-5" />
+          </span>
+          <div>
+            <h2 className="text-sm font-semibold text-slate-950">自动化运行</h2>
+            <p className="mt-1 text-xs text-slate-500">新入库补图、合集对账与删除清理</p>
+          </div>
+        </div>
+        <Button
+          aria-label="刷新自动化记录"
+          disabled={loading}
+          onClick={onRefresh}
+          size="icon"
+          type="button"
+          variant="ghost"
+        >
+          <RefreshCw className={cn('h-4 w-4', loading ? 'animate-spin' : null)} />
+        </Button>
+      </div>
+
+      {error ? (
+        <div className="px-5 py-4 text-sm text-rose-700">{error}</div>
+      ) : runs.length === 0 ? (
+        <div className="px-5 py-8 text-sm text-slate-500">暂无自动化记录。</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[980px] text-left">
+            <thead className="bg-slate-50 text-xs font-medium text-slate-500">
+              <tr>
+                <th className="px-4 py-3">时间</th>
+                <th className="px-4 py-3">触发</th>
+                <th className="px-4 py-3">状态 / 阶段</th>
+                <th className="px-4 py-3">视频封面</th>
+                <th className="px-4 py-3">合集</th>
+              </tr>
+            </thead>
+            <tbody>
+              {runs.map((run) => (
+                <tr className="border-t border-slate-100" key={run.id}>
+                  <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">
+                    {formatDateTime(run.startedAt)}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium text-slate-900">
+                    {run.triggerType === 'NEW_ITEMS' ? '新入库' : '媒体删除'} · {run.eventCount}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={cn(
+                        'inline-flex rounded-md px-2 py-1 text-xs font-medium ring-1',
+                        run.status === 'FAILED'
+                          ? 'bg-rose-50 text-rose-700 ring-rose-200'
+                          : run.status === 'RUNNING'
+                            ? 'bg-blue-50 text-blue-700 ring-blue-200'
+                            : 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+                      )}
+                    >
+                      {run.status === 'RUNNING' ? '进行中' : run.status === 'FAILED' ? '失败' : '已完成'}
+                    </span>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {automationStageLabels[run.stage] ?? run.stage}
+                      {run.message ? ` · ${run.message}` : ''}
+                    </p>
+                  </td>
+                  <td className="px-4 py-3 text-xs leading-5 text-slate-600">
+                    {run.triggerType === 'NEW_ITEMS' ? (
+                      <>
+                        目标 {run.targetItemCount} · 自然完成 {run.naturalPrimaryReadyCount}
+                        <br />
+                        定向刷新 {run.targetedRefreshCount} · 最终 {run.finalPrimaryReadyCount}/{run.targetItemCount} · 缺失 {run.finalPrimaryMissingCount}
+                      </>
+                    ) : '不涉及'}
+                  </td>
+                  <td className="px-4 py-3 text-xs leading-5 text-slate-600">
+                    {run.triggerType === 'NEW_ITEMS' ? (
+                      <>
+                        创建 {run.createdCollectionCount} · 更新 {run.updatedCollectionCount}
+                        <br />
+                        封面 {run.collectionImageReadyCount}/{run.affectedCollectionCount}
+                      </>
+                    ) : `删除空合集 ${run.deletedCollectionCount}`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  )
 }
 
 function formatDateTime(value: string | null) {
@@ -202,31 +332,17 @@ function registrationCodeSourceLabel(source: AdminRegistrationCodeSource) {
   }
   return '未开放'
 }
-
-function signedDelta(value: number | null) {
-  if (value === null) {
-    return '-'
-  }
-  return value > 0 ? `+${value}` : String(value)
-}
-
 function sourceFolderChangeLabel(folder: AdultOtherCollectionSourceFolder) {
-  if (folder.changeStatus === 'MISSING') {
-    return `已消失 ${signedDelta(folder.itemDelta)} 项 / ${signedDelta(folder.groupDelta)} 组`
+  if (folder.healthStatus === 'PENDING_CREATE') {
+    return `待创建 ${folder.pendingCreateGroupCount} 组`
   }
-  if (folder.changeStatus === 'NEVER_SYNCED') {
-    return '未同步'
+  if (folder.healthStatus === 'PENDING_MEMBERS') {
+    return `待补成员 ${folder.pendingMemberGroupCount} 组`
   }
-  if (folder.changeStatus === 'UNCHANGED') {
-    return '无变化'
+  if (folder.healthStatus === 'MIXED') {
+    return `待创建 ${folder.pendingCreateGroupCount} · 待补成员 ${folder.pendingMemberGroupCount}`
   }
-  if (folder.changeStatus === 'INCREASED') {
-    return `有新增 ${signedDelta(folder.itemDelta)} 项 / ${signedDelta(folder.groupDelta)} 组`
-  }
-  if (folder.changeStatus === 'DECREASED') {
-    return `有减少 ${signedDelta(folder.itemDelta)} 项 / ${signedDelta(folder.groupDelta)} 组`
-  }
-  return `有变化 ${signedDelta(folder.itemDelta)} 项 / ${signedDelta(folder.groupDelta)} 组`
+  return '健康'
 }
 
 function isCleanupRun(run: AdultOtherCollectionSyncRun) {
@@ -240,6 +356,9 @@ function runModeLabel(run: AdultOtherCollectionSyncRun) {
   if (run.mode === 'APPLY') {
     return '执行'
   }
+  if (run.mode === 'AUTO_WEBHOOK') {
+    return '自动对账'
+  }
   if (run.mode === 'CLEANUP_DRY_RUN') {
     return '清理预览'
   }
@@ -247,25 +366,16 @@ function runModeLabel(run: AdultOtherCollectionSyncRun) {
 }
 
 function sourceFolderOptionLabel(folder: AdultOtherCollectionSourceFolder) {
-  return `${folder.label} · ${folder.itemCount} 项 · ${folder.groupCount} 组 · ${sourceFolderChangeLabel(folder)}`
+  return `${folder.label} · ${folder.groupCount} 组 · ${sourceFolderChangeLabel(folder)}`
 }
 
 function sourceFolderStatusText(
   folder: AdultOtherCollectionSourceFolder | null,
 ) {
   if (!folder) {
-    return '全量范围会扫描所有第一层文件夹，建议先选择单个范围预览。'
+    return '全量校验会以 Emby 当前库存和 Collection 成员为准。'
   }
-  const previewText = folder.latestPreviewAt
-    ? `最近预览 ${formatDateTime(folder.latestPreviewAt)}`
-    : '未预览'
-  const syncText = folder.latestSyncAt
-    ? `最近同步 ${formatDateTime(folder.latestSyncAt)}`
-    : '未同步'
-  if (!folder.latestSyncAt) {
-    return `${syncText} · ${previewText}`
-  }
-  return `${syncText} · 上次 ${folder.lastSyncedItemCount ?? '-'} 项 / ${folder.lastSyncedGroupCount ?? '-'} 组，当前 ${folder.itemCount} 项 / ${folder.groupCount} 组 · ${previewText}`
+  return `当前 ${folder.groupCount} 组：健康 ${folder.healthyGroupCount}，待创建 ${folder.pendingCreateGroupCount}，待补成员 ${folder.pendingMemberGroupCount}，暂不创建 ${folder.skippedGroupCount}`
 }
 
 function runToastMessage(run: AdultOtherCollectionSyncRun) {
@@ -426,7 +536,7 @@ function SourceFolderChangeBadge({
     <span
       className={cn(
         'inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1',
-        sourceFolderChangeStyles[folder.changeStatus],
+        sourceFolderChangeStyles[folder.healthStatus],
       )}
     >
       {sourceFolderChangeLabel(folder)}
@@ -538,13 +648,18 @@ function ResultTable({ run }: { run: AdultOtherCollectionSyncRun }) {
 }
 
 export function DashboardPage() {
+  const [automationRuns, setAutomationRuns] = useState<
+    AdultOtherAutomationRun[]
+  >([])
+  const [automationLoading, setAutomationLoading] = useState(false)
+  const [automationError, setAutomationError] = useState<string | null>(null)
   const [latestRun, setLatestRun] =
     useState<AdultOtherCollectionSyncRun | null>(null)
   const [currentRun, setCurrentRun] =
     useState<AdultOtherCollectionSyncRun | null>(null)
-  const [sourceFolders, setSourceFolders] = useState<
-    AdultOtherCollectionSourceFolder[]
-  >([])
+  const [collectionInventory, setCollectionInventory] = useState(
+    EMPTY_COLLECTION_INVENTORY,
+  )
   const [status, setStatus] = useState<LoadStatus>('idle')
   const [submitAction, setSubmitAction] = useState<SubmitAction | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -564,6 +679,7 @@ export function DashboardPage() {
     useState<RegistrationCodeStatus>('idle')
   const [registrationCodeCopied, setRegistrationCodeCopied] = useState(false)
 
+  const sourceFolders = collectionInventory.sourceFolders
   const selectedRun = currentRun ?? latestRun
   const selectedSourceFolder = selectedSourceFolderPath
     ? (sourceFolders.find(
@@ -575,39 +691,17 @@ export function DashboardPage() {
     isSubmitting || status === 'loading' || !selectedSourceFolderPath
   const selectedRunIsCleanup = selectedRun ? isCleanupRun(selectedRun) : false
   const selectedRunIsCleanupApply = selectedRun?.mode === 'CLEANUP_APPLY'
-  const folderOverview = useMemo(() => {
-    const changedStatuses: AdultOtherCollectionSourceFolderChangeStatus[] = [
-      'INCREASED',
-      'DECREASED',
-      'CHANGED',
-      'MISSING',
-    ]
-
-    return {
-      changed: sourceFolders.filter((folder) =>
-        changedStatuses.includes(folder.changeStatus),
-      ).length,
-      missing: sourceFolders.filter(
-        (folder) => folder.changeStatus === 'MISSING',
-      ).length,
-      total: sourceFolders.length,
-      unsynced: sourceFolders.filter(
-        (folder) => folder.changeStatus === 'NEVER_SYNCED',
-      ).length,
-    }
-  }, [sourceFolders])
-
   const loadLatestRun = useCallback(
     async (signal?: AbortSignal) => {
       setStatus('loading')
       setErrorMessage(null)
       try {
-        const [run, folders] = await Promise.all([
+        const [run, inventory] = await Promise.all([
           getLatestAdultOtherCollectionSyncRun(signal),
           getAdultOtherCollectionSourceFolders(signal),
         ])
         setLatestRun(run)
-        setSourceFolders(folders)
+        setCollectionInventory(inventory)
         setStatus('success')
       } catch (error) {
         if (isJavaRequestCanceledError(error)) {
@@ -647,11 +741,40 @@ export function DashboardPage() {
     }
   }, [])
 
+  const loadAutomationRuns = useCallback(async (signal?: AbortSignal) => {
+    setAutomationLoading(true)
+    try {
+      setAutomationRuns(await getAdultOtherAutomationRuns(signal))
+      setAutomationError(null)
+    } catch (error) {
+      if (!isJavaRequestCanceledError(error)) {
+        setAutomationError(
+          error instanceof Error ? error.message : '自动化记录加载失败',
+        )
+      }
+    } finally {
+      setAutomationLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     const controller = new AbortController()
     void loadRegistrationCode(controller.signal)
     return () => controller.abort()
   }, [loadRegistrationCode])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void loadAutomationRuns(controller.signal)
+    const intervalId = window.setInterval(
+      () => void loadAutomationRuns(),
+      5000,
+    )
+    return () => {
+      controller.abort()
+      window.clearInterval(intervalId)
+    }
+  }, [loadAutomationRuns])
 
   useEffect(() => {
     if (!toastMessage) {
@@ -686,8 +809,8 @@ export function DashboardPage() {
         setToastMessage(runToastMessage(run))
         setStatus('success')
         try {
-          const folders = await getAdultOtherCollectionSourceFolders()
-          setSourceFolders(folders)
+          const inventory = await getAdultOtherCollectionSourceFolders()
+          setCollectionInventory(inventory)
         } catch {
           setErrorMessage('操作已完成，但文件夹状态刷新失败，请手动刷新。')
         }
@@ -773,7 +896,7 @@ export function DashboardPage() {
   return (
     <PageContainer
       title="控制台"
-      description="管理 Adult-Other Collection 同步与后续系统能力。"
+      description="查看 Adult-Other 当前库存健康度与自动化运行情况。"
     >
       <div className="space-y-6">
         <AdminQuickLinksPanel />
@@ -781,31 +904,46 @@ export function DashboardPage() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard
             icon={Layers}
-            label="同步范围"
+            label="当前范围"
             tone="bg-slate-100 text-slate-700"
-            value={folderOverview.total}
-          />
-          <StatCard
-            icon={AlertTriangle}
-            label="有变化"
-            tone="bg-amber-50 text-amber-700"
-            value={folderOverview.changed}
-          />
-          <StatCard
-            icon={Trash2}
-            label="已消失"
-            tone="bg-rose-50 text-rose-700"
-            value={folderOverview.missing}
+            value={collectionInventory.sourceFolderCount}
           />
           <StatCard
             icon={Database}
-            label="未同步"
+            label="当前合集组"
+            tone="bg-emerald-50 text-emerald-700"
+            value={collectionInventory.groupCount}
+          />
+          <StatCard
+            icon={Layers}
+            label="待创建"
             tone="bg-blue-50 text-blue-700"
-            value={folderOverview.unsynced}
+            value={collectionInventory.pendingCreateGroupCount}
+          />
+          <StatCard
+            icon={AlertTriangle}
+            label="待补成员"
+            tone="bg-amber-50 text-amber-700"
+            value={collectionInventory.pendingMemberGroupCount}
           />
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.25fr)_repeat(3,minmax(16rem,1fr))]">
+        <AutomationRunsPanel
+          error={automationError}
+          loading={automationLoading}
+          onRefresh={() => void loadAutomationRuns()}
+          runs={automationRuns}
+        />
+
+        <details className="rounded-lg bg-white shadow-shell ring-1 ring-slate-200">
+          <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-slate-950">
+            高级恢复工具
+            <span className="ml-2 font-normal text-slate-500">
+              Webhook 遗漏或状态异常时手动校验
+            </span>
+          </summary>
+          <div className="space-y-6 border-t border-slate-100 p-5">
+            <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.25fr)_repeat(3,minmax(16rem,1fr))]">
           <OperationPanel
             action={
               <Button
@@ -825,7 +963,7 @@ export function DashboardPage() {
               </Button>
             }
             icon={Layers}
-            title="同步范围"
+            title="校验范围"
           >
             <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_8rem] xl:grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_8rem]">
               <label className="block">
@@ -886,7 +1024,7 @@ export function DashboardPage() {
             </div>
           </OperationPanel>
 
-          <OperationPanel icon={Play} title="创建合集">
+          <OperationPanel icon={Play} title="对账合集">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
               <Button
                 className="h-11"
@@ -1009,7 +1147,7 @@ export function DashboardPage() {
               ) : null}
             </div>
           </OperationPanel>
-        </div>
+            </div>
 
         <OperationPanel icon={KeyRound} title="注册码">
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_16rem] xl:items-start">
@@ -1064,7 +1202,7 @@ export function DashboardPage() {
           </div>
         ) : null}
 
-        {selectedRun ? (
+            {selectedRun ? (
           <>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <StatCard
@@ -1156,11 +1294,13 @@ export function DashboardPage() {
 
             <ResultTable run={selectedRun} />
           </>
-        ) : (
-          <div className="rounded-lg bg-white p-8 text-sm text-slate-500 shadow-shell ring-1 ring-slate-200">
-            暂无同步记录，先运行一次预览。
+            ) : (
+              <div className="rounded-lg bg-slate-50 p-8 text-sm text-slate-500 ring-1 ring-slate-200">
+                暂无手动校验记录。
+              </div>
+            )}
           </div>
-        )}
+        </details>
       </div>
 
       {toastMessage ? (

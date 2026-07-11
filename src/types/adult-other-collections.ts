@@ -10,18 +10,38 @@ export type AdultOtherCollectionSyncAction =
 export type AdultOtherCollectionSyncMode =
   | 'DRY_RUN'
   | 'APPLY'
+  | 'AUTO_WEBHOOK'
   | 'CLEANUP_DRY_RUN'
   | 'CLEANUP_APPLY'
 
 export type AdultOtherCollectionSyncStatus = 'RUNNING' | 'SUCCEEDED' | 'FAILED'
 
+export type AdultOtherAutomationRun = {
+  id: string
+  triggerType: 'NEW_ITEMS' | 'DELETIONS'
+  status: AdultOtherCollectionSyncStatus
+  stage: string
+  eventCount: number
+  targetItemCount: number
+  naturalPrimaryReadyCount: number
+  targetedRefreshCount: number
+  finalPrimaryReadyCount: number
+  finalPrimaryMissingCount: number
+  affectedCollectionCount: number
+  createdCollectionCount: number
+  updatedCollectionCount: number
+  collectionImageReadyCount: number
+  deletedCollectionCount: number
+  message: string | null
+  startedAt: string
+  finishedAt: string | null
+}
+
 export type AdultOtherCollectionSourceFolderChangeStatus =
-  | 'NEVER_SYNCED'
-  | 'UNCHANGED'
-  | 'INCREASED'
-  | 'DECREASED'
-  | 'CHANGED'
-  | 'MISSING'
+  | 'HEALTHY'
+  | 'PENDING_CREATE'
+  | 'PENDING_MEMBERS'
+  | 'MIXED'
 
 export type AdultOtherCollectionSyncGroup = {
   collectionName: string
@@ -40,13 +60,21 @@ export type AdultOtherCollectionSourceFolder = {
   label: string
   itemCount: number
   groupCount: number
-  latestPreviewAt: string | null
-  latestSyncAt: string | null
-  lastSyncedItemCount: number | null
-  lastSyncedGroupCount: number | null
-  itemDelta: number | null
-  groupDelta: number | null
-  changeStatus: AdultOtherCollectionSourceFolderChangeStatus
+  healthyGroupCount: number
+  pendingCreateGroupCount: number
+  pendingMemberGroupCount: number
+  skippedGroupCount: number
+  healthStatus: AdultOtherCollectionSourceFolderChangeStatus
+}
+
+export type AdultOtherCollectionInventory = {
+  sourceFolderCount: number
+  groupCount: number
+  healthyGroupCount: number
+  pendingCreateGroupCount: number
+  pendingMemberGroupCount: number
+  skippedGroupCount: number
+  sourceFolders: AdultOtherCollectionSourceFolder[]
 }
 
 export type AdultOtherCollectionSyncRun = {

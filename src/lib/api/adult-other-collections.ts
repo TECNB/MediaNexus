@@ -4,7 +4,8 @@ import {
   javaApiClient,
 } from '@/lib/java-api'
 import type {
-  AdultOtherCollectionSourceFolder,
+  AdultOtherAutomationRun,
+  AdultOtherCollectionInventory,
   AdultOtherCollectionSyncRun,
 } from '@/types/adult-other-collections'
 
@@ -12,6 +13,32 @@ type JavaApiResponse<T> = {
   code: number
   message: string
   data: T | null
+}
+
+export async function getAdultOtherAutomationRuns(
+  signal?: AbortSignal,
+): Promise<AdultOtherAutomationRun[]> {
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<AdultOtherAutomationRun[]>
+    >('/api/v1/admin/emby/adult-other-collections/automation/runs', {
+      params: { limit: 10 },
+      signal,
+    })
+    if (response.data.code !== 200) {
+      throw new Error(
+        response.data.message || ADULT_OTHER_COLLECTIONS_ERROR_MESSAGE,
+      )
+    }
+    return response.data.data ?? []
+  } catch (error) {
+    if (isJavaRequestCanceledError(error)) {
+      throw error
+    }
+    throw new Error(
+      getJavaErrorMessage(error) ?? ADULT_OTHER_COLLECTIONS_ERROR_MESSAGE,
+    )
+  }
 }
 
 type SyncRequest = {
@@ -53,10 +80,10 @@ export async function getLatestAdultOtherCollectionSyncRun(
 
 export async function getAdultOtherCollectionSourceFolders(
   signal?: AbortSignal,
-): Promise<AdultOtherCollectionSourceFolder[]> {
+): Promise<AdultOtherCollectionInventory> {
   try {
     const response = await javaApiClient.get<
-      JavaApiResponse<AdultOtherCollectionSourceFolder[]>
+      JavaApiResponse<AdultOtherCollectionInventory>
     >('/api/v1/admin/emby/adult-other-collections/source-folders', {
       signal,
       timeout: ADULT_OTHER_COLLECTIONS_TIMEOUT_MS,
@@ -68,7 +95,10 @@ export async function getAdultOtherCollectionSourceFolders(
       )
     }
 
-    return response.data.data ?? []
+    if (!response.data.data) {
+      throw new Error(ADULT_OTHER_COLLECTIONS_ERROR_MESSAGE)
+    }
+    return response.data.data
   } catch (error) {
     if (isJavaRequestCanceledError(error)) {
       throw error
