@@ -128,6 +128,7 @@ type AutoReleaseConfirmation = {
   mediaType: RecentIngestMediaType
   taskProductType: 'SERIES' | 'ANIME' | null
   qualityTag: OpenListQualityTag
+  selectedQualityTag: OpenListQualityTag
   seasonNumber: number | null
   release: ProwlarrRelease
   releases: ProwlarrRelease[]
@@ -998,6 +999,7 @@ export function ResourceSearchPage() {
               release,
               releases: data.items,
               query: data.query,
+              selectedQualityTag: data.selected_quality ?? qualityTag,
               searchLanguage: getItemSearchLanguage(item),
             }
           })
@@ -1023,6 +1025,7 @@ export function ResourceSearchPage() {
                 release,
                 releases: data.items,
                 query: data.query,
+                selectedQualityTag: data.selected_quality ?? qualityTag,
                 searchLanguage: getItemSearchLanguage(seriesItem),
               }
             })
@@ -1035,7 +1038,7 @@ export function ResourceSearchPage() {
             )
 
     void releaseRequest
-      .then(({ release, releases, query, searchLanguage }) => {
+      .then(({ release, releases, query, selectedQualityTag, searchLanguage }) => {
         if (latestRequestIdRef.current !== searchSessionId) {
           return
         }
@@ -1053,6 +1056,7 @@ export function ResourceSearchPage() {
           mediaType,
           taskProductType: mediaType === 'series' ? taskProductType : null,
           qualityTag,
+          selectedQualityTag,
           seasonNumber: mediaType === 'series' ? seasonNumber : null,
           release,
           releases,
@@ -1688,6 +1692,7 @@ export function ResourceSearchPage() {
     const isNonChineseRelease = !hasChineseText(release.title)
     const matchLabel = releaseMatchLabel(release, selection.query)
     const hasMultipleCandidates = selection.releases.length > 1
+    const hasQualityFallback = selection.selectedQualityTag !== selection.qualityTag
     const selectedSeasonLabel =
       selection.mediaType === 'series' &&
       typeof selection.seasonNumber === 'number'
@@ -1729,7 +1734,9 @@ export function ResourceSearchPage() {
                   ? '动漫整季'
                   : '剧集'}{' '}
               ·{' '}
-              {selection.qualityTag}
+              {hasQualityFallback
+                ? `${selection.qualityTag} → ${selection.selectedQualityTag}`
+                : selection.qualityTag}
               {selectedSeasonLabel ? ` · ${selectedSeasonLabel}` : ''}
               {hasMultipleCandidates ? ` · ${selection.releases.length} 个推荐` : ''}
             </span>
@@ -1738,6 +1745,12 @@ export function ResourceSearchPage() {
           {isNonChineseRelease ? (
             <div className="mt-5 rounded-xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-700">
               当前自动选中的发布标题不含中文，可能没有内置中文字幕。确认后如有需要，可以继续使用字幕上传能力补充字幕。
+            </div>
+          ) : null}
+
+          {hasQualityFallback ? (
+            <div className="mt-5 rounded-xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-700">
+              未找到符合条件且有做种的 {selection.qualityTag} 资源，已在本次搜索结果中自动回退至 {selection.selectedQualityTag}。请确认后再入库。
             </div>
           ) : null}
 
@@ -1808,7 +1821,7 @@ export function ResourceSearchPage() {
               <span>
                 当前选择：
                 {selectedSeasonLabel ? `${selectedSeasonLabel} / ` : ''}
-                {selection.qualityTag} /{' '}
+                {selection.selectedQualityTag} /{' '}
                 {formatDynamicRange(release.dynamic_range_tags)}
               </span>
               <span>体积：{formatReleaseSize(release.size)}</span>

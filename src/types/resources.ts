@@ -183,6 +183,8 @@ export type SeriesReleaseSearchPayload = {
 
 export type ProwlarrReleaseRecommendationData = {
   query: string
+  requested_quality: OpenListQualityTag
+  selected_quality: OpenListQualityTag
   item: ProwlarrRelease
   items: ProwlarrRelease[]
 }
