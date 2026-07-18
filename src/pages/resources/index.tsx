@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, Clock3 } from 'lucide-react'
+import { ArrowRight, Clock3, RefreshCw } from 'lucide-react'
 
 import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
@@ -23,6 +23,7 @@ import {
   type MediaCardSeasonStatus,
 } from '@/components/resources/media-card'
 import { SearchBar } from '@/components/resources/search-bar'
+import { SearchHistory } from '@/components/resources/search-history'
 import {
   getAnimeSubtitleGroups,
   previewAnimeSubscription,
@@ -40,9 +41,19 @@ import {
   isRequestCanceledError,
   recommendMovieRelease,
   recommendSeriesRelease,
+  refreshMovieReleaseRecommendation,
+  refreshSeriesReleaseRecommendation,
   searchMovies,
   searchSeries,
 } from '@/lib/api/resources'
+import {
+  addResourceSearchHistory,
+  clearResourceSearchHistory,
+  readResourceSearchHistory,
+  removeResourceSearchHistoryEntry,
+  type ResourceSearchHistoryEntry,
+} from '@/lib/resource-search-history'
+import { useAuth } from '@/lib/use-auth'
 import { formatElapsedMessage, useElapsedNow } from '@/lib/use-elapsed-time'
 import { cn } from '@/lib/utils'
 import type {
@@ -577,10 +588,15 @@ function EmptyState({
 
 export function ResourceSearchPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const userId = user?.id ?? null
   const [category, setCategory] = useState<ResourceCategoryValue>('movie')
   const [animeResourceMode, setAnimeResourceMode] =
     useState<AnimeResourceMode>(DEFAULT_ANIME_RESOURCE_MODE)
   const [searchText, setSearchText] = useState('')
+  const [searchHistory, setSearchHistory] = useState<
+    ResourceSearchHistoryEntry[]
+  >([])
   const [submittedTerm, setSubmittedTerm] = useState('')
   const [searchState, setSearchState] = useState<ResourceSearchState>(
     createInitialSearchState,
@@ -623,6 +639,7 @@ export function ResourceSearchPage() {
   const isAutoReleaseConfirmationOpen = autoReleaseConfirmation !== null
   const latestRequestIdRef = useRef(0)
   const recentIngestRequestIdRef = useRef(0)
+  const historyRestoredCategoryRef = useRef<ResourceCategoryValue | null>(null)
   const activeRequestControllerRef = useRef<AbortController | null>(null)
   const seriesSeasonsControllerRef = useRef<AbortController | null>(null)
   const activeMediaIngestKeysRef = useRef<Set<string>>(new Set())
@@ -708,6 +725,12 @@ export function ResourceSearchPage() {
   }, [loadRecentIngestSummary])
 
   useEffect(() => {
+    setSearchHistory(
+      userId === null ? [] : readResourceSearchHistory(userId),
+    )
+  }, [userId])
+
+  useEffect(() => {
     if (!toastMessage) {
       return
     }
@@ -747,6 +770,11 @@ export function ResourceSearchPage() {
   }, [])
 
   useEffect(() => {
+    if (historyRestoredCategoryRef.current === category) {
+      return
+    }
+
+    historyRestoredCategoryRef.current = null
     resetSearchSession()
     setAnimeResourceMode(DEFAULT_ANIME_RESOURCE_MODE)
   }, [category, resetSearchSession])
@@ -763,12 +791,18 @@ export function ResourceSearchPage() {
   const elapsedNow = useElapsedNow(hasActiveTimedIngest)
 
   function handleSearchSubmit() {
+    runResourceSearch(searchText, category, animeResourceMode)
+  }
+
+  function runResourceSearch(
+    searchValue: string,
+    activeCategory: ResourceCategoryValue,
+    activeAnimeResourceMode: AnimeResourceMode,
+  ) {
     if (searchState.status === 'loading') {
       return
     }
 
-    const activeCategory = category
-    const activeAnimeResourceMode = animeResourceMode
     const activeSearchHandler =
       activeCategory === 'anime'
         ? animeModeSearchHandlers[activeAnimeResourceMode]
@@ -777,7 +811,7 @@ export function ResourceSearchPage() {
       activeCategory === 'anime'
         ? animeResourceModeCopy[activeAnimeResourceMode].search
         : searchableCategoryCopy[activeCategory]
-    const keyword = searchText.trim()
+    const keyword = searchValue.trim()
     latestRequestIdRef.current += 1
     const requestId = latestRequestIdRef.current
 
@@ -791,6 +825,17 @@ export function ResourceSearchPage() {
     if (!keyword) {
       resetSearchSession()
       return
+    }
+
+    if (userId !== null) {
+      setSearchHistory(
+        addResourceSearchHistory(userId, {
+          keyword,
+          category: activeCategory,
+          animeMode:
+            activeCategory === 'anime' ? activeAnimeResourceMode : null,
+        }),
+      )
     }
 
     const controller = new AbortController()
@@ -877,6 +922,46 @@ export function ResourceSearchPage() {
           activeRequestControllerRef.current = null
         }
       })
+  }
+
+  function handleSearchHistorySelect(entry: ResourceSearchHistoryEntry) {
+    if (isSearching) {
+      return
+    }
+
+    const nextAnimeResourceMode =
+      entry.category === 'anime'
+        ? (entry.animeMode ?? DEFAULT_ANIME_RESOURCE_MODE)
+        : DEFAULT_ANIME_RESOURCE_MODE
+
+    if (entry.category !== category) {
+      historyRestoredCategoryRef.current = entry.category
+    }
+
+    setSearchText(entry.keyword)
+    setCategory(entry.category)
+    setAnimeResourceMode(nextAnimeResourceMode)
+    runResourceSearch(
+      entry.keyword,
+      entry.category,
+      nextAnimeResourceMode,
+    )
+  }
+
+  function handleSearchHistoryRemove(entry: ResourceSearchHistoryEntry) {
+    if (userId === null) {
+      return
+    }
+
+    setSearchHistory(removeResourceSearchHistoryEntry(userId, entry))
+  }
+
+  function handleSearchHistoryClear() {
+    if (userId === null) {
+      return
+    }
+
+    setSearchHistory(clearResourceSearchHistory(userId))
   }
 
   function handleAnimeResourceModeChange(nextMode: AnimeResourceMode) {
@@ -1100,6 +1185,99 @@ export function ResourceSearchPage() {
       return nextStates
     })
     setAutoReleaseConfirmation(null)
+  }
+
+  function handleRefreshAutoReleaseRecommendation() {
+    if (!autoReleaseConfirmation || autoReleaseConfirmation.isSubmitting) {
+      return
+    }
+
+    const selection = autoReleaseConfirmation
+    const searchSessionId = latestRequestIdRef.current
+    const seriesItem = isSeriesSearchItem(selection.item)
+      ? selection.item
+      : null
+
+    setAutoReleaseConfirmation(null)
+    setMediaIngestStates((currentStates) => ({
+      ...currentStates,
+      [selection.itemKey]: {
+        status: 'loading',
+        message: '正在重新搜索最新发布…',
+        startedAt: Date.now(),
+      },
+    }))
+
+    const refreshRequest =
+      selection.mediaType === 'movie'
+        ? refreshMovieReleaseRecommendation({
+            tmdb_id: selection.item.tmdb_id,
+            imdb_id: selection.item.imdb_id,
+            title: selection.item.title,
+            original_title: selection.item.original_title,
+            year: selection.item.year as number,
+            quality: selection.qualityTag,
+          })
+        : seriesItem
+          ? refreshSeriesReleaseRecommendation({
+              tvdb_id: seriesItem.tvdb_id,
+              tmdb_id: seriesItem.tmdb_id,
+              imdb_id: seriesItem.imdb_id,
+              title: seriesItem.title,
+              original_title: seriesItem.original_title,
+              season_number: selection.seasonNumber ?? 1,
+              quality: selection.qualityTag,
+            })
+          : Promise.reject(new Error('缺少剧集资源信息。'))
+
+    void refreshRequest
+      .then((data) => {
+        if (latestRequestIdRef.current !== searchSessionId) {
+          return
+        }
+
+        const release = data.items[0]
+        if (!release) {
+          throw new Error('刷新后未找到匹配的发布资源。')
+        }
+
+        setMediaIngestStates((currentStates) => ({
+          ...currentStates,
+          [selection.itemKey]: {
+            status: 'loading',
+            message: '请确认刷新后的发布资源。',
+          },
+        }))
+        setAutoReleaseConfirmation({
+          ...selection,
+          release,
+          releases: data.items,
+          query: data.query,
+          selectedQualityTag:
+            data.selected_quality ?? selection.qualityTag,
+          isSubmitting: false,
+        })
+      })
+      .catch((error) => {
+        if (latestRequestIdRef.current !== searchSessionId) {
+          return
+        }
+
+        activeMediaIngestKeysRef.current.delete(selection.itemKey)
+        const message =
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : '发布资源刷新失败，请稍后重试。'
+
+        setMediaIngestStates((currentStates) => ({
+          ...currentStates,
+          [selection.itemKey]: {
+            status: 'error',
+            message,
+          },
+        }))
+        setToastMessage(message)
+      })
   }
 
   function handleSelectAutoReleaseCandidate(release: ProwlarrRelease) {
@@ -1832,7 +2010,18 @@ export function ResourceSearchPage() {
             </div>
           </div>
 
-          <div className="mt-6 flex justify-end gap-3">
+          <div className="mt-6 flex items-center gap-3">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={selection.isSubmitting}
+              onClick={handleRefreshAutoReleaseRecommendation}
+              className="mr-auto text-slate-500 shadow-none hover:text-slate-950"
+            >
+              <RefreshCw className="h-4 w-4" />
+              刷新推荐
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -2021,6 +2210,13 @@ export function ResourceSearchPage() {
               </p>
             </div>
           ) : null}
+          <SearchHistory
+            entries={searchHistory}
+            searchDisabled={isSearching}
+            onSelect={handleSearchHistorySelect}
+            onRemove={handleSearchHistoryRemove}
+            onClear={handleSearchHistoryClear}
+          />
         </div>
 
         {renderRecentIngestSummary()}

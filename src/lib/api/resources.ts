@@ -311,6 +311,42 @@ export async function recommendMovieRelease(
   }
 }
 
+export async function refreshMovieReleaseRecommendation(
+  payload: MovieReleaseRecommendationPayload,
+): Promise<ProwlarrReleaseRecommendationData> {
+  try {
+    const response = await javaApiClient.post<
+      JavaApiResponse<ProwlarrReleaseRecommendationData>
+    >('/api/v1/resources/movies/releases/recommendation/refresh', payload, {
+      timeout: PROWLARR_RELEASE_REQUEST_TIMEOUT_MS,
+    })
+
+    const data = response.data.data
+    const items = Array.isArray(data?.items)
+      ? data.items
+      : data?.item
+        ? [data.item]
+        : []
+    const item = data?.item ?? items[0]
+
+    if (response.data.code !== 200 || !data || !item || items.length === 0) {
+      throw new Error(
+        response.data.message || 'movie release recommendation refresh failed',
+      )
+    }
+
+    return {
+      ...data,
+      item,
+      items,
+    }
+  } catch (error) {
+    throw new Error(
+      getJavaErrorMessage(error) || '电影发布资源刷新失败，请稍后重试。',
+    )
+  }
+}
+
 export async function searchMovieReleases(
   payload: MovieReleaseSearchPayload,
   signal?: AbortSignal,
@@ -338,6 +374,39 @@ export async function searchMovieReleases(
     }
     throw new Error(
       getJavaErrorMessage(error) || '电影发布资源加载失败，请稍后重试。',
+    )
+  }
+}
+
+export async function refreshMovieReleases(
+  payload: MovieReleaseSearchPayload,
+  signal?: AbortSignal,
+): Promise<ProwlarrReleaseSearchData> {
+  try {
+    const response = await javaApiClient.post<
+      JavaApiResponse<ProwlarrReleaseSearchData>
+    >('/api/v1/resources/movies/releases/search/refresh', payload, {
+      signal,
+      timeout: PROWLARR_RELEASE_REQUEST_TIMEOUT_MS,
+    })
+
+    if (
+      response.data.code !== 200 ||
+      !response.data.data ||
+      !Array.isArray(response.data.data.items)
+    ) {
+      throw new Error(
+        response.data.message || 'movie release search refresh failed',
+      )
+    }
+
+    return response.data.data
+  } catch (error) {
+    if (isRequestCanceledError(error)) {
+      throw error
+    }
+    throw new Error(
+      getJavaErrorMessage(error) || '电影发布资源刷新失败，请稍后重试。',
     )
   }
 }
@@ -378,6 +447,42 @@ export async function recommendSeriesRelease(
   }
 }
 
+export async function refreshSeriesReleaseRecommendation(
+  payload: SeriesReleaseRecommendationPayload,
+): Promise<ProwlarrReleaseRecommendationData> {
+  try {
+    const response = await javaApiClient.post<
+      JavaApiResponse<ProwlarrReleaseRecommendationData>
+    >('/api/v1/resources/series/releases/recommendation/refresh', payload, {
+      timeout: PROWLARR_RELEASE_REQUEST_TIMEOUT_MS,
+    })
+
+    const data = response.data.data
+    const items = Array.isArray(data?.items)
+      ? data.items
+      : data?.item
+        ? [data.item]
+        : []
+    const item = data?.item ?? items[0]
+
+    if (response.data.code !== 200 || !data || !item || items.length === 0) {
+      throw new Error(
+        response.data.message || 'series release recommendation refresh failed',
+      )
+    }
+
+    return {
+      ...data,
+      item,
+      items,
+    }
+  } catch (error) {
+    throw new Error(
+      getJavaErrorMessage(error) || '剧集发布资源刷新失败，请稍后重试。',
+    )
+  }
+}
+
 export async function searchSeriesReleases(
   payload: SeriesReleaseSearchPayload,
   signal?: AbortSignal,
@@ -405,6 +510,39 @@ export async function searchSeriesReleases(
     }
     throw new Error(
       getJavaErrorMessage(error) || '剧集发布资源加载失败，请稍后重试。',
+    )
+  }
+}
+
+export async function refreshSeriesReleases(
+  payload: SeriesReleaseSearchPayload,
+  signal?: AbortSignal,
+): Promise<ProwlarrReleaseSearchData> {
+  try {
+    const response = await javaApiClient.post<
+      JavaApiResponse<ProwlarrReleaseSearchData>
+    >('/api/v1/resources/series/releases/search/refresh', payload, {
+      signal,
+      timeout: PROWLARR_RELEASE_REQUEST_TIMEOUT_MS,
+    })
+
+    if (
+      response.data.code !== 200 ||
+      !response.data.data ||
+      !Array.isArray(response.data.data.items)
+    ) {
+      throw new Error(
+        response.data.message || 'series release search refresh failed',
+      )
+    }
+
+    return response.data.data
+  } catch (error) {
+    if (isRequestCanceledError(error)) {
+      throw error
+    }
+    throw new Error(
+      getJavaErrorMessage(error) || '剧集发布资源刷新失败，请稍后重试。',
     )
   }
 }

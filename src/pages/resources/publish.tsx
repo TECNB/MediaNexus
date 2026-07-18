@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -20,6 +20,8 @@ import {
   createMovieReleaseOpenListIngest,
   createSeriesReleaseOpenListIngest,
   isRequestCanceledError,
+  refreshMovieReleases,
+  refreshSeriesReleases,
   searchMovieReleases,
   searchSeriesReleases,
 } from '@/lib/api/resources'
@@ -246,7 +248,8 @@ export function ResourcePublishPage() {
   const [resolutionFilter, setResolutionFilter] =
     useState<ResolutionFilter>('all')
   const [dynamicFilter, setDynamicFilter] = useState<DynamicFilter>('all')
-  const [refreshVersion, setRefreshVersion] = useState(0)
+  const activeReleaseSearchControllerRef = useRef<AbortController | null>(null)
+  const releaseSearchRequestIdRef = useRef(0)
   const [loadState, setLoadState] = useState<{
     status: LoadStatus
     query: string
@@ -315,7 +318,11 @@ export function ResourcePublishPage() {
       return
     }
 
+    const requestId = releaseSearchRequestIdRef.current + 1
+    releaseSearchRequestIdRef.current = requestId
+    activeReleaseSearchControllerRef.current?.abort()
     const controller = new AbortController()
+    activeReleaseSearchControllerRef.current = controller
     setLoadState((current) => ({
       status: 'loading',
       query: current.query,
@@ -360,6 +367,9 @@ export function ResourcePublishPage() {
 
     void request
       .then((data) => {
+        if (releaseSearchRequestIdRef.current !== requestId) {
+          return
+        }
         setLoadState({
           status: 'success',
           query: data.query,
@@ -369,7 +379,11 @@ export function ResourcePublishPage() {
         })
       })
       .catch((error) => {
-        if (controller.signal.aborted || isRequestCanceledError(error)) {
+        if (
+          releaseSearchRequestIdRef.current !== requestId ||
+          controller.signal.aborted ||
+          isRequestCanceledError(error)
+        ) {
           return
         }
         setLoadState({
@@ -385,7 +399,14 @@ export function ResourcePublishPage() {
       })
 
     return () => controller.abort()
-  }, [isAnimeSeason, item, mediaType, pageState, refreshVersion, seasonNumber])
+  }, [isAnimeSeason, item, mediaType, pageState, seasonNumber])
+
+  useEffect(
+    () => () => {
+      activeReleaseSearchControllerRef.current?.abort()
+    },
+    [],
+  )
 
   const filteredItems = useMemo(
     () =>
@@ -476,6 +497,89 @@ export function ResourcePublishPage() {
     },
     { all: 0, dolby_vision: 0, hdr: 0, sdr: 0, unmarked: 0 },
   )
+
+  function handleRefreshReleases() {
+    const requestId = releaseSearchRequestIdRef.current + 1
+    releaseSearchRequestIdRef.current = requestId
+    activeReleaseSearchControllerRef.current?.abort()
+    const controller = new AbortController()
+    activeReleaseSearchControllerRef.current = controller
+    const seriesItem = isSeriesSearchItem(item) ? item : null
+
+    setLoadState((current) => ({
+      status: 'loading',
+      query: current.query,
+      items: current.items,
+      message: null,
+      startedAt: Date.now(),
+    }))
+    setSubmitState({ keys: [], message: null })
+
+    const request =
+      mediaType === 'movie'
+        ? refreshMovieReleases(
+            {
+              tmdb_id: item.tmdb_id,
+              imdb_id: item.imdb_id,
+              title: item.title,
+              original_title: item.original_title,
+              year: item.year as number,
+              quality: pageState.qualityTag,
+            },
+            controller.signal,
+          )
+        : seriesItem
+          ? refreshSeriesReleases(
+              {
+                tvdb_id: seriesItem.tvdb_id,
+                tmdb_id: seriesItem.tmdb_id,
+                imdb_id: seriesItem.imdb_id,
+                title: seriesItem.title,
+                original_title: seriesItem.original_title,
+                season_number: seasonNumber,
+                quality: pageState.qualityTag,
+              },
+              controller.signal,
+            )
+          : Promise.reject(
+              new Error(
+                isAnimeSeason ? '缺少动漫整季资源信息。' : '缺少剧集资源信息。',
+              ),
+            )
+
+    void request
+      .then((data) => {
+        if (releaseSearchRequestIdRef.current !== requestId) {
+          return
+        }
+        setLoadState({
+          status: 'success',
+          query: data.query,
+          items: data.items,
+          message: null,
+          startedAt: null,
+        })
+      })
+      .catch((error) => {
+        if (
+          releaseSearchRequestIdRef.current !== requestId ||
+          controller.signal.aborted ||
+          isRequestCanceledError(error)
+        ) {
+          return
+        }
+        setLoadState({
+          status: 'error',
+          query: '',
+          items: [],
+          message:
+            error instanceof Error && error.message.trim()
+              ? error.message.trim()
+              : '发布资源刷新失败，请稍后重试。',
+          startedAt: null,
+        })
+      })
+  }
 
   function handleSubmit(release: ProwlarrRelease, key: string) {
     if (mediaType !== 'movie' && mediaType !== 'series') {
@@ -594,7 +698,7 @@ export function ResourcePublishPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setRefreshVersion((value) => value + 1)}
+              onClick={handleRefreshReleases}
               disabled={loadState.status === 'loading'}
               className="h-10 rounded-lg border-slate-200 shadow-none"
             >
