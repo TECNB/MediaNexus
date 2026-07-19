@@ -17,17 +17,23 @@ import {
 import { Button } from '@/components/ui/button'
 import { SelectControl } from '@/components/ui/form-control'
 import {
+  listEmbyLibraries,
+  refreshEmbyLibrary,
+} from '@/lib/api/emby-libraries'
+import {
   getSeriesSeasons,
   isRequestCanceledError,
   searchMovies,
   searchSeries,
 } from '@/lib/api/resources'
 import {
+  getSubtitleUpload,
   listSubtitleUploadLogs,
   listSubtitleUploads,
   uploadSubtitleByAssociation,
 } from '@/lib/api/subtitles'
 import { cn } from '@/lib/utils'
+import type { EmbyLibrarySummary } from '@/types/emby-library'
 import type { MovieSearchItem, SeriesSearchItem } from '@/types/resources'
 import type {
   SubtitleUploadResponse,
@@ -36,6 +42,7 @@ import type {
 
 type ProcessStatus = 'mounted' | 'uploaded' | 'matching' | 'failed'
 type AssociationStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
+type EmbyLibraryLoadStatus = 'loading' | 'success' | 'empty' | 'error'
 
 type RecentProcessRecord = {
   uploadId: string
@@ -65,12 +72,16 @@ type LastUploadResult = {
 
 const demoToastMessage = '演示模式：当前仅展示前端搜索与选择交互'
 const supportedSubtitleUploadExtensions = ['srt', 'ass', 'sup', 'zip']
+const subtitleLogPollIntervalMs = 2000
+const subtitleListPollIntervalMs = 5000
 const subtitleLogStageLabels: Record<string, string> = {
   created: '已创建',
+  extracting: '解析文件',
   target_checking: '检查目录',
   planning: '规划文件',
   uploading: '上传中',
   uploaded: '已上传',
+  refreshing_as: '刷新 AS',
   waiting_for_as: '等待 AS',
   failed: '失败',
 }
@@ -95,7 +106,7 @@ const processStatusMeta: Record<
     dotClassName: 'bg-emerald-500',
   },
   matching: {
-    label: '匹配中',
+    label: '处理中',
     badgeClassName: 'bg-amber-50 text-amber-700',
     dotClassName: 'bg-amber-500',
   },
@@ -229,41 +240,6 @@ function buildRecentProcessRecord(
     status: mapUploadStatus(upload.status),
     time: formatRecordTime(upload.created_at),
   }
-}
-
-function buildUploadSuccessLogs(
-  fileName: string,
-  item: SubtitleAssociationItem,
-  response: SubtitleUploadResponse,
-): OperationalLogEntry[] {
-  const createdAt = new Date().toISOString()
-
-  return [
-    {
-      id: `${response.id}-uploaded`,
-      level: 'INFO',
-      stage: 'uploaded',
-      message: `已上传 ${fileName}`,
-      detail: null,
-      created_at: createdAt,
-    },
-    {
-      id: `${response.id}-target`,
-      level: 'INFO',
-      stage: 'uploaded',
-      message: '字幕文件已写入目标目录',
-      detail: response.target_path,
-      created_at: createdAt,
-    },
-    {
-      id: `${response.id}-waiting-for-as`,
-      level: 'INFO',
-      stage: 'waiting_for_as',
-      message: `已保存 ${response.files.length} 个字幕文件：${getAssociationProjectLabel(item, response.season_number)}`,
-      detail: null,
-      created_at: createdAt,
-    },
-  ]
 }
 
 function buildUploadFailureLog(message: string): OperationalLogEntry {
@@ -778,6 +754,27 @@ function UploadResultSummary({
   if (uploadStatus === 'success' && lastUploadResult) {
     const { fileName, projectTitle, response } = lastUploadResult
 
+    if (response.status === 'PROCESSING') {
+      return (
+        <div className="rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p className="font-medium">
+            已接收：{fileName} → {projectTitle}
+          </p>
+          <p className="mt-1 text-xs text-amber-700/90">
+            后台正在解析并上传字幕，右侧日志会自动更新。
+          </p>
+        </div>
+      )
+    }
+
+    if (response.status === 'FAILED') {
+      return (
+        <div className="rounded-[18px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {response.error_message || '字幕后台处理失败'}
+        </div>
+      )
+    }
+
     return (
       <div className="rounded-[18px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
         <p className="font-medium">
@@ -837,6 +834,12 @@ export function SubtitleManagePage() {
   const [associationErrorMessage, setAssociationErrorMessage] = useState<
     string | null
   >(null)
+  const [embyLibraries, setEmbyLibraries] = useState<EmbyLibrarySummary[]>([])
+  const [selectedEmbyLibraryId, setSelectedEmbyLibraryId] = useState('')
+  const [embyLibraryLoadStatus, setEmbyLibraryLoadStatus] =
+    useState<EmbyLibraryLoadStatus>('loading')
+  const [embyLibraryRefreshPending, setEmbyLibraryRefreshPending] =
+    useState(false)
 
   useEffect(() => {
     if (!toastMessage) {
@@ -862,6 +865,167 @@ export function SubtitleManagePage() {
   useEffect(() => {
     void refreshUploadHistory()
   }, [])
+
+  useEffect(() => {
+    let canceled = false
+
+    const loadLibraries = async () => {
+      try {
+        const libraries = await listEmbyLibraries()
+        if (canceled) {
+          return
+        }
+
+        setEmbyLibraries(libraries)
+        setSelectedEmbyLibraryId((currentLibraryId) =>
+          libraries.some((library) => library.id === currentLibraryId)
+            ? currentLibraryId
+            : (libraries[0]?.id ?? ''),
+        )
+        setEmbyLibraryLoadStatus(
+          libraries.length > 0 ? 'success' : 'empty',
+        )
+      } catch {
+        if (!canceled) {
+          setEmbyLibraries([])
+          setSelectedEmbyLibraryId('')
+          setEmbyLibraryLoadStatus('error')
+        }
+      }
+    }
+
+    void loadLibraries()
+
+    return () => {
+      canceled = true
+    }
+  }, [])
+
+  const hasProcessingUploads = recentProcessRecords.some(
+    (record) => record.status === 'matching',
+  )
+
+  useEffect(() => {
+    if (!selectedLogUploadId) {
+      return
+    }
+
+    let canceled = false
+    let requestInFlight = false
+    let timeoutId: number | null = null
+
+    const pollSelectedUpload = async () => {
+      if (requestInFlight) {
+        return
+      }
+
+      requestInFlight = true
+      let shouldContinuePolling = true
+      try {
+        const [upload, logs] = await Promise.all([
+          getSubtitleUpload(selectedLogUploadId),
+          listSubtitleUploadLogs(selectedLogUploadId),
+        ])
+
+        if (canceled) {
+          return
+        }
+
+        const record = buildRecentProcessRecord(upload)
+        setRecentProcessRecords((currentRecords) => {
+          const exists = currentRecords.some(
+            (currentRecord) => currentRecord.uploadId === upload.id,
+          )
+
+          return exists
+            ? currentRecords.map((currentRecord) =>
+                currentRecord.uploadId === upload.id ? record : currentRecord,
+              )
+            : [record, ...currentRecords]
+        })
+        setLastUploadResult((currentResult) =>
+          currentResult?.response.id === upload.id
+            ? { ...currentResult, response: upload }
+            : currentResult,
+        )
+        setSystemLogRecords(logs)
+        setSystemLogError(null)
+        setSystemLogStatus(logs.length > 0 ? 'success' : 'empty')
+        shouldContinuePolling = upload.status === 'PROCESSING'
+      } catch (error) {
+        if (canceled) {
+          return
+        }
+
+        const message =
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : '字幕上传状态加载失败'
+        setSystemLogError(message)
+        setSystemLogStatus('error')
+      } finally {
+        requestInFlight = false
+        if (!canceled && shouldContinuePolling) {
+          timeoutId = window.setTimeout(
+            () => void pollSelectedUpload(),
+            subtitleLogPollIntervalMs,
+          )
+        }
+      }
+    }
+
+    void pollSelectedUpload()
+
+    return () => {
+      canceled = true
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
+    }
+  }, [selectedLogUploadId])
+
+  useEffect(() => {
+    if (!hasProcessingUploads) {
+      return
+    }
+
+    let canceled = false
+    const pollUploadList = async () => {
+      try {
+        const uploads = await listSubtitleUploads()
+
+        if (canceled) {
+          return
+        }
+
+        setRecentProcessRecords(uploads.map(buildRecentProcessRecord))
+        setLastUploadResult((currentResult) => {
+          if (!currentResult) {
+            return null
+          }
+
+          const upload = uploads.find(
+            (item) => item.id === currentResult.response.id,
+          )
+          return upload
+            ? { ...currentResult, response: upload }
+            : currentResult
+        })
+      } catch {
+        // The selected upload poll owns visible error feedback.
+      }
+    }
+
+    const intervalId = window.setInterval(
+      () => void pollUploadList(),
+      subtitleListPollIntervalMs,
+    )
+
+    return () => {
+      canceled = true
+      window.clearInterval(intervalId)
+    }
+  }, [hasProcessingUploads])
 
   async function refreshUploadHistory(preferredUploadId?: string) {
     setSystemLogStatus('loading')
@@ -920,6 +1084,27 @@ export function SubtitleManagePage() {
 
   function showToast(message: string) {
     setToastMessage(message)
+  }
+
+  async function handleEmbyLibraryRefresh() {
+    if (!selectedEmbyLibraryId) {
+      showToast('请先选择要刷新的 Emby 媒体库')
+      return
+    }
+
+    setEmbyLibraryRefreshPending(true)
+    try {
+      const response = await refreshEmbyLibrary(selectedEmbyLibraryId)
+      showToast(`${response.libraryName}：${response.message}`)
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message.trim()
+          : 'Emby 媒体库刷新失败'
+      showToast(message)
+    } finally {
+      setEmbyLibraryRefreshPending(false)
+    }
   }
 
   function openFilePicker() {
@@ -1214,29 +1399,19 @@ export function SubtitleManagePage() {
           status: mapUploadStatus(response.status),
           time: '刚刚',
         },
-        ...currentRecords,
+        ...currentRecords.filter((record) => record.uploadId !== response.id),
       ])
-      setSystemLogRecords((currentLogs) =>
-        [
-          ...currentLogs,
-          ...buildUploadSuccessLogs(
-            uploadedFileName,
-            selectedAssociationItem,
-            response,
-          ),
-        ].slice(-12),
-      )
       setSelectedLogUploadId(response.id)
       setSystemLogError(null)
-      setSystemLogStatus('success')
+      setSystemLogRecords([])
+      setSystemLogStatus('loading')
       setSelectedFile(null)
 
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
 
-      void refreshUploadHistory(response.id)
-      showToast('上传成功，已触发 AS 刷新')
+      showToast('文件已接收，正在后台处理')
     } catch (error) {
       const message =
         error instanceof Error && error.message.trim()
@@ -1449,32 +1624,65 @@ export function SubtitleManagePage() {
               <div className="space-y-1">
                 <h3 className="text-sm font-semibold text-slate-950">库概览</h3>
                 <p className="text-sm text-slate-500">
-                  静态指标仅用于展示当前界面层级。
-                </p>
-              </div>
-
-              <div className="mt-6 flex items-end justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.24em] text-slate-400">
-                    已管理字幕
-                  </p>
-                  <p className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">
-                    1,428
-                  </p>
-                </div>
-                <p className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                  +12 今日新增
+                  选择一个 Emby 媒体库进行刷新，不会影响其他媒体库。
                 </p>
               </div>
 
               <div className="mt-5 space-y-3">
-                <div className="flex items-center justify-between text-sm text-slate-500">
-                  <span>STRM 覆盖率</span>
-                  <span className="font-semibold text-slate-900">92.4%</span>
-                </div>
-                <div className="h-2 rounded-full bg-slate-100">
-                  <div className="h-full w-[92.4%] rounded-full bg-slate-900" />
-                </div>
+                <label
+                  className="block text-xs font-medium uppercase tracking-[0.18em] text-slate-400"
+                  htmlFor="subtitle-emby-library"
+                >
+                  目标媒体库
+                </label>
+                <SelectControl
+                  id="subtitle-emby-library"
+                  aria-label="选择要刷新的 Emby 媒体库"
+                  disabled={
+                    embyLibraryLoadStatus !== 'success' ||
+                    embyLibraryRefreshPending
+                  }
+                  value={selectedEmbyLibraryId}
+                  onChange={(event) =>
+                    setSelectedEmbyLibraryId(event.target.value)
+                  }
+                >
+                  {embyLibraryLoadStatus === 'loading' ? (
+                    <option value="">正在加载媒体库...</option>
+                  ) : null}
+                  {embyLibraryLoadStatus === 'error' ? (
+                    <option value="">媒体库加载失败</option>
+                  ) : null}
+                  {embyLibraryLoadStatus === 'empty' ? (
+                    <option value="">暂无可用媒体库</option>
+                  ) : null}
+                  {embyLibraries.map((library) => (
+                    <option key={library.id} value={library.id}>
+                      {library.name || library.id}
+                    </option>
+                  ))}
+                </SelectControl>
+
+                <Button
+                  type="button"
+                  disabled={
+                    !selectedEmbyLibraryId || embyLibraryRefreshPending
+                  }
+                  className="h-10 w-full rounded-[14px] bg-slate-950 text-sm font-medium text-white hover:bg-black disabled:bg-slate-200 disabled:text-slate-500"
+                  onClick={() => {
+                    void handleEmbyLibraryRefresh()
+                  }}
+                >
+                  <RefreshCcw
+                    className={cn(
+                      'h-4 w-4',
+                      embyLibraryRefreshPending && 'animate-spin',
+                    )}
+                  />
+                  {embyLibraryRefreshPending
+                    ? '正在提交刷新...'
+                    : '刷新所选媒体库'}
+                </Button>
               </div>
             </section>
 
