@@ -499,6 +499,10 @@ export function ResourcePublishPage() {
   )
 
   function handleRefreshReleases() {
+    if (!pageState || !item) {
+      return
+    }
+
     const requestId = releaseSearchRequestIdRef.current + 1
     releaseSearchRequestIdRef.current = requestId
     activeReleaseSearchControllerRef.current?.abort()
