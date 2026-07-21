@@ -931,13 +931,16 @@ export function MagnetIngestPage() {
       return
     }
 
+    const tmdbId = selectedSeries.tmdb_id
     const tvdbId = selectedSeries.tvdb_id
+    const hasTmdbId = typeof tmdbId === 'number' && tmdbId > 0
+    const hasTvdbId = typeof tvdbId === 'number' && tvdbId > 0
 
-    if (typeof tvdbId !== 'number' || tvdbId <= 0) {
+    if (!hasTmdbId && !hasTvdbId) {
       setSeriesSeasonStatus('error')
       setSeriesSeasonOptions([])
       setSelectedSeasonNumber(null)
-      setSeriesSeasonError('当前剧集缺少有效的 TVDB ID，无法加载季数。')
+      setSeriesSeasonError('当前剧集缺少有效的目录 ID，无法加载季数。')
       return
     }
 
@@ -953,7 +956,13 @@ export function MagnetIngestPage() {
     setSelectedSeasonNumber(null)
     setSeriesSeasonError(null)
 
-    void getSeriesSeasons({ tmdbId: null, tvdbId }, controller.signal)
+    void getSeriesSeasons(
+      {
+        tmdbId: hasTmdbId ? tmdbId : null,
+        tvdbId: hasTvdbId ? tvdbId : null,
+      },
+      controller.signal,
+    )
       .then((data) => {
         if (latestSeriesSeasonRequestIdRef.current !== requestId) {
           return
