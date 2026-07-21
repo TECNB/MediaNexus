@@ -37,6 +37,7 @@ import {
 import {
   createMovieReleaseOpenListIngest,
   createSeriesReleaseOpenListIngest,
+  checkMediaLibraryPresence,
   getSeriesSeasons,
   isRequestCanceledError,
   recommendMovieRelease,
@@ -68,6 +69,7 @@ import type {
 } from '@/types/magnet-ingest'
 import type {
   OpenListQualityTag,
+  MediaLibraryPresenceData,
   ProwlarrRelease,
   ResourcePublishPageState,
   SearchableResourceItem,
@@ -145,6 +147,7 @@ type AutoReleaseConfirmation = {
   releases: ProwlarrRelease[]
   query: string
   searchLanguage: SearchLanguage
+  libraryPresence: MediaLibraryPresenceData | null
   isSubmitting: boolean
 }
 
@@ -1122,8 +1125,14 @@ export function ResourceSearchPage() {
               ),
             )
 
-    void releaseRequest
-      .then(({ release, releases, query, selectedQualityTag, searchLanguage }) => {
+    const presenceRequest = checkMediaLibraryPresence({
+      media_type: mediaType,
+      tmdb_id: item.tmdb_id,
+      season_number: mediaType === 'series' ? seasonNumber : null,
+    }).catch(() => null)
+
+    void Promise.all([releaseRequest, presenceRequest])
+      .then(([{ release, releases, query, selectedQualityTag, searchLanguage }, libraryPresence]) => {
         if (latestRequestIdRef.current !== searchSessionId) {
           return
         }
@@ -1147,6 +1156,7 @@ export function ResourceSearchPage() {
           releases,
           query,
           searchLanguage,
+          libraryPresence,
           isSubmitting: false,
         })
       })
@@ -1296,11 +1306,16 @@ export function ResourceSearchPage() {
       return
     }
 
+    if (autoReleaseConfirmation.libraryPresence?.exists) {
+      return
+    }
+
     const selection = autoReleaseConfirmation
     const release = selection.release
     const commonPayload = {
       title: selection.item.title,
       original_title: selection.item.original_title,
+      tmdb_id: selection.item.tmdb_id,
       release_title: release.title,
       indexer: release.indexer,
       size: release.size,
@@ -1926,6 +1941,16 @@ export function ResourceSearchPage() {
             </div>
           ) : null}
 
+          {selection.libraryPresence?.exists ? (
+            <div className="mt-5 rounded-xl bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-700">
+              Emby 媒体库中已存在
+              {selection.mediaType === 'series' && selection.seasonNumber
+                ? `《${selection.libraryPresence.matched_title || selection.item.title}》第 ${selection.seasonNumber} 季`
+                : `《${selection.libraryPresence.matched_title || selection.item.title}》`}
+              ，禁止重复入库。当前按作品与季度判断，不支持多质量版本。
+            </div>
+          ) : null}
+
           {hasQualityFallback ? (
             <div className="mt-5 rounded-xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-700">
               未找到符合条件且有做种的 {selection.qualityTag} 资源，已在本次搜索结果中自动回退至 {selection.selectedQualityTag}。请确认后再入库。
@@ -2033,11 +2058,17 @@ export function ResourceSearchPage() {
             </Button>
             <Button
               type="button"
-              disabled={selection.isSubmitting}
+              disabled={
+                selection.isSubmitting || Boolean(selection.libraryPresence?.exists)
+              }
               onClick={handleConfirmAutoRelease}
               className="rounded-xl bg-slate-950 text-white shadow-none hover:bg-slate-800"
             >
-              {selection.isSubmitting ? '正在创建任务…' : '确认入库'}
+              {selection.isSubmitting
+                ? '正在创建任务…'
+                : selection.libraryPresence?.exists
+                  ? '媒体已存在，禁止入库'
+                  : '确认入库'}
             </Button>
           </div>
         </div>

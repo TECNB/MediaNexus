@@ -3,6 +3,7 @@ export type CreateMovieMagnetIngestPayload = {
   title: string
   original_title: string
   year: number
+  tmdb_id: number | null
 }
 
 export type CreateSeriesMagnetIngestPayload = {
@@ -10,6 +11,7 @@ export type CreateSeriesMagnetIngestPayload = {
   title: string
   original_title: string
   season_number: number
+  tmdb_id: number | null
 }
 
 export type AdultMagnetCategory = 'JAV' | 'OTHER'

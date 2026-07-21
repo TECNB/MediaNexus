@@ -90,6 +90,21 @@ export type SeriesSeasonsResponse = {
   data: SeriesSeasonsData
 }
 
+export type MediaLibraryPresenceParams = {
+  media_type: 'movie' | 'series'
+  tmdb_id?: number | null
+  bgm_id?: string | null
+  season_number?: number | null
+}
+
+export type MediaLibraryPresenceData = {
+  check_available: boolean
+  exists: boolean
+  tmdb_id: number | null
+  matched_title: string | null
+  season_number: number | null
+}
+
 export type OpenListQualityTag = '2160p' | '1080p' | '720p'
 
 export type ResourcePublishMediaType = 'movie' | 'series'
@@ -110,6 +125,7 @@ export type CreateMovieOpenListIngestPayload = {
   original_title: string | null
   year: number
   quality: OpenListQualityTag
+  tmdb_id: number | null
 }
 
 export type CreateSeriesOpenListIngestPayload = {
@@ -119,6 +135,7 @@ export type CreateSeriesOpenListIngestPayload = {
   season_number: number
   task_product_type?: 'SERIES' | 'ANIME'
   quality: OpenListQualityTag
+  tmdb_id: number | null
 }
 
 export type ProwlarrRelease = {
@@ -205,6 +222,7 @@ type SelectedReleasePayload = {
   download_ref: string
   resolution_tags: OpenListQualityTag[]
   dynamic_range_tags: string[]
+  tmdb_id: number | null
 }
 
 export type CreateMovieReleaseOpenListIngestPayload =

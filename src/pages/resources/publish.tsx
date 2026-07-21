@@ -30,6 +30,7 @@ import {
   retryOpenListWithSelectedRelease,
 } from '@/lib/api/task-center'
 import { formatElapsedMessage, useElapsedNow } from '@/lib/use-elapsed-time'
+import { checkMediaLibraryIngestAllowed } from '@/lib/media-library-presence'
 import { cn } from '@/lib/utils'
 import type {
   OpenListQualityTag,
@@ -585,7 +586,7 @@ export function ResourcePublishPage() {
       })
   }
 
-  function handleSubmit(release: ProwlarrRelease, key: string) {
+  async function handleSubmit(release: ProwlarrRelease, key: string) {
     if (mediaType !== 'movie' && mediaType !== 'series') {
       return
     }
@@ -595,9 +596,30 @@ export function ResourcePublishPage() {
       keys: [...current.keys, key],
       message: null,
     }))
+
+    if (!retryContextState.context) {
+      const isIngestAllowed = await checkMediaLibraryIngestAllowed(
+        {
+          media_type: activeMediaType,
+          tmdb_id: item!.tmdb_id,
+          season_number:
+            activeMediaType === 'series' ? seasonNumber : null,
+        },
+        item!.title,
+      )
+      if (!isIngestAllowed) {
+        setSubmitState((current) => ({
+          keys: current.keys.filter((itemKey) => itemKey !== key),
+          message: null,
+        }))
+        return
+      }
+    }
+
     const commonPayload = {
       title: item!.title,
       original_title: item!.original_title,
+      tmdb_id: item!.tmdb_id,
       release_title: release.title,
       indexer: release.indexer,
       size: release.size,

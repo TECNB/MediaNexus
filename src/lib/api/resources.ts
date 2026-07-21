@@ -15,6 +15,8 @@ import type {
   CreateSeriesReleaseOpenListIngestPayload,
   MovieReleaseRecommendationPayload,
   MovieReleaseSearchPayload,
+  MediaLibraryPresenceData,
+  MediaLibraryPresenceParams,
   MovieQualityProfile,
   MovieQualityProfilesResponse,
   MovieSearchItem,
@@ -219,6 +221,26 @@ export async function getSeriesSeasons(
 
     throw new Error(
       getJavaErrorMessage(error) || '剧集季数加载失败，请稍后重试。',
+    )
+  }
+}
+
+export async function checkMediaLibraryPresence(
+  params: MediaLibraryPresenceParams,
+): Promise<MediaLibraryPresenceData> {
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<MediaLibraryPresenceData>
+    >('/api/v1/media-library/presence', { params })
+
+    if (response.data.code !== 200 || !response.data.data) {
+      throw new Error(response.data.message || 'media library presence check failed')
+    }
+
+    return response.data.data
+  } catch (error) {
+    throw new Error(
+      getJavaErrorMessage(error) || '媒体库存在性检查暂时不可用。',
     )
   }
 }

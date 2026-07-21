@@ -41,6 +41,7 @@ import {
   type RecentIngestTaskStatus,
 } from '@/data/mock-magnet-ingest'
 import { useAuth } from '@/lib/use-auth'
+import { checkMediaLibraryIngestAllowed } from '@/lib/media-library-presence'
 import { cn } from '@/lib/utils'
 import type {
   AdultMagnetCategory,
@@ -382,6 +383,7 @@ function getMovieMagnetIngestPayload(
     title,
     original_title: originalTitle,
     year,
+    tmdb_id: selectedMovie.tmdb_id,
   }
 }
 
@@ -402,6 +404,7 @@ function getSeriesMagnetIngestPayload(
     title,
     original_title: originalTitle,
     season_number: seasonNumber,
+    tmdb_id: selectedSeries.tmdb_id,
   }
 }
 
@@ -1746,6 +1749,19 @@ export function MagnetIngestPage() {
       setSubmitError(null)
       setSubmitSuccessMessage(null)
 
+      const isIngestAllowed = await checkMediaLibraryIngestAllowed(
+        {
+          media_type: 'series',
+          tmdb_id: selectedSeries.tmdb_id,
+          season_number: selectedSeasonNumber,
+        },
+        selectedSeries.title,
+      )
+      if (!isIngestAllowed) {
+        setSubmitStatus('idle')
+        return
+      }
+
       try {
         const task = await createSeriesMagnetIngest(payload)
         const successMessage = `剧集任务已创建：${task.id}`
@@ -1803,6 +1819,19 @@ export function MagnetIngestPage() {
       setSubmitError(null)
       setSubmitSuccessMessage(null)
 
+      const isIngestAllowed = await checkMediaLibraryIngestAllowed(
+        {
+          media_type: 'series',
+          bgm_id: selectedAnime.bgm_id,
+          season_number: payload.season_number,
+        },
+        selectedAnime.title,
+      )
+      if (!isIngestAllowed) {
+        setSubmitStatus('idle')
+        return
+      }
+
       try {
         const task = await createAnimeMagnetIngestTask(payload)
         const successMessage = `动漫整季任务已创建：${task.id}`
@@ -1855,6 +1884,18 @@ export function MagnetIngestPage() {
     setSubmitStatus('loading')
     setSubmitError(null)
     setSubmitSuccessMessage(null)
+
+    const isIngestAllowed = await checkMediaLibraryIngestAllowed(
+      {
+        media_type: 'movie',
+        tmdb_id: selectedMovie.tmdb_id,
+      },
+      selectedMovie.title,
+    )
+    if (!isIngestAllowed) {
+      setSubmitStatus('idle')
+      return
+    }
 
     try {
       const task = await createMovieMagnetIngest(payload)
