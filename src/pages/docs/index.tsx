@@ -1054,7 +1054,7 @@ function ConnectionInfoSection({
               className="mt-4 inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
               state={{
                 from: {
-                  pathname: '/docs',
+                  pathname: '/help',
                   search: '',
                   hash: '#player-access',
                 },

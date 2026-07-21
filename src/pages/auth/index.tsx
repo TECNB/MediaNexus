@@ -125,7 +125,7 @@ function AuthShell({ title, description, children, footerNote }: AuthShellProps)
         <div className="mt-6 text-center">
           <Link
             className="text-sm font-medium text-black underline-offset-4 transition-all hover:underline"
-            to="/docs"
+            to="/help"
           >
             查看使用说明
           </Link>
@@ -583,7 +583,7 @@ export function RegisterPage() {
             </p>
             <button
               className="mt-6 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
-              onClick={() => navigate('/docs#player-access', { replace: true })}
+              onClick={() => navigate('/help#player-access', { replace: true })}
               type="button"
             >
               查看 Emby 使用方式

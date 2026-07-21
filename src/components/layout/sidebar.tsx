@@ -37,7 +37,7 @@ const adminPrimaryItems: NavigationItem[] = [
 ]
 
 const secondaryItems: NavigationItem[] = [
-  { icon: CircleHelp, label: '帮助', to: '/docs' },
+  { icon: CircleHelp, label: '帮助', to: '/help' },
 ]
 
 const adminItems: NavigationItem[] = [

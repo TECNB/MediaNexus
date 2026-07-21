@@ -17,8 +17,7 @@ import { TaskCenterDetailPage } from '@/pages/tasks/detail'
 import { UserManagementPage } from '@/pages/users'
 
 export const router = createBrowserRouter([
-  { path: '/docs', element: <DocsPage /> },
-  { path: '/help', element: <Navigate to="/docs" replace /> },
+  { path: '/help', element: <DocsPage /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
   {
