@@ -41,10 +41,15 @@ import {
   generateAdminRegistrationCode,
   getAdminRegistrationCode,
 } from '@/lib/api/admin-registration-code'
+import { listAdminUsers } from '@/lib/api/admin-users'
 import { refreshAutoSymlink } from '@/lib/api/autosymlink'
+import { copyTextToClipboard } from '@/lib/copy-to-clipboard'
 import { isJavaRequestCanceledError } from '@/lib/java-api'
 import { cn } from '@/lib/utils'
-import type { AdminRegistrationCodeSource } from '@/types/admin-users'
+import type {
+  AdminRegistrationCodeSource,
+  AdminUser,
+} from '@/types/admin-users'
 import type {
   AutoSymlinkRefreshResult,
   AutoSymlinkRefreshTarget,
@@ -875,6 +880,10 @@ export function DashboardPage() {
   const [registrationCodeStatus, setRegistrationCodeStatus] =
     useState<RegistrationCodeStatus>('idle')
   const [registrationCodeCopied, setRegistrationCodeCopied] = useState(false)
+  const [registrationCodeInviter, setRegistrationCodeInviter] =
+    useState<Pick<AdminUser, 'id' | 'username'> | null>(null)
+  const [selectedInviterUserId, setSelectedInviterUserId] = useState('')
+  const [inviterOptions, setInviterOptions] = useState<AdminUser[]>([])
 
   const sourceFolders = collectionInventory.sourceFolders
   const selectedRun = currentRun ?? latestRun
@@ -922,9 +931,29 @@ export function DashboardPage() {
   const loadRegistrationCode = useCallback(async (signal?: AbortSignal) => {
     setRegistrationCodeStatus('loading')
     try {
-      const data = await getAdminRegistrationCode(signal)
+      const [data, users] = await Promise.all([
+        getAdminRegistrationCode(signal),
+        listAdminUsers(
+          {
+            page: 1,
+            page_size: 100,
+            role: 'ALL',
+            sort: 'CREATED_AT_ASC',
+          },
+          signal,
+        ),
+      ])
       setRegistrationCode(data.registration_code ?? '')
       setRegistrationCodeSource(data.source)
+      setRegistrationCodeInviter(
+        data.inviter_user_id && data.inviter_username
+          ? { id: data.inviter_user_id, username: data.inviter_username }
+          : null,
+      )
+      setSelectedInviterUserId(
+        data.inviter_user_id ? String(data.inviter_user_id) : '',
+      )
+      setInviterOptions(users.items)
       setRegistrationCodeCopied(false)
     } catch (error) {
       if (isJavaRequestCanceledError(error)) {
@@ -1063,9 +1092,18 @@ export function DashboardPage() {
     setRegistrationCodeStatus('saving')
     setErrorMessage(null)
     try {
-      const data = await generateAdminRegistrationCode()
+      const data = await generateAdminRegistrationCode({
+        inviter_user_id: selectedInviterUserId
+          ? Number(selectedInviterUserId)
+          : null,
+      })
       setRegistrationCode(data.registration_code ?? '')
       setRegistrationCodeSource(data.source)
+      setRegistrationCodeInviter(
+        data.inviter_user_id && data.inviter_username
+          ? { id: data.inviter_user_id, username: data.inviter_username }
+          : null,
+      )
       setRegistrationCodeCopied(false)
       setToastMessage('新注册码已生成并启用')
     } catch (error) {
@@ -1075,14 +1113,14 @@ export function DashboardPage() {
     } finally {
       setRegistrationCodeStatus('idle')
     }
-  }, [registrationCode])
+  }, [registrationCode, selectedInviterUserId])
 
   const copyRegistrationCode = useCallback(async () => {
     if (!registrationCode) {
       return
     }
     try {
-      await navigator.clipboard.writeText(registrationCode)
+      await copyTextToClipboard(registrationCode)
       setRegistrationCodeCopied(true)
       setToastMessage('注册码已复制')
     } catch {
@@ -1347,7 +1385,7 @@ export function DashboardPage() {
             </div>
 
         <OperationPanel icon={KeyRound} title="注册码">
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_16rem] xl:items-start">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_18rem_16rem] xl:items-start">
             <div className="min-w-0">
               <div className="flex min-h-16 items-center rounded-lg bg-slate-950 px-5 py-4">
                 <p className="break-all font-mono text-xl font-semibold leading-8 tracking-[0.12em] text-white sm:text-2xl">
@@ -1358,6 +1396,48 @@ export function DashboardPage() {
               </div>
               <p className="mt-3 text-xs leading-5 text-slate-500">
                 {registrationCodeSourceLabel(registrationCodeSource)}。生成新注册码会写入后端数据库，并立即作为注册页校验值。
+              </p>
+              <p className="mt-1 truncate text-xs text-slate-500">
+                当前邀请人：
+                {registrationCodeInviter
+                  ? `${registrationCodeInviter.username} · ID ${registrationCodeInviter.id}`
+                  : '无邀请人（管理员直接邀请）'}
+              </p>
+            </div>
+            <div className="min-w-0">
+              <label
+                className="mb-2 block text-xs font-semibold text-slate-500"
+                htmlFor="registration-code-inviter"
+              >
+                新注册码邀请人
+              </label>
+              <SelectControl
+                className="h-11 w-full"
+                disabled={registrationCodeStatus !== 'idle'}
+                id="registration-code-inviter"
+                onChange={(event) =>
+                  setSelectedInviterUserId(event.target.value)
+                }
+                value={selectedInviterUserId}
+              >
+                <option value="">无邀请人（管理员直接邀请）</option>
+                {registrationCodeInviter &&
+                !inviterOptions.some(
+                  (user) => user.id === registrationCodeInviter.id,
+                ) ? (
+                  <option value={registrationCodeInviter.id}>
+                    {registrationCodeInviter.username} · ID{' '}
+                    {registrationCodeInviter.id}
+                  </option>
+                ) : null}
+                {inviterOptions.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.username} · ID {user.id}
+                  </option>
+                ))}
+              </SelectControl>
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                仅随下一次“生成并启用”生效。
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">

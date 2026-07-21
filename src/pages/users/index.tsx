@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Copy,
+  KeyRound,
   Loader2,
   Pencil,
   RefreshCw,
   RotateCcw,
   Search,
   ShieldCheck,
+  Trash2,
   Users,
   X,
 } from 'lucide-react'
@@ -22,13 +24,16 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
+  deleteAdminUser,
   getAdminDefaultQuota,
+  getAdminUserEmbyCredential,
   getAdminUserSummary,
   listAdminUsers,
   resetAdminUserTodayUsage,
   updateAdminDefaultQuota,
   updateAdminUserQuota,
 } from '@/lib/api/admin-users'
+import { copyTextToClipboard } from '@/lib/copy-to-clipboard'
 import { isJavaRequestCanceledError } from '@/lib/java-api'
 import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
@@ -42,6 +47,7 @@ import type {
   AdminUserSort,
   AdminUserSummary,
 } from '@/types/admin-users'
+import type { EmbyCredential } from '@/types/emby-account'
 
 type LoadStatus = 'idle' | 'loading' | 'success' | 'error'
 type ActionStatus = 'idle' | 'saving'
@@ -200,6 +206,13 @@ function UserManagementPageContent() {
   const [editingStatus, setEditingStatus] = useState<ActionStatus>('idle')
   const [editingError, setEditingError] = useState<string | null>(null)
   const [resettingUserId, setResettingUserId] = useState<number | null>(null)
+  const [credentialUser, setCredentialUser] = useState<AdminUser | null>(null)
+  const [credential, setCredential] = useState<EmbyCredential | null>(null)
+  const [credentialStatus, setCredentialStatus] = useState<LoadStatus>('idle')
+  const [credentialError, setCredentialError] = useState<string | null>(null)
+  const [deletingUser, setDeletingUser] = useState<AdminUser | null>(null)
+  const [deletingStatus, setDeletingStatus] = useState<ActionStatus>('idle')
+  const [deletingError, setDeletingError] = useState<string | null>(null)
 
   const loadUsers = useCallback(
     async (signal?: AbortSignal) => {
@@ -393,10 +406,82 @@ function UserManagementPageContent() {
 
   async function handleCopyUserId(userId: number) {
     try {
-      await navigator.clipboard.writeText(String(userId))
+      await copyTextToClipboard(String(userId))
       setToastMessage(`已复制用户 ID: ${userId}`)
     } catch {
       setToastMessage('复制失败，请手动复制')
+    }
+  }
+
+  async function openEmbyCredential(user: AdminUser) {
+    setCredentialUser(user)
+    setCredential(null)
+    setCredentialError(null)
+    setCredentialStatus('loading')
+
+    try {
+      setCredential(await getAdminUserEmbyCredential(user.id))
+      setCredentialStatus('success')
+    } catch (error) {
+      setCredentialStatus('error')
+      setCredentialError(
+        error instanceof Error ? error.message : 'Emby 凭据加载失败',
+      )
+    }
+  }
+
+  function closeEmbyCredential() {
+    setCredentialUser(null)
+    setCredential(null)
+    setCredentialError(null)
+    setCredentialStatus('idle')
+  }
+
+  async function handleCopyCredential(label: string, value: string) {
+    try {
+      await copyTextToClipboard(value)
+      setToastMessage(`已复制 Emby ${label}`)
+    } catch {
+      setToastMessage('复制失败，请手动复制')
+    }
+  }
+
+  function openDeleteConfirmation(user: AdminUser) {
+    setDeletingUser(user)
+    setDeletingError(null)
+  }
+
+  function closeDeleteConfirmation() {
+    if (deletingStatus === 'saving') {
+      return
+    }
+    setDeletingUser(null)
+    setDeletingError(null)
+  }
+
+  async function handleDeleteUser() {
+    if (!deletingUser) {
+      return
+    }
+
+    const username = deletingUser.username
+    setDeletingStatus('saving')
+    setDeletingError(null)
+    try {
+      await deleteAdminUser(deletingUser.id)
+      setDeletingUser(null)
+      setToastMessage(`已删除用户 ${username}，关联 Emby 账号已同步处理`)
+      if (users.length === 1 && page > 1) {
+        setPage((currentPage) => currentPage - 1)
+      } else {
+        await loadUsers()
+      }
+    } catch (error) {
+      setDeletingError(
+        error instanceof Error ? error.message : '用户删除失败',
+      )
+    } finally {
+      setDeletingStatus('idle')
     }
   }
 
@@ -547,17 +632,18 @@ function UserManagementPageContent() {
 
           <div className="overflow-hidden rounded-2xl bg-white shadow-shell ring-1 ring-slate-200">
             <div className="overflow-x-auto">
-              <table className="min-w-[1080px] w-full border-separate border-spacing-0 text-left">
+              <table className="w-full min-w-[1640px] border-separate border-spacing-0 text-left">
                 <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
                   <tr>
-                    <th className="px-5 py-4">用户</th>
-                    <th className="px-5 py-4">邮箱</th>
-                    <th className="px-5 py-4">角色</th>
-                    <th className="px-5 py-4">今日已用/额度</th>
-                    <th className="px-5 py-4">额度来源</th>
-                    <th className="px-5 py-4">注册时间</th>
-                    <th className="px-5 py-4">最后更新时间</th>
-                    <th className="px-5 py-4 text-right">操作</th>
+                    <th className="whitespace-nowrap px-4 py-4">用户</th>
+                    <th className="whitespace-nowrap px-4 py-4">邮箱</th>
+                    <th className="whitespace-nowrap px-4 py-4">角色</th>
+                    <th className="whitespace-nowrap px-4 py-4">今日已用/额度</th>
+                    <th className="whitespace-nowrap px-4 py-4">额度来源</th>
+                    <th className="whitespace-nowrap px-4 py-4">邀请人</th>
+                    <th className="whitespace-nowrap px-4 py-4">注册时间</th>
+                    <th className="whitespace-nowrap px-4 py-4">最后更新时间</th>
+                    <th className="whitespace-nowrap px-4 py-4 text-right">操作</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
@@ -570,7 +656,7 @@ function UserManagementPageContent() {
 
                     return (
                       <tr className="hover:bg-slate-50/80" key={user.id}>
-                        <td className="px-5 py-4 align-middle">
+                        <td className="whitespace-nowrap px-4 py-4 align-middle">
                           <div className="space-y-1">
                             <p className="font-semibold text-slate-950">
                               {user.username}
@@ -585,18 +671,18 @@ function UserManagementPageContent() {
                             </button>
                           </div>
                         </td>
-                        <td className="px-5 py-4 text-slate-600">
+                        <td className="whitespace-nowrap px-4 py-4 text-slate-600">
                           {user.email}
                         </td>
-                        <td className="px-5 py-4">
-                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                        <td className="whitespace-nowrap px-4 py-4">
+                          <span className="inline-flex whitespace-nowrap rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
                             {roleLabel[user.role]}
                           </span>
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="whitespace-nowrap px-4 py-4">
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <div className="inline-flex cursor-default items-center gap-2">
+                              <div className="inline-flex cursor-default items-center gap-2 whitespace-nowrap">
                                 <span className="font-semibold text-slate-950">
                                   {quotaLabel}
                                 </span>
@@ -622,17 +708,36 @@ function UserManagementPageContent() {
                             </TooltipContent>
                           </Tooltip>
                         </td>
-                        <td className="px-5 py-4 text-slate-600">
+                        <td className="whitespace-nowrap px-4 py-4 text-slate-600">
                           {quotaSourceLabel[user.quota_source]}
                         </td>
-                        <td className="px-5 py-4 text-slate-500">
+                        <td className="whitespace-nowrap px-4 py-4 text-slate-600">
+                          {user.invited_by_username
+                            ? `${user.invited_by_username}${
+                                user.invited_by_user_id
+                                  ? ` · ID ${user.invited_by_user_id}`
+                                  : ''
+                              }`
+                            : '—'}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-4 text-slate-500">
                           {formatDateTime(user.created_at)}
                         </td>
-                        <td className="px-5 py-4 text-slate-500">
+                        <td className="whitespace-nowrap px-4 py-4 text-slate-500">
                           {formatDateTime(user.updated_at)}
                         </td>
-                        <td className="px-5 py-4">
-                          <div className="flex justify-end gap-2">
+                        <td className="whitespace-nowrap px-4 py-4">
+                          <div className="flex min-w-max justify-end gap-1.5 whitespace-nowrap">
+                            <Button
+                              disabled={isAdminUser}
+                              onClick={() => void openEmbyCredential(user)}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              <KeyRound className="h-4 w-4" />
+                              Emby
+                            </Button>
                             <Button
                               disabled={isAdminUser}
                               onClick={() => openQuotaEditor(user)}
@@ -655,6 +760,17 @@ function UserManagementPageContent() {
                                 <RotateCcw className="h-4 w-4" />
                               )}
                               重置
+                            </Button>
+                            <Button
+                              className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                              disabled={isAdminUser}
+                              onClick={() => openDeleteConfirmation(user)}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              删除
                             </Button>
                           </div>
                         </td>
@@ -820,6 +936,169 @@ function UserManagementPageContent() {
                   </Button>
                 </div>
               </div>
+            </div>
+          </div>
+        ) : null}
+
+        {deletingUser ? (
+          <div
+            aria-labelledby="delete-user-title"
+            aria-modal="true"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4 backdrop-blur-sm"
+            role="dialog"
+          >
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-slate-200">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p
+                    className="text-lg font-semibold text-slate-950"
+                    id="delete-user-title"
+                  >
+                    删除用户
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {deletingUser.username} · {deletingUser.email}
+                  </p>
+                </div>
+                <button
+                  aria-label="关闭"
+                  className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                  disabled={deletingStatus === 'saving'}
+                  onClick={closeDeleteConfirmation}
+                  type="button"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="mt-5 rounded-2xl bg-rose-50 p-4 text-sm leading-6 text-rose-800">
+                此操作不可恢复。MediaNexus 用户会被删除；如果该用户拥有托管的
+                Emby 账号，对应 Emby 用户也会同步删除。
+              </div>
+
+              {deletingError ? (
+                <p className="mt-4 text-sm text-rose-600" role="alert">
+                  {deletingError}
+                </p>
+              ) : null}
+
+              <div className="mt-6 flex justify-end gap-3">
+                <Button
+                  disabled={deletingStatus === 'saving'}
+                  onClick={closeDeleteConfirmation}
+                  type="button"
+                  variant="ghost"
+                >
+                  取消
+                </Button>
+                <Button
+                  className="bg-rose-600 text-white hover:bg-rose-700"
+                  disabled={deletingStatus === 'saving'}
+                  onClick={() => void handleDeleteUser()}
+                  type="button"
+                >
+                  {deletingStatus === 'saving' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  确认删除
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {credentialUser ? (
+          <div
+            aria-labelledby="emby-credential-title"
+            aria-modal="true"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 px-4 backdrop-blur-sm"
+            role="dialog"
+          >
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-slate-200">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p
+                    className="text-lg font-semibold text-slate-950"
+                    id="emby-credential-title"
+                  >
+                    Emby 登录凭据
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {credentialUser.username} · 用于权限排查
+                  </p>
+                </div>
+                <button
+                  aria-label="关闭"
+                  className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                  onClick={closeEmbyCredential}
+                  type="button"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {credentialStatus === 'loading' ? (
+                <div className="mt-6 flex items-center justify-center gap-2 rounded-2xl bg-slate-50 px-4 py-8 text-sm text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  正在加载凭据
+                </div>
+              ) : null}
+
+              {credentialStatus === 'error' ? (
+                <div
+                  className="mt-6 rounded-2xl bg-rose-50 p-4 text-sm text-rose-700"
+                  role="alert"
+                >
+                  {credentialError}
+                </div>
+              ) : null}
+
+              {credentialStatus === 'success' && credential?.managed ? (
+                <div className="mt-6 space-y-3">
+                  {(
+                    [
+                      ['用户名', credential.username],
+                      ['密码', credential.password],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <div
+                      className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 p-4"
+                      key={label}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-slate-400">
+                          {label}
+                        </p>
+                        <p className="mt-1 break-all font-mono text-sm font-semibold text-slate-950">
+                          {value ?? '-'}
+                        </p>
+                      </div>
+                      <Button
+                        aria-label={`复制 Emby ${label}`}
+                        disabled={!value}
+                        onClick={() =>
+                          void handleCopyCredential(label, value ?? '')
+                        }
+                        size="icon"
+                        type="button"
+                        variant="outline"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              {credentialStatus === 'success' &&
+              credential &&
+              !credential.managed ? (
+                <div className="mt-6 rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-800">
+                  这是旧用户，未纳入自动 Emby 账号管理，无需补全或重新注册。
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}

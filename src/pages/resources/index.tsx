@@ -590,6 +590,7 @@ export function ResourceSearchPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const userId = user?.id ?? null
+  const canUseAnimeSubscriptions = user?.role === 'ADMIN'
   const [category, setCategory] = useState<ResourceCategoryValue>('movie')
   const [animeResourceMode, setAnimeResourceMode] =
     useState<AnimeResourceMode>(DEFAULT_ANIME_RESOURCE_MODE)
@@ -779,6 +780,22 @@ export function ResourceSearchPage() {
     setAnimeResourceMode(DEFAULT_ANIME_RESOURCE_MODE)
   }, [category, resetSearchSession])
 
+  useEffect(() => {
+    if (
+      !canUseAnimeSubscriptions &&
+      animeResourceMode === 'follow-subscription'
+    ) {
+      resetSearchSession()
+      setAnimeResourceMode(DEFAULT_ANIME_RESOURCE_MODE)
+    }
+  }, [animeResourceMode, canUseAnimeSubscriptions, resetSearchSession])
+
+  const visibleSearchHistory = canUseAnimeSubscriptions
+    ? searchHistory
+    : searchHistory.filter(
+        (entry) => entry.animeMode !== 'follow-subscription',
+      )
+
   const activeCategoryCopy =
     category === 'anime'
       ? animeResourceModeCopy[animeResourceMode].search
@@ -800,6 +817,13 @@ export function ResourceSearchPage() {
     activeAnimeResourceMode: AnimeResourceMode,
   ) {
     if (searchState.status === 'loading') {
+      return
+    }
+    if (
+      activeCategory === 'anime' &&
+      activeAnimeResourceMode === 'follow-subscription' &&
+      !canUseAnimeSubscriptions
+    ) {
       return
     }
 
@@ -929,10 +953,15 @@ export function ResourceSearchPage() {
       return
     }
 
-    const nextAnimeResourceMode =
+    const requestedAnimeResourceMode =
       entry.category === 'anime'
         ? (entry.animeMode ?? DEFAULT_ANIME_RESOURCE_MODE)
         : DEFAULT_ANIME_RESOURCE_MODE
+    const nextAnimeResourceMode =
+      requestedAnimeResourceMode === 'follow-subscription' &&
+      !canUseAnimeSubscriptions
+        ? DEFAULT_ANIME_RESOURCE_MODE
+        : requestedAnimeResourceMode
 
     if (entry.category !== category) {
       historyRestoredCategoryRef.current = entry.category
@@ -965,6 +994,9 @@ export function ResourceSearchPage() {
   }
 
   function handleAnimeResourceModeChange(nextMode: AnimeResourceMode) {
+    if (nextMode === 'follow-subscription' && !canUseAnimeSubscriptions) {
+      return
+    }
     if (nextMode === animeResourceMode) {
       return
     }
@@ -2221,17 +2253,19 @@ export function ResourceSearchPage() {
           <CategorySwitch value={category} onChange={setCategory} />
           {category === 'anime' ? (
             <div className="flex flex-col items-center gap-2 text-center">
-              <AnimeModeSwitch
-                value={animeResourceMode}
-                onChange={handleAnimeResourceModeChange}
-              />
+              {canUseAnimeSubscriptions ? (
+                <AnimeModeSwitch
+                  value={animeResourceMode}
+                  onChange={handleAnimeResourceModeChange}
+                />
+              ) : null}
               <p className="text-sm text-slate-500">
                 {animeResourceModeCopy[animeResourceMode].description}
               </p>
             </div>
           ) : null}
           <SearchHistory
-            entries={searchHistory}
+            entries={visibleSearchHistory}
             searchDisabled={isSearching}
             onSelect={handleSearchHistorySelect}
             onRemove={handleSearchHistoryRemove}

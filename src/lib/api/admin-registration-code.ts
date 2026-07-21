@@ -3,7 +3,10 @@ import {
   isJavaRequestCanceledError,
   javaApiClient,
 } from '@/lib/java-api'
-import type { AdminRegistrationCode } from '@/types/admin-users'
+import type {
+  AdminRegistrationCode,
+  AdminRegistrationCodeGeneratePayload,
+} from '@/types/admin-users'
 
 type JavaApiResponse<T> = {
   code: number
@@ -41,11 +44,13 @@ export async function getAdminRegistrationCode(
   }
 }
 
-export async function generateAdminRegistrationCode(): Promise<AdminRegistrationCode> {
+export async function generateAdminRegistrationCode(
+  payload: AdminRegistrationCodeGeneratePayload,
+): Promise<AdminRegistrationCode> {
   try {
     const response = await javaApiClient.post<
       JavaApiResponse<AdminRegistrationCode>
-    >('/api/v1/admin/registration-code/generate')
+    >('/api/v1/admin/registration-code/generate', payload)
 
     if (response.data.code !== 200 || !response.data.data) {
       throw new Error(

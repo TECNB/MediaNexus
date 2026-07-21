@@ -1,4 +1,10 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Check, Eye, EyeOff } from 'lucide-react'
 
@@ -409,12 +415,17 @@ export function RegisterPage() {
   const [registrationCode, setRegistrationCode] = useState('')
   const [status, setStatus] = useState<AuthFormStatus>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [registrationComplete, setRegistrationComplete] = useState(false)
+  const registrationCompleteRef = useRef(false)
 
   const isSubmitting = status === 'submitting'
   const redirectPath = getAuthRedirectPath(location.state)
 
   useEffect(() => {
-    if (authStatus === 'authenticated') {
+    if (
+      authStatus === 'authenticated' &&
+      !registrationCompleteRef.current
+    ) {
       navigate(redirectPath, { replace: true })
     }
   }, [authStatus, navigate, redirectPath])
@@ -467,8 +478,9 @@ export function RegisterPage() {
         confirm_password: normalizedConfirmPassword,
         registration_code: normalizedRegistrationCode,
       })
+      registrationCompleteRef.current = true
       signIn(session)
-      navigate(redirectPath, { replace: true })
+      setRegistrationComplete(true)
     } catch (error) {
       setErrorMessage(getErrorMessage(error, '注册失败，请稍后重试。'))
     } finally {
@@ -547,6 +559,38 @@ export function RegisterPage() {
           </Link>
         </div>
       </form>
+
+      {registrationComplete ? (
+        <div
+          aria-labelledby="registration-complete-title"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4 backdrop-blur-sm"
+          role="dialog"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 text-left shadow-2xl ring-1 ring-black/5">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
+              <Check className="h-5 w-5" />
+            </div>
+            <h2
+              className="mt-5 text-xl font-semibold text-slate-950"
+              id="registration-complete-title"
+            >
+              注册完成，Emby 账号已开通
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              请前往帮助页查看 Emby 的登录账号、密码和可用线路。MediaNexus
+              与 Emby 使用不同密码。
+            </p>
+            <button
+              className="mt-6 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+              onClick={() => navigate('/docs#player-access', { replace: true })}
+              type="button"
+            >
+              查看 Emby 使用方式
+            </button>
+          </div>
+        </div>
+      ) : null}
     </AuthShell>
   )
 }

@@ -37,6 +37,8 @@ export type AdminUser = {
   today_used_count: number
   usage_status: AdminUsageStatus
   usage_breakdown: AdminUserUsageBreakdown
+  invited_by_user_id: number | null
+  invited_by_username: string | null
   created_at: string
   updated_at: string
 }
@@ -62,6 +64,12 @@ export type AdminDefaultQuota = {
 export type AdminRegistrationCode = {
   registration_code: string | null
   source: AdminRegistrationCodeSource
+  inviter_user_id: number | null
+  inviter_username: string | null
+}
+
+export type AdminRegistrationCodeGeneratePayload = {
+  inviter_user_id: number | null
 }
 
 export type AdminUserQuotaUpdatePayload = {

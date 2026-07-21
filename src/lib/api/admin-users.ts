@@ -11,6 +11,7 @@ import type {
   AdminUserQuotaUpdatePayload,
   AdminUserSummary,
 } from '@/types/admin-users'
+import type { EmbyCredential } from '@/types/emby-account'
 
 type JavaApiResponse<T> = {
   code: number
@@ -155,6 +156,41 @@ export async function resetAdminUserTodayUsage(
       throw new Error(response.data.message || ADMIN_USERS_ACTION_ERROR_MESSAGE)
     }
 
+    return response.data.data
+  } catch (error) {
+    throw new Error(
+      getJavaErrorMessage(error) ?? ADMIN_USERS_ACTION_ERROR_MESSAGE,
+    )
+  }
+}
+
+export async function deleteAdminUser(userId: number): Promise<void> {
+  try {
+    const response = await javaApiClient.delete<JavaApiResponse<unknown>>(
+      `/api/v1/admin/users/${userId}`,
+    )
+
+    if (response.data.code !== 200) {
+      throw new Error(response.data.message || ADMIN_USERS_ACTION_ERROR_MESSAGE)
+    }
+  } catch (error) {
+    throw new Error(
+      getJavaErrorMessage(error) ?? ADMIN_USERS_ACTION_ERROR_MESSAGE,
+    )
+  }
+}
+
+export async function getAdminUserEmbyCredential(
+  userId: number,
+): Promise<EmbyCredential> {
+  try {
+    const response = await javaApiClient.get<JavaApiResponse<EmbyCredential>>(
+      `/api/v1/admin/users/${userId}/emby-credentials`,
+    )
+
+    if (response.data.code !== 200 || !response.data.data) {
+      throw new Error(response.data.message || ADMIN_USERS_ACTION_ERROR_MESSAGE)
+    }
     return response.data.data
   } catch (error) {
     throw new Error(
