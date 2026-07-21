@@ -1406,7 +1406,10 @@ function ExternalResourceGroups({
                         <button
                           aria-label={`复制 ${resource.name} 弹幕源地址`}
                           className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-sky-200 hover:text-sky-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600"
-                          onClick={() => void copyEndpoint(resource.endpoint)}
+                          onClick={() => {
+                            const endpoint = resource.endpoint
+                            if (endpoint) void copyEndpoint(endpoint)
+                          }}
                           type="button"
                         >
                           {copiedEndpoint === resource.endpoint ? (

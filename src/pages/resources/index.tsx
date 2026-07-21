@@ -1465,13 +1465,13 @@ export function ResourceSearchPage() {
     )
 
     items.forEach((item) => {
-      const hasTmdbId = typeof item.tmdb_id === 'number' && item.tmdb_id > 0
-      if (!hasTmdbId) {
+      const tmdbId = item.tmdb_id
+      if (typeof tmdbId !== 'number' || tmdbId <= 0) {
         return
       }
 
       const itemKey = getSeriesIngestKey(item)
-      void getSeriesSeasons(item.tmdb_id, controller.signal)
+      void getSeriesSeasons(tmdbId, controller.signal)
         .then((result) => {
           if (
             controller.signal.aborted ||
