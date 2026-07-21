@@ -185,10 +185,7 @@ export async function searchSeries(
 }
 
 export async function getSeriesSeasons(
-  identity: {
-    tmdbId: number | null
-    tvdbId: number | null
-  },
+  tmdbId: number,
   signal?: AbortSignal,
 ): Promise<SeriesSeasonsData> {
   try {
@@ -198,12 +195,7 @@ export async function getSeriesSeasons(
       '/api/v1/resources/series/seasons',
       {
         params: {
-          ...(typeof identity.tmdbId === 'number' && identity.tmdbId > 0
-            ? { tmdb_id: identity.tmdbId }
-            : {}),
-          ...(typeof identity.tvdbId === 'number' && identity.tvdbId > 0
-            ? { tvdb_id: identity.tvdbId }
-            : {}),
+          tmdb_id: tmdbId,
         },
         signal,
       },

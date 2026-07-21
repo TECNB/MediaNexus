@@ -283,9 +283,6 @@ function getMovieIngestKey(item: SearchableResourceItem) {
 }
 
 function getSeriesIngestKey(item: SeriesSearchItem) {
-  if (typeof item.tvdb_id === 'number' && item.tvdb_id > 0) {
-    return `series:tvdb:${item.tvdb_id}`
-  }
   if (typeof item.tmdb_id === 'number' && item.tmdb_id > 0) {
     return `series:tmdb:${item.tmdb_id}`
   }
@@ -1418,8 +1415,7 @@ export function ResourceSearchPage() {
     setSeriesSeasonLoadStates(
       items.reduce<Record<string, SeriesSeasonLoadState>>((states, item) => {
         const hasCatalogIdentity =
-          (typeof item.tmdb_id === 'number' && item.tmdb_id > 0) ||
-          (typeof item.tvdb_id === 'number' && item.tvdb_id > 0)
+          typeof item.tmdb_id === 'number' && item.tmdb_id > 0
         states[getSeriesIngestKey(item)] = hasCatalogIdentity
           ? {
               status: 'loading',
@@ -1438,19 +1434,12 @@ export function ResourceSearchPage() {
 
     items.forEach((item) => {
       const hasTmdbId = typeof item.tmdb_id === 'number' && item.tmdb_id > 0
-      const hasTvdbId = typeof item.tvdb_id === 'number' && item.tvdb_id > 0
-      if (!hasTmdbId && !hasTvdbId) {
+      if (!hasTmdbId) {
         return
       }
 
       const itemKey = getSeriesIngestKey(item)
-      void getSeriesSeasons(
-        {
-          tmdbId: hasTmdbId ? item.tmdb_id : null,
-          tvdbId: hasTvdbId ? item.tvdb_id : null,
-        },
-        controller.signal,
-      )
+      void getSeriesSeasons(item.tmdb_id, controller.signal)
         .then((result) => {
           if (
             controller.signal.aborted ||

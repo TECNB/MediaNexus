@@ -59,7 +59,7 @@ type SubtitleAssociationItem = {
   originalTitle?: string
   year?: number
   poster?: string
-  tvdbId?: number
+  tmdbId?: number
   mediaType: 'movie' | 'series'
   subtitle: string
 }
@@ -303,7 +303,7 @@ function normalizeSeriesAssociationItem(
     originalTitle: item.original_title?.trim() || undefined,
     year: item.year ?? undefined,
     poster: item.poster?.trim() || undefined,
-    tvdbId: item.tvdb_id ?? undefined,
+    tmdbId: item.tmdb_id ?? undefined,
     mediaType: 'series',
     subtitle: buildAssociationSubtitle({
       title: item.title,
@@ -1272,13 +1272,13 @@ export function SubtitleManagePage() {
       setSeriesSeasonStatus('idle')
       return
     }
-    if (!item.tvdbId) {
+    if (!item.tmdbId) {
       setSeriesSeasonStatus('error')
       return
     }
 
     setSeriesSeasonStatus('loading')
-    void getSeriesSeasons({ tmdbId: null, tvdbId: item.tvdbId })
+    void getSeriesSeasons(item.tmdbId)
       .then((data) => {
         if (seasonLatestRequestIdRef.current !== requestId) {
           return

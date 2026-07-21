@@ -233,8 +233,8 @@ function TargetSeasonSelect({
   )
 }
 
-function hasValidTvdbId(series: SeriesSearchItem | null) {
-  return typeof series?.tvdb_id === 'number' && series.tvdb_id > 0
+function hasValidTmdbId(series: SeriesSearchItem | null) {
+  return typeof series?.tmdb_id === 'number' && series.tmdb_id > 0
 }
 
 function isValidSeasonNumber(value: number | null, options: number[]) {
@@ -268,8 +268,8 @@ function getSeasonLoadValidationMessage({
     return '请先选择一个剧集项目'
   }
 
-  if (!hasValidTvdbId(selectedSeries)) {
-    return '当前剧集缺少有效的 TVDB ID，无法加载季数。'
+  if (!hasValidTmdbId(selectedSeries)) {
+    return '当前剧集缺少有效的 TMDB ID，无法加载季数。'
   }
 
   if (seriesSeasonStatus === 'loading') {
@@ -932,15 +932,13 @@ export function MagnetIngestPage() {
     }
 
     const tmdbId = selectedSeries.tmdb_id
-    const tvdbId = selectedSeries.tvdb_id
     const hasTmdbId = typeof tmdbId === 'number' && tmdbId > 0
-    const hasTvdbId = typeof tvdbId === 'number' && tvdbId > 0
 
-    if (!hasTmdbId && !hasTvdbId) {
+    if (!hasTmdbId) {
       setSeriesSeasonStatus('error')
       setSeriesSeasonOptions([])
       setSelectedSeasonNumber(null)
-      setSeriesSeasonError('当前剧集缺少有效的目录 ID，无法加载季数。')
+      setSeriesSeasonError('当前剧集缺少有效的 TMDB ID，无法加载季数。')
       return
     }
 
@@ -956,13 +954,7 @@ export function MagnetIngestPage() {
     setSelectedSeasonNumber(null)
     setSeriesSeasonError(null)
 
-    void getSeriesSeasons(
-      {
-        tmdbId: hasTmdbId ? tmdbId : null,
-        tvdbId: hasTvdbId ? tvdbId : null,
-      },
-      controller.signal,
-    )
+    void getSeriesSeasons(tmdbId, controller.signal)
       .then((data) => {
         if (latestSeriesSeasonRequestIdRef.current !== requestId) {
           return
