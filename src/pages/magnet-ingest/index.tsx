@@ -28,7 +28,6 @@ import {
   listMovieMagnetIngestTasks,
   listSeriesMagnetIngestTaskLogs,
   listSeriesMagnetIngestTasks,
-  searchAnimeMagnetItems,
 } from '@/lib/api/magnet-ingest'
 import {
   getSeriesSeasons,
@@ -46,7 +45,6 @@ import { cn } from '@/lib/utils'
 import type {
   AdultMagnetCategory,
   AdultMagnetIngestTask,
-  AnimeMagnetSearchItem,
   AnimeMagnetIngestTask,
   CreateAdultMagnetIngestTaskPayload,
   CreateAnimeMagnetIngestTaskPayload,
@@ -178,12 +176,14 @@ function TargetSeasonSelect({
   options,
   status,
   error,
+  mediaLabel,
   onChange,
 }: {
   value: number | null
   options: number[]
   status: SeriesSeasonStatus
   error: string | null
+  mediaLabel: '剧集' | '动漫'
   onChange: (value: number) => void
 }) {
   const isDisabled = status !== 'success'
@@ -219,11 +219,11 @@ function TargetSeasonSelect({
       </SelectControl>
 
       {status === 'loading' ? (
-        <p className="text-sm text-slate-500">正在拉取当前剧集的可用季数...</p>
+        <p className="text-sm text-slate-500">正在拉取当前{mediaLabel}的可用季数...</p>
       ) : null}
 
       {status === 'empty' ? (
-        <p className="text-sm text-slate-500">当前剧集暂无可用季数，暂时无法提交。</p>
+        <p className="text-sm text-slate-500">当前{mediaLabel}暂无可用季数，暂时无法提交。</p>
       ) : null}
 
       {status === 'error' && error ? (
@@ -252,24 +252,26 @@ function normalizeSeasonNumbers(seasonNumbers: number[]) {
 }
 
 function getSeasonLoadValidationMessage({
-  selectedSeries,
+  selectedItem,
+  mediaLabel,
   seriesSeasonStatus,
   selectedSeasonNumber,
   seriesSeasonOptions,
   seriesSeasonError,
 }: {
-  selectedSeries: SeriesSearchItem | null
+  selectedItem: SeriesSearchItem | null
+  mediaLabel: '剧集' | '动漫'
   seriesSeasonStatus: SeriesSeasonStatus
   selectedSeasonNumber: number | null
   seriesSeasonOptions: number[]
   seriesSeasonError: string | null
 }) {
-  if (!selectedSeries) {
-    return '请先选择一个剧集项目'
+  if (!selectedItem) {
+    return `请先选择一个${mediaLabel}项目`
   }
 
-  if (!hasValidTmdbId(selectedSeries)) {
-    return '当前剧集缺少有效的 TMDB ID，无法加载季数。'
+  if (!hasValidTmdbId(selectedItem)) {
+    return `当前${mediaLabel}缺少有效的 TMDB ID，无法加载季数。`
   }
 
   if (seriesSeasonStatus === 'loading') {
@@ -277,11 +279,11 @@ function getSeasonLoadValidationMessage({
   }
 
   if (seriesSeasonStatus === 'error') {
-    return seriesSeasonError || '剧集季数加载失败，请稍后重试。'
+    return seriesSeasonError || `${mediaLabel}季数加载失败，请稍后重试。`
   }
 
   if (seriesSeasonStatus === 'empty') {
-    return '当前剧集暂无可用季数，暂时无法提交。'
+    return `当前${mediaLabel}暂无可用季数，暂时无法提交。`
   }
 
   if (
@@ -410,22 +412,29 @@ function getSeriesMagnetIngestPayload(
 
 function getAnimeMagnetIngestPayload(
   magnet: string,
-  selectedAnime: AnimeMagnetSearchItem,
+  selectedAnime: SeriesSearchItem,
+  seasonNumber: number | null,
 ): CreateAnimeMagnetIngestTaskPayload | null {
   const title = selectedAnime.title.trim()
-  const seasonNumber = selectedAnime.season ?? 1
+  const tmdbId = selectedAnime.tmdb_id
 
-  if (!title || !Number.isInteger(seasonNumber) || seasonNumber < 0) {
+  if (
+    !title ||
+    typeof tmdbId !== 'number' ||
+    tmdbId <= 0 ||
+    seasonNumber === null ||
+    !Number.isInteger(seasonNumber) ||
+    seasonNumber <= 0
+  ) {
     return null
   }
 
   return {
     magnet,
-    bgm_id: selectedAnime.bgm_id,
-    bgm_url: selectedAnime.bgm_url,
+    tmdb_id: tmdbId,
     title,
-    name_cn: selectedAnime.name_cn,
-    name: selectedAnime.name,
+    name_cn: title,
+    name: selectedAnime.original_title?.trim() || null,
     season_number: seasonNumber,
   }
 }
@@ -587,10 +596,6 @@ function isSeriesSearchItem(item: unknown): item is SeriesSearchItem {
   return typeof item === 'object' && item !== null && 'tvdb_id' in item
 }
 
-function isAnimeMagnetSearchItem(item: unknown): item is AnimeMagnetSearchItem {
-  return typeof item === 'object' && item !== null && 'bgm_id' in item
-}
-
 export function MagnetIngestPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
@@ -609,15 +614,16 @@ export function MagnetIngestPage() {
     useState<ResourceSearchStatus>('idle')
   const [movieResults, setMovieResults] = useState<MovieSearchItem[]>([])
   const [seriesResults, setSeriesResults] = useState<SeriesSearchItem[]>([])
-  const [animeResults, setAnimeResults] = useState<AnimeMagnetSearchItem[]>([])
+  const [animeResults, setAnimeResults] = useState<SeriesSearchItem[]>([])
   const [selectedMovie, setSelectedMovie] = useState<MovieSearchItem | null>(
     null,
   )
   const [selectedSeries, setSelectedSeries] = useState<SeriesSearchItem | null>(
     null,
   )
-  const [selectedAnime, setSelectedAnime] =
-    useState<AnimeMagnetSearchItem | null>(null)
+  const [selectedAnime, setSelectedAnime] = useState<SeriesSearchItem | null>(
+    null,
+  )
   const [seriesSeasonStatus, setSeriesSeasonStatus] =
     useState<SeriesSeasonStatus>('idle')
   const [seriesSeasonOptions, setSeriesSeasonOptions] = useState<number[]>([])
@@ -927,18 +933,21 @@ export function MagnetIngestPage() {
   }, [])
 
   useEffect(() => {
-    if (mode !== 'series' || !selectedSeries) {
+    const selectedItem =
+      mode === 'series' ? selectedSeries : mode === 'anime' ? selectedAnime : null
+    if (!selectedItem) {
       return
     }
 
-    const tmdbId = selectedSeries.tmdb_id
+    const tmdbId = selectedItem.tmdb_id
     const hasTmdbId = typeof tmdbId === 'number' && tmdbId > 0
+    const mediaLabel = mode === 'anime' ? '动漫' : '剧集'
 
     if (!hasTmdbId) {
       setSeriesSeasonStatus('error')
       setSeriesSeasonOptions([])
       setSelectedSeasonNumber(null)
-      setSeriesSeasonError('当前剧集缺少有效的 TMDB ID，无法加载季数。')
+      setSeriesSeasonError(`当前${mediaLabel}缺少有效的 TMDB ID，无法加载季数。`)
       return
     }
 
@@ -992,7 +1001,7 @@ export function MagnetIngestPage() {
         setSeriesSeasonError(
           error instanceof Error && error.message.trim()
             ? error.message.trim()
-            : '剧集季数加载失败，请稍后重试。',
+            : `${mediaLabel}季数加载失败，请稍后重试。`,
         )
       })
       .finally(() => {
@@ -1008,7 +1017,7 @@ export function MagnetIngestPage() {
         activeSeriesSeasonControllerRef.current = null
       }
     }
-  }, [mode, selectedSeries])
+  }, [mode, selectedAnime, selectedSeries])
 
   useEffect(() => {
     let isDisposed = false
@@ -1337,8 +1346,12 @@ export function MagnetIngestPage() {
   const adultMagnetValidationMessage = getAdultMagnetValidationMessage(magnetInput)
   const magnetValidationMessage =
     mode === 'adult' ? adultMagnetValidationMessage : singleMagnetValidationMessage
+  const selectedSeasonItem =
+    mode === 'series' ? selectedSeries : mode === 'anime' ? selectedAnime : null
+  const seasonMediaLabel = mode === 'anime' ? '动漫' : '剧集'
   const seriesSeasonValidationMessage = getSeasonLoadValidationMessage({
-    selectedSeries,
+    selectedItem: selectedSeasonItem,
+    mediaLabel: seasonMediaLabel,
     seriesSeasonStatus,
     selectedSeasonNumber,
     seriesSeasonOptions,
@@ -1353,7 +1366,7 @@ export function MagnetIngestPage() {
       : mode === 'series'
         ? Boolean(seriesSeasonValidationMessage)
         : mode === 'anime'
-          ? !selectedAnime
+          ? Boolean(seriesSeasonValidationMessage)
           : !isAdmin)
 
   function abortActiveSearch() {
@@ -1402,6 +1415,7 @@ export function MagnetIngestPage() {
     setAnimeResults([])
     setSelectedAnime(null)
     setAnimeSearchError(null)
+    resetSeriesSeasonState()
   }
 
   function handleModeChange(nextMode: IngestMode) {
@@ -1450,6 +1464,7 @@ export function MagnetIngestPage() {
     setAnimeResults([])
     setSelectedAnime(null)
     setAnimeSearchError(null)
+    resetSeriesSeasonState()
   }
 
   function handleMovieSearchSubmit() {
@@ -1593,7 +1608,7 @@ export function MagnetIngestPage() {
     setAnimeResults([])
     setAnimeSearchError(null)
 
-    void searchAnimeMagnetItems(keyword, controller.signal)
+    void searchSeries(keyword, controller.signal)
       .then((items) => {
         if (latestSearchRequestIdRef.current !== requestId) {
           return
@@ -1706,13 +1721,7 @@ export function MagnetIngestPage() {
     }
 
     if (mode === 'series') {
-      const seasonValidationMessage = getSeasonLoadValidationMessage({
-        selectedSeries,
-        seriesSeasonStatus,
-        selectedSeasonNumber,
-        seriesSeasonOptions,
-        seriesSeasonError,
-      })
+      const seasonValidationMessage = seriesSeasonValidationMessage
 
       if (seasonValidationMessage) {
         setSubmitStatus('error')
@@ -1793,8 +1802,9 @@ export function MagnetIngestPage() {
     }
 
     if (mode === 'anime') {
-      if (!selectedAnime) {
-        const message = '请先选择一个动漫项目'
+      if (seriesSeasonValidationMessage || !selectedAnime) {
+        const message =
+          seriesSeasonValidationMessage || '请先选择一个动漫项目'
         setSubmitStatus('error')
         setSubmitError(message)
         setSubmitSuccessMessage(null)
@@ -1805,6 +1815,7 @@ export function MagnetIngestPage() {
       const payload = getAnimeMagnetIngestPayload(
         normalizedMagnet,
         selectedAnime,
+        selectedSeasonNumber,
       )
 
       if (!payload) {
@@ -1823,7 +1834,7 @@ export function MagnetIngestPage() {
       const isIngestAllowed = await checkMediaLibraryIngestAllowed(
         {
           media_type: 'series',
-          bgm_id: selectedAnime.bgm_id,
+          tmdb_id: selectedAnime.tmdb_id,
           season_number: payload.season_number,
         },
         selectedAnime.title,
@@ -2050,7 +2061,7 @@ export function MagnetIngestPage() {
                     : mode === 'series'
                       ? '使用剧集搜索接口查询媒体库项目，并从结果中单选一个剧集进行绑定。'
                       : mode === 'anime'
-                        ? '使用 Bangumi 搜索接口查询动漫条目，并从结果中单选一个动漫进行绑定。'
+                        ? '使用 TMDB 剧集搜索接口查询动漫条目，并从结果中单选一个动漫进行绑定。'
                         : '选择 Adult 保存分类，任务将使用当天日期目录和临时隔离目录处理。'
                 }
               />
@@ -2119,13 +2130,14 @@ export function MagnetIngestPage() {
                 onKeywordChange={handleAnimeKeywordChange}
                 onSearchSubmit={handleAnimeSearchSubmit}
                 onSelectItem={(item) => {
-                  if (isAnimeMagnetSearchItem(item)) {
+                  if (isSeriesSearchItem(item)) {
                     setSelectedAnime(item)
                   }
                   resetSubmitFeedback()
                 }}
                 onClearSelection={() => {
                   setSelectedAnime(null)
+                  resetSeriesSeasonState()
                   resetSubmitFeedback()
                 }}
               />
@@ -2150,11 +2162,15 @@ export function MagnetIngestPage() {
             )}
           </section>
 
-          {mode === 'series' ? (
+          {mode === 'series' || mode === 'anime' ? (
             <section className="space-y-3">
               <SectionHeading
                 label="目标季数"
-                title="选中剧集后会动态拉取真实可用季数，并用于电视剧离线直收提交。"
+                title={
+                  mode === 'anime'
+                    ? '选中动漫后会通过 TMDB 动态拉取真实可用季度，并用于动漫整季提交。'
+                    : '选中剧集后会动态拉取真实可用季数，并用于电视剧离线直收提交。'
+                }
               />
 
               <TargetSeasonSelect
@@ -2162,6 +2178,7 @@ export function MagnetIngestPage() {
                 options={seriesSeasonOptions}
                 status={seriesSeasonStatus}
                 error={seriesSeasonError}
+                mediaLabel={mode === 'anime' ? '动漫' : '剧集'}
                 onChange={(value) => {
                   setSelectedSeasonNumber(value)
                   resetSubmitFeedback()

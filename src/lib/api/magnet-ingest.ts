@@ -1,5 +1,3 @@
-import axios from 'axios'
-
 import { getJavaErrorMessage, javaApiClient } from '@/lib/java-api'
 import type {
   AdultMagnetIngestTask,
@@ -10,8 +8,6 @@ import type {
   AnimeMagnetIngestTaskListData,
   AnimeMagnetIngestTaskLog,
   AnimeMagnetIngestTaskLogListData,
-  AnimeMagnetSearchItem,
-  AnimeMagnetSearchResponseData,
   CreateAnimeMagnetIngestTaskPayload,
   CreateAdultMagnetIngestTaskPayload,
   CreateAdultMagnetIngestTaskResponse,
@@ -29,46 +25,10 @@ import type {
   SeriesMagnetIngestTaskLogListData,
 } from '@/types/magnet-ingest'
 
-const JAVA_ANIME_MAGNET_SEARCH_ERROR_MESSAGE = '动漫搜索失败，请稍后重试。'
 const JAVA_ANIME_MAGNET_TASK_ERROR_MESSAGE = '动漫磁力任务处理失败，请稍后重试。'
 const JAVA_MAGNET_TASK_ERROR_MESSAGE = '磁力任务处理失败，请稍后重试。'
 const JAVA_ADULT_MAGNET_TASK_ERROR_MESSAGE =
   'Adult 磁力任务处理失败，请稍后重试。'
-
-export async function searchAnimeMagnetItems(
-  term: string,
-  signal?: AbortSignal,
-): Promise<AnimeMagnetSearchItem[]> {
-  try {
-    const response = await javaApiClient.get<
-      JavaApiResponse<AnimeMagnetSearchResponseData>
-    >('/api/v1/magnet-ingest/anime/search', {
-      params: { term: term.trim() },
-      signal,
-    })
-
-    if (
-      response.data.code !== 200 ||
-      !response.data.data ||
-      !Array.isArray(response.data.data.items)
-    ) {
-      throw new Error(response.data.message || 'anime magnet search failed')
-    }
-
-    return response.data.data.items
-  } catch (error) {
-    if (
-      axios.isCancel(error) ||
-      (axios.isAxiosError(error) && error.code === 'ERR_CANCELED')
-    ) {
-      throw error
-    }
-
-    throw new Error(
-      getJavaErrorMessage(error) || JAVA_ANIME_MAGNET_SEARCH_ERROR_MESSAGE,
-    )
-  }
-}
 
 export async function createAnimeMagnetIngestTask(
   payload: CreateAnimeMagnetIngestTaskPayload,
