@@ -37,13 +37,13 @@ const adminPrimaryItems: NavigationItem[] = [
 ]
 
 const secondaryItems: NavigationItem[] = [
-  { icon: Settings, label: '设置', to: '/settings' },
   { icon: CircleHelp, label: '帮助', to: '/docs' },
 ]
 
 const adminItems: NavigationItem[] = [
   { icon: Activity, label: '观看统计', to: '/emby-watch-rankings' },
   { icon: Users, label: '用户管理', to: '/users' },
+  { icon: Settings, label: '设置', to: '/settings' },
 ]
 
 function SidebarLink({ icon: Icon, label, to }: NavigationItem) {

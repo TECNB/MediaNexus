@@ -50,7 +50,14 @@ export const router = createBrowserRouter([
       { path: 'subtitles', element: <SubtitleManagePage /> },
       { path: 'emby-watch-rankings', element: <EmbyWatchRankingsPage /> },
       { path: 'users', element: <UserManagementPage /> },
-      { path: 'settings', element: <SettingsPage /> },
+      {
+        path: 'settings',
+        element: (
+          <ProtectedRoute requiredRole="ADMIN">
+            <SettingsPage />
+          </ProtectedRoute>
+        ),
+      },
       { path: '*', element: <Navigate to="/resources" replace /> },
     ],
   },
