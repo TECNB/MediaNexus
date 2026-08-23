@@ -116,6 +116,7 @@ export type ResourcePublishPageState = {
   seasonNumber: number | null
   seasonOptions: number[]
   taskProductType?: 'SERIES' | 'ANIME'
+  releaseSource?: 'prowlarr' | 'quark'
 }
 
 export type CreateMovieOpenListIngestPayload = {
@@ -157,6 +158,47 @@ export type ProwlarrRelease = {
 export type ProwlarrReleaseSearchData = {
   query: string
   items: ProwlarrRelease[]
+}
+
+export type QuarkReleaseMediaType = 'MOVIE' | 'SERIES' | 'VARIETY'
+
+export type QuarkReleaseSearchPayload = {
+  media_type: QuarkReleaseMediaType
+  title: string
+  original_title: string | null
+  year: number | null
+  season_number: number | null
+  tmdb_id: number | null
+  refresh: boolean
+}
+
+export type QuarkReleaseAvailability =
+  | 'OK'
+  | 'BAD'
+  | 'LOCKED'
+  | 'UNCERTAIN'
+  | 'UNCHECKED'
+
+export type QuarkReleaseRelevance = 'STRONG' | 'POSSIBLE' | 'CONFLICT'
+
+export type QuarkRelease = {
+  id: string
+  title: string
+  share_url: string
+  source: string
+  published_at: string
+  availability: QuarkReleaseAvailability
+  availability_summary: string
+  relevance: QuarkReleaseRelevance
+  match_reasons: string[]
+  conflicts: string[]
+  tags: string[]
+}
+
+export type QuarkReleaseSearchData = {
+  query: string
+  items: QuarkRelease[]
+  warnings: string[]
 }
 
 export type MovieReleaseRecommendationPayload = {

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 
 import { PageContainer } from '@/components/layout/page-container'
+import { QuarkReleasePanel } from '@/components/resources/quark-release-panel'
 import { Button } from '@/components/ui/button'
 import { SelectControl } from '@/components/ui/form-control'
 import {
@@ -243,6 +244,9 @@ export function ResourcePublishPage() {
   const item = pageState?.item ?? null
   const mediaType = pageState?.mediaType ?? null
   const isAnimeSeason = pageState?.taskProductType === 'ANIME'
+  const [releaseSource, setReleaseSource] = useState<'prowlarr' | 'quark'>(
+    routePageState?.releaseSource ?? 'prowlarr',
+  )
   const [seasonNumber, setSeasonNumber] = useState(
     pageState?.seasonNumber ?? 1,
   )
@@ -310,6 +314,7 @@ export function ResourcePublishPage() {
 
   useEffect(() => {
     if (
+      releaseSource !== 'prowlarr' ||
       !pageState ||
       !item ||
       (mediaType !== 'movie' && mediaType !== 'series') ||
@@ -400,7 +405,7 @@ export function ResourcePublishPage() {
       })
 
     return () => controller.abort()
-  }, [isAnimeSeason, item, mediaType, pageState, seasonNumber])
+  }, [isAnimeSeason, item, mediaType, pageState, releaseSource, seasonNumber])
 
   useEffect(
     () => () => {
@@ -671,7 +676,9 @@ export function ResourcePublishPage() {
       description={
         isAnimeSeason
           ? '选择匹配当前季度的发布资源，随后创建动漫整季入库任务。'
-          : '从 Prowlarr 返回结果中选择一个具体发布，随后创建 OpenList 入库任务。'
+          : releaseSource === 'quark'
+            ? '从 PanSou 返回结果中检查一个 Quark 分享，确认后创建并立即执行 QAS 任务。'
+            : '从 Prowlarr 返回结果中选择一个具体发布，随后创建 OpenList 入库任务。'
       }
     >
       <section className="rounded-lg bg-white p-5">
@@ -721,24 +728,62 @@ export function ResourcePublishPage() {
                 </SelectControl>
               </label>
             ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleRefreshReleases}
-              disabled={loadState.status === 'loading'}
-              className="h-10 rounded-lg border-slate-200 shadow-none"
-            >
-              <RefreshCw
-                className={cn(
-                  'h-4 w-4',
-                  loadState.status === 'loading' && 'animate-spin',
-                )}
-              />
-              刷新
-            </Button>
+            {releaseSource === 'prowlarr' ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleRefreshReleases}
+                disabled={loadState.status === 'loading'}
+                className="h-10 rounded-lg border-slate-200 shadow-none"
+              >
+                <RefreshCw
+                  className={cn(
+                    'h-4 w-4',
+                    loadState.status === 'loading' && 'animate-spin',
+                  )}
+                />
+                刷新
+              </Button>
+            ) : null}
           </div>
         </div>
       </section>
+
+      {!retryContextState.context && !isAnimeSeason ? (
+        <section className="rounded-lg bg-white p-2">
+          <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1">
+            {(
+              [
+                ['prowlarr', '磁力资源（Prowlarr）'],
+                ['quark', 'Quark 资源（PanSou）'],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setReleaseSource(value)}
+                className={cn(
+                  'rounded-md px-4 py-3 text-sm font-semibold transition',
+                  releaseSource === value
+                    ? 'bg-white text-slate-950 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-900',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {releaseSource === 'quark' && !retryContextState.context && !isAnimeSeason ? (
+        <QuarkReleasePanel
+          mediaType={mediaType}
+          item={item}
+          seasonNumber={seasonNumber}
+        />
+      ) : (
+        <>
 
       {retryContextState.context ? (
         <section className="rounded-lg bg-amber-50 p-5 text-amber-900">
@@ -938,6 +983,8 @@ export function ResourcePublishPage() {
           {submitState.message}
         </p>
       ) : null}
+        </>
+      )}
     </PageContainer>
   )
 }

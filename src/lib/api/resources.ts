@@ -22,6 +22,8 @@ import type {
   MovieSearchItem,
   ProwlarrReleaseRecommendationData,
   ProwlarrReleaseSearchData,
+  QuarkReleaseSearchData,
+  QuarkReleaseSearchPayload,
   SearchProwlarrReleasesParams,
   SeriesReleaseRecommendationPayload,
   SeriesReleaseSearchPayload,
@@ -36,6 +38,7 @@ type JavaApiResponse<TData> = {
 }
 
 const PROWLARR_RELEASE_REQUEST_TIMEOUT_MS = 120_000
+const QUARK_RELEASE_REQUEST_TIMEOUT_MS = 30_000
 
 function getAxiosErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
@@ -285,6 +288,37 @@ export async function searchProwlarrReleases(
     }
     throw new Error(
       getJavaErrorMessage(error) || '发布资源加载失败，请稍后重试。',
+    )
+  }
+}
+
+export async function searchQuarkReleases(
+  payload: QuarkReleaseSearchPayload,
+  signal?: AbortSignal,
+): Promise<QuarkReleaseSearchData> {
+  try {
+    const response = await javaApiClient.post<
+      JavaApiResponse<QuarkReleaseSearchData>
+    >('/api/v1/resources/quark/releases/search', payload, {
+      signal,
+      timeout: QUARK_RELEASE_REQUEST_TIMEOUT_MS,
+    })
+
+    if (
+      response.data.code !== 200 ||
+      !response.data.data ||
+      !Array.isArray(response.data.data.items)
+    ) {
+      throw new Error(response.data.message || 'quark release search failed')
+    }
+
+    return response.data.data
+  } catch (error) {
+    if (isRequestCanceledError(error)) {
+      throw error
+    }
+    throw new Error(
+      getJavaErrorMessage(error) || 'Quark 资源搜索失败，请稍后重试。',
     )
   }
 }
