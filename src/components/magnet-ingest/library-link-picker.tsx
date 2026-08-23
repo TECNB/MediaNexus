@@ -22,7 +22,7 @@ export type ResourceSearchStatus =
   | 'empty'
   | 'error'
 
-type LibraryLinkMode = Exclude<IngestMode, 'adult'>
+type LibraryLinkMode = Exclude<IngestMode, 'adult'> | 'variety'
 
 type LibraryLinkPickerProps = {
   mode: LibraryLinkMode
@@ -82,6 +82,19 @@ const pickerCopy: Record<
     emptyBindingMessage: '尚未绑定剧集项目，请从下方搜索结果中选择一个目标条目。',
     resultsLabel: 'tv show',
   },
+  variety: {
+    searchPlaceholder: '搜索综艺名称、原名或年份...',
+    searchAriaLabel: '搜索综艺节目',
+    idleTitle: '搜索并选择综艺',
+    idleDescription: '复用剧集目录搜索，输入节目名称后发起查询。',
+    loadingTitle: '正在搜索综艺',
+    loadingDescription: '正在从剧集目录服务获取搜索结果，请稍候。',
+    errorFallback: '综艺搜索失败，请稍后重试。',
+    emptyTitle: '未找到匹配综艺',
+    emptyDescription: '试试节目中文名、原名或年份关键词。',
+    emptyBindingMessage: '尚未绑定综艺项目，请从下方搜索结果中选择一个目标条目。',
+    resultsLabel: 'variety show',
+  },
   anime: {
     searchPlaceholder: '搜索动漫中文名或原名...',
     searchAriaLabel: '通过 TMDB 搜索动漫条目',
@@ -104,7 +117,7 @@ function isSeriesSearchItem(
 }
 
 function getItemIcon(mode: LibraryLinkMode) {
-  return mode === 'series' ? Tv : Clapperboard
+  return mode === 'series' || mode === 'variety' ? Tv : Clapperboard
 }
 
 function getItemPoster(item: LibraryLinkItem) {

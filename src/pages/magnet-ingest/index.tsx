@@ -12,6 +12,7 @@ import {
   ProTipCard,
   TaskLogsCard,
 } from '@/components/magnet-ingest/status-cards'
+import { QuarkIngestPanel } from '@/components/quark-ingest/quark-ingest-panel'
 import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
 import { SelectControl } from '@/components/ui/form-control'
@@ -596,7 +597,7 @@ function isSeriesSearchItem(item: unknown): item is SeriesSearchItem {
   return typeof item === 'object' && item !== null && 'tvdb_id' in item
 }
 
-export function MagnetIngestPage() {
+function MagnetIngestContent() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
   const [mode, setMode] = useState<IngestMode>('movie')
@@ -2005,10 +2006,7 @@ export function MagnetIngestPage() {
   )}`
 
   return (
-    <PageContainer
-      title="手动磁力入库"
-      description="直接粘贴高质量磁力链接，将其绑定至媒体库结构并推送至云端离线下载。"
-    >
+    <>
       <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.72fr)_320px]">
         <div className="min-w-0 space-y-6">
           <section className="space-y-3">
@@ -2322,6 +2320,58 @@ export function MagnetIngestPage() {
           </div>
         </div>
       ) : null}
+    </>
+  )
+}
+
+type ManualIngestSource = 'magnet' | 'quark'
+
+function IngestSourceToggle({
+  value,
+  onChange,
+}: {
+  value: ManualIngestSource
+  onChange: (value: ManualIngestSource) => void
+}) {
+  const options: Array<{ label: string; value: ManualIngestSource }> = [
+    { label: '磁力链接', value: 'magnet' },
+    { label: 'Quark 分享链接', value: 'quark' },
+  ]
+
+  return (
+    <div className="flex w-full rounded-2xl border border-slate-200 bg-slate-100/80 p-1 sm:w-fit">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={option.value === value}
+          onClick={() => onChange(option.value)}
+          className={cn(
+            'min-w-0 flex-1 whitespace-nowrap rounded-[14px] px-4 py-2 text-sm font-semibold transition-all sm:flex-none',
+            option.value === value
+              ? 'bg-white text-slate-950 shadow-[0_1px_2px_rgba(15,23,42,0.08)]'
+              : 'text-slate-500 hover:text-slate-900',
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+export function MagnetIngestPage() {
+  const [source, setSource] = useState<ManualIngestSource>('magnet')
+
+  return (
+    <PageContainer
+      title="手动链接入库"
+      description="粘贴磁力链接或 Quark 分享链接，绑定媒体信息后创建对应的入库任务。"
+    >
+      <div className="mb-6">
+        <IngestSourceToggle value={source} onChange={setSource} />
+      </div>
+      {source === 'magnet' ? <MagnetIngestContent /> : <QuarkIngestPanel />}
     </PageContainer>
   )
 }
