@@ -244,9 +244,13 @@ export function ResourcePublishPage() {
   const item = pageState?.item ?? null
   const mediaType = pageState?.mediaType ?? null
   const isAnimeSeason = pageState?.taskProductType === 'ANIME'
-  const [releaseSource, setReleaseSource] = useState<'prowlarr' | 'quark'>(
-    routePageState?.releaseSource ?? 'prowlarr',
-  )
+  const releaseSource =
+    retryContextState.context || isAnimeSeason
+      ? 'prowlarr'
+      : (pageState?.releaseSource ?? 'prowlarr')
+  const quarkMediaType =
+    pageState?.quarkMediaType ??
+    (mediaType === 'movie' ? 'MOVIE' : 'SERIES')
   const [seasonNumber, setSeasonNumber] = useState(
     pageState?.seasonNumber ?? 1,
   )
@@ -699,7 +703,9 @@ export function ResourcePublishPage() {
               {item.title}
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              {mediaType === 'movie'
+              {quarkMediaType === 'VARIETY'
+                ? `综艺 · ${targetLabel} · 使用综艺目录搜索计划`
+                : mediaType === 'movie'
                 ? `电影 · ${targetLabel} · 使用电影实体搜索计划`
                 : isAnimeSeason
                   ? `动漫整季 · ${targetLabel} · 使用动漫目录搜索计划`
@@ -749,36 +755,10 @@ export function ResourcePublishPage() {
         </div>
       </section>
 
-      {!retryContextState.context && !isAnimeSeason ? (
-        <section className="rounded-lg bg-white p-2">
-          <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1">
-            {(
-              [
-                ['prowlarr', '磁力资源（Prowlarr）'],
-                ['quark', 'Quark 资源（PanSou）'],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setReleaseSource(value)}
-                className={cn(
-                  'rounded-md px-4 py-3 text-sm font-semibold transition',
-                  releaseSource === value
-                    ? 'bg-white text-slate-950 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-900',
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
       {releaseSource === 'quark' && !retryContextState.context && !isAnimeSeason ? (
         <QuarkReleasePanel
           mediaType={mediaType}
+          targetMediaType={quarkMediaType}
           item={item}
           seasonNumber={seasonNumber}
         />

@@ -14,16 +14,27 @@ type SearchHistoryProps = {
 }
 
 function getContextLabel(entry: ResourceSearchHistoryEntry) {
+  const sourceLabel = entry.source === 'quark' ? 'Quark' : 'Prowlarr'
+  let categoryLabel: string
+
   switch (entry.category) {
     case 'movie':
-      return '电影'
+      categoryLabel = '电影'
+      break
     case 'tv':
-      return '电视剧'
+      categoryLabel = '电视剧'
+      break
+    case 'variety':
+      categoryLabel = '综艺'
+      break
     case 'anime':
-      return entry.animeMode === 'follow-subscription'
+      categoryLabel = entry.animeMode === 'follow-subscription'
         ? '动漫 · 追更'
         : '动漫 · 整季'
+      break
   }
+
+  return `${sourceLabel} · ${categoryLabel}`
 }
 
 export function SearchHistory({

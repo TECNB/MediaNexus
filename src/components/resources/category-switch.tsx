@@ -1,14 +1,16 @@
 import { cn } from '@/lib/utils'
+import type { ResourceReleaseSource } from '@/types/resources'
 
-export type ResourceCategoryValue = 'movie' | 'tv' | 'anime'
+export type ResourceCategoryValue = 'movie' | 'tv' | 'anime' | 'variety'
 
 type CategorySwitchProps = {
+  source: ResourceReleaseSource
   value: ResourceCategoryValue
   onChange: (value: ResourceCategoryValue) => void
   className?: string
 }
 
-const categoryOptions: Array<{
+const prowlarrCategoryOptions: Array<{
   label: string
   value: ResourceCategoryValue
 }> = [
@@ -17,11 +19,24 @@ const categoryOptions: Array<{
   { label: '动漫', value: 'anime' },
 ]
 
+const quarkCategoryOptions: Array<{
+  label: string
+  value: ResourceCategoryValue
+}> = [
+  { label: '电影', value: 'movie' },
+  { label: '电视剧', value: 'tv' },
+  { label: '综艺', value: 'variety' },
+]
+
 export function CategorySwitch({
+  source,
   value,
   onChange,
   className,
 }: CategorySwitchProps) {
+  const categoryOptions =
+    source === 'quark' ? quarkCategoryOptions : prowlarrCategoryOptions
+
   return (
     <div
       role="tablist"

@@ -108,6 +108,8 @@ export type OpenListQualityTag = '2160p' | '1080p' | '720p'
 
 export type ResourcePublishMediaType = 'movie' | 'series'
 
+export type ResourceReleaseSource = 'prowlarr' | 'quark'
+
 export type ResourcePublishPageState = {
   mediaType: ResourcePublishMediaType
   item: SearchableResourceItem
@@ -116,7 +118,8 @@ export type ResourcePublishPageState = {
   seasonNumber: number | null
   seasonOptions: number[]
   taskProductType?: 'SERIES' | 'ANIME'
-  releaseSource?: 'prowlarr' | 'quark'
+  releaseSource?: ResourceReleaseSource
+  quarkMediaType?: QuarkReleaseMediaType
 }
 
 export type CreateMovieOpenListIngestPayload = {

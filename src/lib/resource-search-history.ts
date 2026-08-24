@@ -1,4 +1,10 @@
-export type ResourceSearchHistoryCategory = 'movie' | 'tv' | 'anime'
+import type { ResourceReleaseSource } from '@/types/resources'
+
+export type ResourceSearchHistoryCategory =
+  | 'movie'
+  | 'tv'
+  | 'anime'
+  | 'variety'
 
 export type ResourceSearchHistoryAnimeMode =
   | 'season-ingest'
@@ -6,6 +12,7 @@ export type ResourceSearchHistoryAnimeMode =
 
 export type ResourceSearchHistoryEntry = {
   keyword: string
+  source: ResourceReleaseSource
   category: ResourceSearchHistoryCategory
   animeMode: ResourceSearchHistoryAnimeMode | null
   searchedAt: number
@@ -13,6 +20,7 @@ export type ResourceSearchHistoryEntry = {
 
 type AddResourceSearchHistoryInput = {
   keyword: string
+  source: ResourceReleaseSource
   category: ResourceSearchHistoryCategory
   animeMode?: ResourceSearchHistoryAnimeMode | null
 }
@@ -22,7 +30,16 @@ const RESOURCE_SEARCH_HISTORY_STORAGE_PREFIX =
 const RESOURCE_SEARCH_HISTORY_LIMIT = 10
 
 function isCategory(value: unknown): value is ResourceSearchHistoryCategory {
-  return value === 'movie' || value === 'tv' || value === 'anime'
+  return (
+    value === 'movie' ||
+    value === 'tv' ||
+    value === 'anime' ||
+    value === 'variety'
+  )
+}
+
+function isSource(value: unknown): value is ResourceReleaseSource {
+  return value === 'prowlarr' || value === 'quark'
 }
 
 function isAnimeMode(
@@ -64,12 +81,14 @@ function getLocalStorage() {
 
 function getEntryIdentity(entry: {
   keyword: string
+  source: ResourceReleaseSource
   category: ResourceSearchHistoryCategory
   animeMode?: ResourceSearchHistoryAnimeMode | null
 }) {
   const animeMode = normalizeAnimeMode(entry.category, entry.animeMode)
   return JSON.stringify([
     entry.category,
+    entry.source,
     animeMode,
     normalizeKeyword(entry.keyword),
   ])
@@ -99,9 +118,11 @@ function parseEntry(value: unknown): ResourceSearchHistoryEntry | null {
     Number.isFinite(candidate.searchedAt)
       ? candidate.searchedAt
       : 0
+  const source = isSource(candidate.source) ? candidate.source : 'prowlarr'
 
   return {
     keyword,
+    source,
     category: candidate.category,
     animeMode,
     searchedAt,
@@ -183,6 +204,7 @@ export function addResourceSearchHistory(
 
   const entry: ResourceSearchHistoryEntry = {
     keyword,
+    source: input.source,
     category: input.category,
     animeMode: normalizeAnimeMode(input.category, input.animeMode),
     searchedAt: Date.now(),

@@ -24,6 +24,7 @@ import {
 } from '@/components/resources/media-card'
 import { SearchBar } from '@/components/resources/search-bar'
 import { SearchHistory } from '@/components/resources/search-history'
+import { ReleaseSourceSwitch } from '@/components/resources/release-source-switch'
 import {
   getAnimeSubtitleGroups,
   previewAnimeSubscription,
@@ -72,6 +73,7 @@ import type {
   MediaLibraryPresenceData,
   ProwlarrRelease,
   ResourcePublishPageState,
+  ResourceReleaseSource,
   SearchableResourceItem,
   SeriesSearchItem,
 } from '@/types/resources'
@@ -200,6 +202,16 @@ const searchableCategoryCopy: Record<
     emptyDescription: '换个电视剧名称试试，或检查关键词是否输入正确。',
     errorMessage: '电视剧搜索失败，请稍后重试。',
   },
+  variety: {
+    placeholder: '搜索综艺名称…',
+    idleTitle: '输入综艺名称开始搜索',
+    idleDescription: '选择目标季数后可搜索 Quark 分享并创建 QAS 入库任务。',
+    loadingTitle: '正在搜索综艺…',
+    loadingDescription: '正在从媒体目录服务获取综艺结果。',
+    emptyTitle: '没有搜索结果',
+    emptyDescription: '换个综艺名称试试，或检查关键词是否输入正确。',
+    errorMessage: '综艺搜索失败，请稍后重试。',
+  },
 }
 
 const animeResourceModeCopy: Record<
@@ -243,6 +255,7 @@ const categorySearchHandlers: Record<
 > = {
   movie: async (term, signal) => searchMovies(term, signal),
   tv: async (term, signal) => searchSeries(term, signal),
+  variety: async (term, signal) => searchSeries(term, signal),
 }
 
 const animeModeSearchHandlers: Record<
@@ -591,6 +604,8 @@ export function ResourceSearchPage() {
   const { user } = useAuth()
   const userId = user?.id ?? null
   const canUseAnimeSubscriptions = user?.role === 'ADMIN'
+  const [releaseSource, setReleaseSource] =
+    useState<ResourceReleaseSource>('prowlarr')
   const [category, setCategory] = useState<ResourceCategoryValue>('movie')
   const [animeResourceMode, setAnimeResourceMode] =
     useState<AnimeResourceMode>(DEFAULT_ANIME_RESOURCE_MODE)
@@ -640,7 +655,7 @@ export function ResourceSearchPage() {
   const isAutoReleaseConfirmationOpen = autoReleaseConfirmation !== null
   const latestRequestIdRef = useRef(0)
   const recentIngestRequestIdRef = useRef(0)
-  const historyRestoredCategoryRef = useRef<ResourceCategoryValue | null>(null)
+  const historyRestoredContextRef = useRef<string | null>(null)
   const activeRequestControllerRef = useRef<AbortController | null>(null)
   const seriesSeasonsControllerRef = useRef<AbortController | null>(null)
   const activeMediaIngestKeysRef = useRef<Set<string>>(new Set())
@@ -771,14 +786,15 @@ export function ResourceSearchPage() {
   }, [])
 
   useEffect(() => {
-    if (historyRestoredCategoryRef.current === category) {
+    const activeContext = `${releaseSource}:${category}`
+    if (historyRestoredContextRef.current === activeContext) {
+      historyRestoredContextRef.current = null
       return
     }
 
-    historyRestoredCategoryRef.current = null
     resetSearchSession()
     setAnimeResourceMode(DEFAULT_ANIME_RESOURCE_MODE)
-  }, [category, resetSearchSession])
+  }, [category, releaseSource, resetSearchSession])
 
   useEffect(() => {
     if (
@@ -808,11 +824,12 @@ export function ResourceSearchPage() {
   const elapsedNow = useElapsedNow(hasActiveTimedIngest)
 
   function handleSearchSubmit() {
-    runResourceSearch(searchText, category, animeResourceMode)
+    runResourceSearch(searchText, releaseSource, category, animeResourceMode)
   }
 
   function runResourceSearch(
     searchValue: string,
+    activeReleaseSource: ResourceReleaseSource,
     activeCategory: ResourceCategoryValue,
     activeAnimeResourceMode: AnimeResourceMode,
   ) {
@@ -855,6 +872,7 @@ export function ResourceSearchPage() {
       setSearchHistory(
         addResourceSearchHistory(userId, {
           keyword,
+          source: activeReleaseSource,
           category: activeCategory,
           animeMode:
             activeCategory === 'anime' ? activeAnimeResourceMode : null,
@@ -907,6 +925,7 @@ export function ResourceSearchPage() {
         }
         if (
           (activeCategory === 'tv' ||
+            activeCategory === 'variety' ||
             (activeCategory === 'anime' &&
               activeAnimeResourceMode === 'season-ingest')) &&
           items.length > 0
@@ -963,18 +982,38 @@ export function ResourceSearchPage() {
         ? DEFAULT_ANIME_RESOURCE_MODE
         : requestedAnimeResourceMode
 
-    if (entry.category !== category) {
-      historyRestoredCategoryRef.current = entry.category
+    if (entry.category !== category || entry.source !== releaseSource) {
+      historyRestoredContextRef.current = `${entry.source}:${entry.category}`
     }
 
     setSearchText(entry.keyword)
+    setReleaseSource(entry.source)
     setCategory(entry.category)
     setAnimeResourceMode(nextAnimeResourceMode)
     runResourceSearch(
       entry.keyword,
+      entry.source,
       entry.category,
       nextAnimeResourceMode,
     )
+  }
+
+  function handleReleaseSourceChange(nextSource: ResourceReleaseSource) {
+    if (nextSource === releaseSource) {
+      return
+    }
+
+    const nextCategory =
+      nextSource === 'quark' && category === 'anime'
+        ? 'movie'
+        : nextSource === 'prowlarr' && category === 'variety'
+          ? 'movie'
+          : category
+
+    resetSearchSession()
+    setReleaseSource(nextSource)
+    setCategory(nextCategory)
+    setAnimeResourceMode(DEFAULT_ANIME_RESOURCE_MODE)
   }
 
   function handleSearchHistoryRemove(entry: ResourceSearchHistoryEntry) {
@@ -1432,6 +1471,15 @@ export function ResourceSearchPage() {
             : [],
         taskProductType:
           mediaType === 'series' && category === 'anime' ? 'ANIME' : 'SERIES',
+        releaseSource,
+        quarkMediaType:
+          releaseSource === 'quark'
+            ? category === 'variety'
+              ? 'VARIETY'
+              : mediaType === 'movie'
+                ? 'MOVIE'
+                : 'SERIES'
+            : undefined,
       } satisfies ResourcePublishPageState,
     })
   }
@@ -2174,6 +2222,16 @@ export function ResourceSearchPage() {
                 <MediaCard
                   key={item.id}
                   item={item}
+                  releaseSource={releaseSource}
+                  quarkMediaType={
+                    releaseSource === 'quark'
+                      ? category === 'variety'
+                        ? 'VARIETY'
+                        : isSeriesSearchItem(item)
+                          ? 'SERIES'
+                          : 'MOVIE'
+                      : undefined
+                  }
                   taskProductType={category === 'anime' ? 'ANIME' : 'SERIES'}
                   addStatus={ingestState?.status}
                   addMessage={ingestMessage}
@@ -2207,8 +2265,14 @@ export function ResourceSearchPage() {
                       ? handleSeasonNumberChange
                       : undefined
                   }
-                  onOpenListIngest={handleOpenListIngest}
-                  onViewMore={handleViewMore}
+                  onOpenListIngest={
+                    releaseSource === 'quark'
+                      ? handleViewMore
+                      : handleOpenListIngest
+                  }
+                  onViewMore={
+                    releaseSource === 'prowlarr' ? handleViewMore : undefined
+                  }
                 />
               )
             })}
@@ -2229,7 +2293,7 @@ export function ResourceSearchPage() {
   return (
     <PageContainer
       title="资源搜索"
-      description="从资源卡片匹配 Prowlarr 发布资源，并通过 OpenList 创建电影、剧集或动漫整季入库任务。"
+      description="选择 Prowlarr 或 Quark 分享来源，搜索电影、电视剧、综艺或动漫并创建对应入库任务。"
     >
       <div className="space-y-8">
         <div className="flex justify-end">
@@ -2242,6 +2306,10 @@ export function ResourceSearchPage() {
         </div>
 
         <div className="flex flex-col items-center gap-5">
+          <ReleaseSourceSwitch
+            value={releaseSource}
+            onChange={handleReleaseSourceChange}
+          />
           <SearchBar
             value={searchText}
             onChange={setSearchText}
@@ -2250,8 +2318,12 @@ export function ResourceSearchPage() {
             isSubmitting={isSearching}
             submitDisabled={isSearching}
           />
-          <CategorySwitch value={category} onChange={setCategory} />
-          {category === 'anime' ? (
+          <CategorySwitch
+            source={releaseSource}
+            value={category}
+            onChange={setCategory}
+          />
+          {releaseSource === 'prowlarr' && category === 'anime' ? (
             <div className="flex flex-col items-center gap-2 text-center">
               {canUseAnimeSubscriptions ? (
                 <AnimeModeSwitch

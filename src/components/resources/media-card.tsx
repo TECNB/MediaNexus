@@ -6,6 +6,8 @@ import { SelectControl } from '@/components/ui/form-control'
 import { cn } from '@/lib/utils'
 import type {
   OpenListQualityTag,
+  QuarkReleaseMediaType,
+  ResourceReleaseSource,
   SearchableResourceItem,
   SeriesSearchItem,
 } from '@/types/resources'
@@ -19,6 +21,8 @@ export type MediaCardSeasonStatus =
 
 type MediaCardProps = {
   item: SearchableResourceItem
+  releaseSource?: ResourceReleaseSource
+  quarkMediaType?: QuarkReleaseMediaType
   taskProductType?: 'SERIES' | 'ANIME'
   addStatus?: MediaCardAddStatus
   addMessage?: string | null
@@ -60,6 +64,8 @@ function getSeasonLabel(seasonNumber: number) {
 
 export function MediaCard({
   item,
+  releaseSource = 'prowlarr',
+  quarkMediaType,
   taskProductType,
   addStatus = 'idle',
   addMessage = null,
@@ -76,6 +82,7 @@ export function MediaCard({
 }: MediaCardProps) {
   const [hasImageError, setHasImageError] = useState(false)
   const isSeriesItem = isSeriesSearchItem(item)
+  const isQuarkSource = releaseSource === 'quark'
   const isAddLoading = addStatus === 'loading'
   const isAddSuccess = addStatus === 'success'
   const hasQualityTags = qualityTags.length > 0
@@ -106,12 +113,16 @@ export function MediaCard({
   )
   const network = isSeriesItem ? item.network?.trim() : null
   const seriesType = isSeriesItem ? item.series_type?.trim() : null
-  const mediaTypeLabel = isSeriesItem
-    ? taskProductType === 'ANIME'
-      ? 'ANIME'
-      : 'SERIES'
-    : 'MOVIE'
-  const ingestActionLabel = isSeriesItem
+  const mediaTypeLabel =
+    quarkMediaType ??
+    (isSeriesItem
+      ? taskProductType === 'ANIME'
+        ? 'ANIME'
+        : 'SERIES'
+      : 'MOVIE')
+  const ingestActionLabel = isQuarkSource
+    ? '搜索 Quark 分享'
+    : isSeriesItem
     ? taskProductType === 'ANIME'
       ? '动漫整季入库'
       : '剧集入库'
@@ -183,7 +194,9 @@ export function MediaCard({
           <div
             className={cn(
               'grid gap-3',
-              isSeriesItem ? 'grid-cols-2' : 'grid-cols-1',
+              isSeriesItem && !isQuarkSource
+                ? 'grid-cols-2'
+                : 'grid-cols-1',
             )}
           >
             {isSeriesItem ? (
@@ -220,33 +233,36 @@ export function MediaCard({
               </label>
             ) : null}
 
-            <label className="space-y-1.5">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                分辨率
-              </span>
-              <SelectControl
-                value={activeQualityTag ?? ''}
-                onChange={(event) => {
-                  const nextQualityTag = event.target.value as OpenListQualityTag
-                  if (qualityTags.includes(nextQualityTag)) {
-                    onQualityTagChange?.(item, nextQualityTag)
-                  }
-                }}
-                disabled={isAddLoading || isAddSuccess || !hasQualityTags}
-                aria-label={`${item.title} 分辨率`}
-                className="bg-slate-100 text-xs font-semibold text-slate-700 shadow-none hover:bg-slate-200 focus:bg-white focus:ring-slate-900/10"
-              >
-                {hasQualityTags ? (
-                  qualityTags.map((qualityTag) => (
-                    <option key={qualityTag} value={qualityTag}>
-                      {qualityTag}
-                    </option>
-                  ))
-                ) : (
-                  <option value="">分辨率</option>
-                )}
-              </SelectControl>
-            </label>
+            {!isQuarkSource ? (
+              <label className="space-y-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  分辨率
+                </span>
+                <SelectControl
+                  value={activeQualityTag ?? ''}
+                  onChange={(event) => {
+                    const nextQualityTag = event.target
+                      .value as OpenListQualityTag
+                    if (qualityTags.includes(nextQualityTag)) {
+                      onQualityTagChange?.(item, nextQualityTag)
+                    }
+                  }}
+                  disabled={isAddLoading || isAddSuccess || !hasQualityTags}
+                  aria-label={`${item.title} 分辨率`}
+                  className="bg-slate-100 text-xs font-semibold text-slate-700 shadow-none hover:bg-slate-200 focus:bg-white focus:ring-slate-900/10"
+                >
+                  {hasQualityTags ? (
+                    qualityTags.map((qualityTag) => (
+                      <option key={qualityTag} value={qualityTag}>
+                        {qualityTag}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">分辨率</option>
+                  )}
+                </SelectControl>
+              </label>
+            ) : null}
           </div>
 
           {isSeriesItem && seasonMessage ? (
@@ -262,7 +278,14 @@ export function MediaCard({
             </p>
           ) : null}
 
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+          <div
+            className={cn(
+              'grid gap-2',
+              isQuarkSource
+                ? 'grid-cols-1'
+                : 'grid-cols-[minmax(0,1fr)_auto]',
+            )}
+          >
             <Button
               type="button"
               disabled={isIngestDisabled}
@@ -283,20 +306,22 @@ export function MediaCard({
               )}
             </Button>
 
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isViewMoreDisabled}
-              onClick={() => {
-                if (activeQualityTag) {
-                  onViewMore?.(item, activeQualityTag, activeSeasonNumber)
-                }
-              }}
-              className="h-10 rounded-xl border-slate-200 px-3 text-xs font-semibold text-slate-700 shadow-none hover:bg-slate-100"
-            >
-              查看更多
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
+            {!isQuarkSource ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isViewMoreDisabled}
+                onClick={() => {
+                  if (activeQualityTag) {
+                    onViewMore?.(item, activeQualityTag, activeSeasonNumber)
+                  }
+                }}
+                className="h-10 rounded-xl border-slate-200 px-3 text-xs font-semibold text-slate-700 shadow-none hover:bg-slate-100"
+              >
+                查看更多
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            ) : null}
           </div>
 
           {addMessage ? (

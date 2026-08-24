@@ -56,6 +56,7 @@ type PreviewState = {
 
 type QuarkReleasePanelProps = {
   mediaType: 'movie' | 'series'
+  targetMediaType: QuarkReleaseMediaType
   item: SearchableResourceItem
   seasonNumber: number
 }
@@ -110,14 +111,10 @@ function PreviewTree({
 
 export function QuarkReleasePanel({
   mediaType,
+  targetMediaType,
   item,
   seasonNumber,
 }: QuarkReleasePanelProps) {
-  const [seasonMediaType, setSeasonMediaType] = useState<'SERIES' | 'VARIETY'>(
-    'SERIES',
-  )
-  const targetMediaType: QuarkReleaseMediaType =
-    mediaType === 'movie' ? 'MOVIE' : seasonMediaType
   const requestIdRef = useRef(0)
   const searchControllerRef = useRef<AbortController | null>(null)
   const previewControllerRef = useRef<AbortController | null>(null)
@@ -334,36 +331,6 @@ export function QuarkReleasePanel({
 
   return (
     <>
-      {mediaType === 'series' ? (
-        <section className="rounded-lg bg-white p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-slate-950">目标媒体库</p>
-              <p className="mt-1 text-xs text-slate-500">
-                电视剧与综艺共用 TMDB TV 项目，但保存到不同的 QAS 根目录。
-              </p>
-            </div>
-            <div className="inline-flex rounded-lg bg-slate-100 p-1">
-              {(['SERIES', 'VARIETY'] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setSeasonMediaType(value)}
-                  className={cn(
-                    'rounded-md px-4 py-2 text-xs font-semibold transition',
-                    seasonMediaType === value
-                      ? 'bg-white text-slate-950 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-900',
-                  )}
-                >
-                  {value === 'SERIES' ? '电视剧' : '综艺'}
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
-      ) : null}
-
       <section className="rounded-lg bg-white p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
