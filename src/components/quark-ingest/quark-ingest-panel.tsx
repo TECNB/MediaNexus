@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { CheckCircle2, CloudUpload, Link2, Loader2, TriangleAlert } from 'lucide-react'
 
 import {
@@ -8,9 +8,15 @@ import {
 } from '@/components/magnet-ingest/library-link-picker'
 import { Button } from '@/components/ui/button'
 import {
+  OperationalLogPanel,
+  type OperationalLogStatus,
+} from '@/components/operation-log/operational-log-panel'
+import {
   createMovieQuarkIngestTask,
   createSeriesQuarkIngestTask,
   createVarietyQuarkIngestTask,
+  listQuarkIngestTaskLogs,
+  listQuarkIngestTasks,
 } from '@/lib/api/quark-ingest'
 import {
   getSeriesSeasons,
@@ -26,6 +32,7 @@ import type {
 import type {
   QuarkIngestMediaType,
   QuarkIngestTaskResult,
+  QuarkIngestTaskLog,
 } from '@/types/quark-ingest'
 
 type SubmitStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -39,6 +46,27 @@ const mediaTypeCopy: Record<
   series: { label: '电视剧', root: '/TV' },
   variety: { label: '综艺', root: '/Variety' },
 }
+
+const TASK_LOG_POLL_INTERVAL_MS = 2000
+const quarkStageLabels: Record<string, string> = {
+  planning: '规划中',
+  rename_preview: '改名预览',
+  creating: '创建任务',
+  submitted: '请求执行',
+  qas_running: 'QAS 执行中',
+  renaming: '实际改名',
+  scheduled: '等待定时执行',
+  partial: '部分创建',
+  failed: '创建失败',
+  execution_ended: '执行输出结束',
+  execution_stream_interrupted: '执行输出中断',
+}
+const terminalQuarkLogStages = new Set([
+  'scheduled',
+  'failed',
+  'execution_ended',
+  'execution_stream_interrupted',
+])
 
 function isSeriesSearchItem(
   item: SearchableResourceItem,
@@ -134,6 +162,11 @@ export function QuarkIngestPanel() {
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle')
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [createdTask, setCreatedTask] = useState<QuarkIngestTaskResult | null>(null)
+  const [recentTasks, setRecentTasks] = useState<QuarkIngestTaskResult[]>([])
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+  const [taskLogs, setTaskLogs] = useState<QuarkIngestTaskLog[]>([])
+  const [taskLogStatus, setTaskLogStatus] = useState<OperationalLogStatus>('idle')
+  const [taskLogError, setTaskLogError] = useState<string | null>(null)
   const searchControllerRef = useRef<AbortController | null>(null)
   const seasonControllerRef = useRef<AbortController | null>(null)
 
@@ -166,6 +199,66 @@ export function QuarkIngestPanel() {
       seasonControllerRef.current?.abort()
     }
   }, [])
+
+  const refreshRecentTasks = useCallback(async (preferredTaskId?: string) => {
+    try {
+      const data = await listQuarkIngestTasks()
+      setRecentTasks(data.items)
+      setSelectedTaskId((current) => {
+        if (preferredTaskId && data.items.some((task) => task.id === preferredTaskId)) {
+          return preferredTaskId
+        }
+        if (current && data.items.some((task) => task.id === current)) {
+          return current
+        }
+        return data.items[0]?.id ?? null
+      })
+    } catch {
+      // The submit flow remains usable when task history is temporarily unavailable.
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshRecentTasks()
+  }, [refreshRecentTasks])
+
+  useEffect(() => {
+    if (!selectedTaskId) {
+      setTaskLogs([])
+      setTaskLogStatus('idle')
+      setTaskLogError(null)
+      return
+    }
+
+    let active = true
+    let loading = false
+    const loadLogs = async () => {
+      if (loading) return
+      loading = true
+      try {
+        const data = await listQuarkIngestTaskLogs(selectedTaskId)
+        if (!active) return
+        setTaskLogs(data.items)
+        setTaskLogStatus(data.items.length > 0 ? 'success' : 'empty')
+        setTaskLogError(null)
+      } catch (error) {
+        if (!active) return
+        setTaskLogStatus('error')
+        setTaskLogError(error instanceof Error ? error.message : 'Quark 入库日志加载失败。')
+      } finally {
+        loading = false
+      }
+    }
+
+    setTaskLogs([])
+    setTaskLogStatus('loading')
+    void loadLogs()
+    const timer = window.setInterval(() => void loadLogs(), TASK_LOG_POLL_INTERVAL_MS)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [selectedTaskId])
 
   function resetSubmitFeedback() {
     setSubmitStatus('idle')
@@ -364,6 +457,8 @@ export function QuarkIngestPanel() {
         )
       }
       setCreatedTask(task)
+      setSelectedTaskId(task.id)
+      void refreshRecentTasks(task.id)
       setSubmitStatus('success')
       setShareUrl('')
     } catch (error) {
@@ -555,6 +650,42 @@ export function QuarkIngestPanel() {
       </div>
 
       <aside className="min-w-0 space-y-5">
+        <section className="space-y-3">
+          <div className="flex items-end justify-between gap-3">
+            <SectionHeading
+              label="入库日志"
+              title="包含命名规划预览与 QAS 实际执行输出。"
+            />
+          </div>
+          {recentTasks.length > 0 ? (
+            <select
+              value={selectedTaskId ?? ''}
+              onChange={(event) => setSelectedTaskId(event.target.value || null)}
+              aria-label="选择 Quark 入库记录"
+              className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none"
+            >
+              {recentTasks.map((task) => (
+                <option key={task.id} value={task.id}>
+                  {task.task_name} · {task.status}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          <OperationalLogPanel
+            logs={taskLogs}
+            status={taskLogStatus}
+            error={taskLogError}
+            hasSelection={Boolean(selectedTaskId)}
+            title="Quark 入库日志"
+            monitorLabel="每 2 秒更新"
+            emptySelectionMessage="创建任务后可在这里查看命名与执行日志。"
+            emptyLogsMessage="任务尚未写入日志。"
+            stageLabels={quarkStageLabels}
+            terminalStages={terminalQuarkLogStages}
+            scrollKey={selectedTaskId}
+          />
+        </section>
+
         <div className="rounded-[24px] bg-slate-950 p-5 text-white shadow-shell">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <Link2 className="h-4 w-4" />

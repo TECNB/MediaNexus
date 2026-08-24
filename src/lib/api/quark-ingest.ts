@@ -5,6 +5,8 @@ import type {
   CreateSeasonQuarkIngestPayload,
   QuarkIngestPreview,
   QuarkIngestTaskResult,
+  QuarkIngestTaskList,
+  QuarkIngestTaskLogList,
 } from '@/types/quark-ingest'
 
 const QUARK_INGEST_ERROR_MESSAGE = 'Quark 入库任务创建失败，请稍后重试。'
@@ -45,6 +47,34 @@ export function createVarietyQuarkIngestTask(
   payload: CreateSeasonQuarkIngestPayload,
 ) {
   return createQuarkIngestTask('/api/v1/quark-ingest/variety/tasks', payload)
+}
+
+export async function listQuarkIngestTasks() {
+  try {
+    const response = await javaApiClient.get<JavaApiResponse<QuarkIngestTaskList>>(
+      '/api/v1/quark-ingest/tasks',
+    )
+    if (response.data.code !== 200 || !response.data.data) {
+      throw new Error(response.data.message || 'quark ingest task list failed')
+    }
+    return response.data.data
+  } catch (error) {
+    throw new Error(getJavaErrorMessage(error) || 'Quark 入库记录加载失败。')
+  }
+}
+
+export async function listQuarkIngestTaskLogs(taskId: string) {
+  try {
+    const response = await javaApiClient.get<JavaApiResponse<QuarkIngestTaskLogList>>(
+      `/api/v1/quark-ingest/tasks/${encodeURIComponent(taskId)}/logs`,
+    )
+    if (response.data.code !== 200 || !response.data.data) {
+      throw new Error(response.data.message || 'quark ingest task logs failed')
+    }
+    return response.data.data
+  } catch (error) {
+    throw new Error(getJavaErrorMessage(error) || 'Quark 入库日志加载失败。')
+  }
 }
 
 async function previewQuarkIngest(

@@ -16,7 +16,8 @@ export type CreateSeasonQuarkIngestPayload = {
 }
 
 export type QuarkIngestTaskResult = {
-  status: 'STARTED' | 'SCHEDULED' | 'PARTIAL'
+  id: string
+  status: 'PLANNED' | 'STARTED' | 'SCHEDULED' | 'PARTIAL' | 'FAILED'
   media_type: 'MOVIE' | 'SERIES' | 'VARIETY'
   task_name: string
   save_path: string
@@ -25,6 +26,26 @@ export type QuarkIngestTaskResult = {
   planned_task_count: number
   warnings: string[]
   message: string
+}
+
+export type QuarkIngestTaskList = {
+  items: QuarkIngestTaskResult[]
+  total: number
+}
+
+export type QuarkIngestTaskLog = {
+  id: number
+  task_id: string
+  level: string
+  stage: string
+  message: string
+  detail: string | null
+  created_at: string | null
+}
+
+export type QuarkIngestTaskLogList = {
+  items: QuarkIngestTaskLog[]
+  total: number
 }
 
 export type QuarkSharePreviewNode = {
