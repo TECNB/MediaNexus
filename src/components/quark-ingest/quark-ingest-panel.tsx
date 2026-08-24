@@ -267,13 +267,17 @@ export function QuarkIngestPanel() {
       return
     }
 
+    const tmdbId = item.tmdb_id
+    if (typeof tmdbId !== 'number' || tmdbId <= 0) {
+      setSeasonStatus('error')
+      setSeasonError('当前剧集缺少有效的 TMDB ID，无法加载季数。')
+      return
+    }
+
     const controller = new AbortController()
     seasonControllerRef.current = controller
     setSeasonStatus('loading')
-    void getSeriesSeasons(
-      { tmdbId: item.tmdb_id, tvdbId: item.tvdb_id },
-      controller.signal,
-    )
+    void getSeriesSeasons(tmdbId, controller.signal)
       .then((data) => {
         if (controller.signal.aborted) {
           return
