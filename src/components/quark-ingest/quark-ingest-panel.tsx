@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CheckCircle2, CloudUpload, Link2, Loader2, TriangleAlert } from 'lucide-react'
+import { CheckCircle2, CloudUpload, File, Folder, Link2, Loader2, TriangleAlert } from 'lucide-react'
 
 import {
   LibraryLinkPicker,
@@ -13,10 +13,13 @@ import {
 } from '@/components/operation-log/operational-log-panel'
 import {
   createMovieQuarkIngestTask,
+  createQuarkMultiSourceTasks,
   createSeriesQuarkIngestTask,
   createVarietyQuarkIngestTask,
   listQuarkIngestTaskLogs,
   listQuarkIngestTasks,
+  previewQuarkMultiSourcePlan,
+  previewQuarkShareTree,
 } from '@/lib/api/quark-ingest'
 import {
   getSeriesSeasons,
@@ -33,6 +36,10 @@ import type {
   QuarkIngestMediaType,
   QuarkIngestTaskResult,
   QuarkIngestTaskLog,
+  QuarkMultiSourcePreview,
+  QuarkMultiSourceTaskResult,
+  QuarkSourceSelection,
+  QuarkSourceTreeNode,
 } from '@/types/quark-ingest'
 
 type SubmitStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -147,6 +154,148 @@ function seasonLabel(seasonNumber: number) {
   return `Season ${String(seasonNumber).padStart(2, '0')}`
 }
 
+function candidateNodes(
+  nodes: QuarkSourceTreeNode[],
+  result: QuarkSourceTreeNode[] = [],
+) {
+  for (const node of nodes) {
+    if (node.source_candidate_id) {
+      result.push(node)
+    }
+    candidateNodes(node.children, result)
+  }
+  return result
+}
+
+function candidateIdsBelow(node: QuarkSourceTreeNode) {
+  return candidateNodes(node.children)
+    .map((child) => child.source_candidate_id)
+    .filter((value): value is string => Boolean(value))
+}
+
+function sourceMappingLabel(
+  node: QuarkSourceTreeNode,
+  selection: QuarkSourceSelection | undefined,
+) {
+  if (!selection) return null
+  if (selection.ignored) return '已忽略'
+  if (typeof selection.season_number === 'number') {
+    const origin =
+      node.season_status === 'AUTO' && node.detected_season === selection.season_number
+        ? '自动'
+        : '手动'
+    return `${origin}·第 ${selection.season_number} 季`
+  }
+  return '未设置季度'
+}
+
+function ShareTree({
+  nodes,
+  ignoredCandidateIds,
+  selectionsByCandidateId,
+  selectedSeason,
+  onMapDescendants,
+  followUpdatesEnabled,
+  onFollowDescendants,
+  depth = 0,
+}: {
+  nodes: QuarkSourceTreeNode[]
+  ignoredCandidateIds: Set<string>
+  selectionsByCandidateId: Map<string, QuarkSourceSelection>
+  selectedSeason: number | null
+  onMapDescendants: (candidateIds: string[], seasonNumber: number) => void
+  followUpdatesEnabled: boolean
+  onFollowDescendants: (candidateIds: string[], followUpdates: boolean) => void
+  depth?: number
+}) {
+  return (
+    <ul className={cn('space-y-1.5 text-xs', depth > 0 && 'ml-4 border-l border-slate-200 pl-3')}>
+      {nodes.map((node) => (
+        <li key={`${node.relative_path}:${node.name}`}>
+          {node.directory ? (
+            <details
+              className="group"
+              defaultOpen={depth === 0 && !ignoredCandidateIds.has(node.source_candidate_id ?? '')}
+            >
+              <summary className="flex min-w-0 cursor-pointer list-none items-center gap-2 text-slate-700 marker:hidden">
+                <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500 transition-transform group-open:rotate-0" />
+                <span className="break-all">{node.name}</span>
+                {node.source_candidate_id ? (
+                  <span
+                    className={cn(
+                      'shrink-0 rounded-full px-2 py-0.5 text-[10px]',
+                      ignoredCandidateIds.has(node.source_candidate_id)
+                        ? 'bg-slate-200 text-slate-500'
+                        : 'bg-indigo-50 text-indigo-700',
+                    )}
+                  >
+                    {ignoredCandidateIds.has(node.source_candidate_id)
+                      ? '已忽略'
+                      : sourceMappingLabel(
+                          node,
+                          selectionsByCandidateId.get(node.source_candidate_id),
+                        ) ?? (node.source_kind === 'DIRECT_FILES' ? '直属文件' : '来源')}
+                  </span>
+                ) : null}
+              </summary>
+              {candidateIdsBelow(node).length > 0 ? (
+                <button
+                  type="button"
+                  className="ml-5 mt-1 rounded-lg border border-indigo-100 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                  disabled={selectedSeason == null}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    if (selectedSeason != null) {
+                      onMapDescendants(candidateIdsBelow(node), selectedSeason)
+                    }
+                  }}
+                >
+                  批量映射后代为 S{String(selectedSeason ?? 0).padStart(2, '0')}
+                </button>
+              ) : null}
+              {followUpdatesEnabled && candidateIdsBelow(node).length > 0 ? (
+                <label className="ml-2 mt-1 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={candidateIdsBelow(node)
+                      .filter((candidateId) => !ignoredCandidateIds.has(candidateId))
+                      .every(
+                        (candidateId) =>
+                          selectionsByCandidateId.get(candidateId)?.follow_updates === true,
+                      )}
+                    onChange={(event) =>
+                      onFollowDescendants(candidateIdsBelow(node), event.target.checked)
+                    }
+                  />
+                  订阅后代
+                </label>
+              ) : null}
+              {node.children.length > 0 ? (
+                <ShareTree
+                  nodes={node.children}
+                  ignoredCandidateIds={ignoredCandidateIds}
+                  selectionsByCandidateId={selectionsByCandidateId}
+                  selectedSeason={selectedSeason}
+                  onMapDescendants={onMapDescendants}
+                  followUpdatesEnabled={followUpdatesEnabled}
+                  onFollowDescendants={onFollowDescendants}
+                  depth={depth + 1}
+                />
+              ) : null}
+            </details>
+          ) : (
+            <div className="flex min-w-0 items-center gap-2 text-slate-700">
+              <File className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              <span className="break-all">{node.name}</span>
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export function QuarkIngestPanel() {
   const [mediaType, setMediaType] = useState<QuarkIngestMediaType>('series')
   const [shareUrl, setShareUrl] = useState('')
@@ -162,6 +311,10 @@ export function QuarkIngestPanel() {
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle')
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [createdTask, setCreatedTask] = useState<QuarkIngestTaskResult | null>(null)
+  const [createdMultiTask, setCreatedMultiTask] = useState<QuarkMultiSourceTaskResult | null>(null)
+  const [multiPreview, setMultiPreview] = useState<QuarkMultiSourcePreview | null>(null)
+  const [multiSelections, setMultiSelections] = useState<QuarkSourceSelection[]>([])
+  const [followUpdatesEnabled, setFollowUpdatesEnabled] = useState(false)
   const [recentTasks, setRecentTasks] = useState<QuarkIngestTaskResult[]>([])
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [taskLogs, setTaskLogs] = useState<QuarkIngestTaskLog[]>([])
@@ -169,6 +322,7 @@ export function QuarkIngestPanel() {
   const [taskLogError, setTaskLogError] = useState<string | null>(null)
   const searchControllerRef = useRef<AbortController | null>(null)
   const seasonControllerRef = useRef<AbortController | null>(null)
+  const multiPreviewControllerRef = useRef<AbortController | null>(null)
 
   const isSeasonMedia = mediaType !== 'movie'
   const shareUrlValidationMessage = getShareUrlValidationMessage(shareUrl)
@@ -189,14 +343,102 @@ export function QuarkIngestPanel() {
     Boolean(shareUrlValidationMessage) ||
     !selectedItem ||
     !selectedTitle ||
-    (mediaType === 'movie'
-      ? typeof selectedYear !== 'number'
-      : typeof selectedSeason !== 'number' || seasonStatus !== 'success')
+    (mediaType === 'movie' && typeof selectedYear !== 'number')
+
+  const multiCandidateNames = new Map(
+    candidateNodes(multiPreview?.entries ?? []).map((node) => [
+      node.source_candidate_id as string,
+      node.name,
+    ]),
+  )
+  const ignoredMultiCandidateIds = new Set(
+    multiSelections.filter((selection) => selection.ignored).map((selection) => selection.source_candidate_id),
+  )
+  const multiSelectionsByCandidateId = new Map(
+    multiSelections.map((selection) => [selection.source_candidate_id, selection]),
+  )
+  const plannedSavePaths = [
+    ...new Set(
+      (multiPreview?.sources ?? [])
+        .map((source) => source.save_path)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ]
+  const rootSourceCandidateId = multiPreview?.root_source_candidate_id ?? null
+  const rootSourcePlan = rootSourceCandidateId
+    ? multiPreview?.sources.find(
+        (source) => source.source_candidate_id === rootSourceCandidateId,
+      )
+    : undefined
+
+  function mapDescendantSources(candidateIds: string[], seasonNumber: number) {
+    const candidateIdSet = new Set(candidateIds)
+    const changing = multiSelections.some(
+      (source) =>
+        candidateIdSet.has(source.source_candidate_id) &&
+        !source.ignored &&
+        source.season_number !== seasonNumber,
+    )
+    if (
+      changing &&
+      !window.confirm(
+        `确认将全部未忽略后代来源覆盖为 S${String(seasonNumber).padStart(2, '0')}？子级已有季度设置也会被覆盖。`,
+      )
+    ) {
+      return
+    }
+    setMultiSelections((current) =>
+      current.map((source) =>
+        candidateIdSet.has(source.source_candidate_id) && !source.ignored
+          ? { ...source, season_number: seasonNumber }
+          : source,
+      ),
+    )
+    setMultiPreview((current) =>
+      current
+        ? {
+            ...current,
+            sources: current.sources.map((source) =>
+              candidateIdSet.has(source.source_candidate_id) && !source.ignored
+                ? { ...source, selected_season: seasonNumber, status: 'PENDING' }
+                : source,
+            ),
+          }
+        : current,
+    )
+    markMultiPlanDirty()
+  }
+
+  function followDescendantSources(candidateIds: string[], followUpdates: boolean) {
+    const candidateIdSet = new Set(candidateIds)
+    setMultiSelections((current) =>
+      current.map((source) =>
+        candidateIdSet.has(source.source_candidate_id) && !source.ignored
+          ? { ...source, follow_updates: followUpdates }
+          : source,
+      ),
+    )
+    setMultiPreview((current) =>
+      current
+        ? {
+            ...current,
+            sources: current.sources.map((source) =>
+              candidateIdSet.has(source.source_candidate_id) && !source.ignored
+                ? { ...source, follow_updates: followUpdates }
+                : source,
+            ),
+          }
+        : current,
+    )
+    markMultiPlanDirty()
+  }
+  const multiPlanReady = Boolean(multiPreview?.ready && multiPreview.sources.length > 0)
 
   useEffect(() => {
     return () => {
       searchControllerRef.current?.abort()
       seasonControllerRef.current?.abort()
+      multiPreviewControllerRef.current?.abort()
     }
   }, [])
 
@@ -264,6 +506,22 @@ export function QuarkIngestPanel() {
     setSubmitStatus('idle')
     setSubmitError(null)
     setCreatedTask(null)
+    setCreatedMultiTask(null)
+  }
+
+  function resetMultiPreview() {
+    multiPreviewControllerRef.current?.abort()
+    multiPreviewControllerRef.current = null
+    setMultiPreview(null)
+    setMultiSelections([])
+    setFollowUpdatesEnabled(false)
+    setCreatedMultiTask(null)
+  }
+
+  function markMultiPlanDirty() {
+    setMultiPreview((current) => (current ? { ...current, ready: false } : current))
+    setSubmitStatus('idle')
+    setSubmitError(null)
   }
 
   function resetSelection() {
@@ -274,6 +532,7 @@ export function QuarkIngestPanel() {
     setSeasonOptions([])
     setSelectedSeason(null)
     setSeasonError(null)
+    resetMultiPreview()
     resetSubmitFeedback()
   }
 
@@ -354,6 +613,7 @@ export function QuarkIngestPanel() {
     setSeasonOptions([])
     setSelectedSeason(null)
     setSeasonError(null)
+    resetMultiPreview()
 
     if (!isSeasonMedia || !isSeriesSearchItem(item)) {
       setSeasonStatus('idle')
@@ -422,6 +682,7 @@ export function QuarkIngestPanel() {
     setSubmitStatus('loading')
     setSubmitError(null)
     setCreatedTask(null)
+    setCreatedMultiTask(null)
 
     try {
       const commonPayload = {
@@ -429,6 +690,99 @@ export function QuarkIngestPanel() {
         title: selectedTitle,
         original_title: selectedItem.original_title,
       }
+
+      if (isSeasonMedia) {
+        const multiMediaType = mediaType as 'series' | 'variety'
+        const baseMultiPayload = {
+          ...commonPayload,
+          tmdb_id: selectedItem.tmdb_id,
+          preview_id: multiPreview?.preview_id ?? null,
+          follow_updates_enabled: followUpdatesEnabled,
+          sources: multiSelections,
+        }
+        if (!multiPreview) {
+          const controller = new AbortController()
+          multiPreviewControllerRef.current = controller
+          const preview = await previewQuarkShareTree(
+            multiMediaType,
+            { ...baseMultiPayload, sources: [] },
+            controller.signal,
+          )
+          setMultiPreview(preview)
+          setMultiSelections(
+            preview.sources.map((source) => ({
+              source_candidate_id: source.source_candidate_id,
+              season_number: source.selected_season,
+              ignored: source.ignored,
+              follow_updates: false,
+            })),
+          )
+          setSubmitStatus('success')
+          return
+        }
+        if (!multiPlanReady) {
+          const controller = new AbortController()
+          multiPreviewControllerRef.current = controller
+          const preview = await previewQuarkMultiSourcePlan(
+            multiMediaType,
+            baseMultiPayload,
+            controller.signal,
+          )
+          setMultiPreview(preview)
+          setMultiSelections(
+            preview.sources.map((source) => ({
+              source_candidate_id: source.source_candidate_id,
+              season_number: source.selected_season,
+              ignored: source.ignored,
+              follow_updates: source.follow_updates,
+            })),
+          )
+          setSubmitStatus('success')
+          return
+        }
+        const task = await createQuarkMultiSourceTasks(multiMediaType, baseMultiPayload)
+        setCreatedMultiTask(task)
+        setSelectedTaskId(task.id)
+        void refreshRecentTasks(task.id)
+        setSubmitStatus('success')
+        if (task.status === 'PARTIAL') {
+          const createdCandidateIds = new Set(
+            task.sources
+              .filter((source) => source.status === 'CREATED')
+              .map((source) => source.source_candidate_id),
+          )
+          setMultiSelections((current) =>
+            current.map((source) =>
+              createdCandidateIds.has(source.source_candidate_id)
+                ? { ...source, ignored: true, follow_updates: false }
+                : source,
+            ),
+          )
+          setMultiPreview((current) =>
+            current
+              ? {
+                  ...current,
+                  ready: false,
+                  message: '已创建的来源已标记为忽略，可重新预览并重试失败来源。',
+                  sources: current.sources.map((source) =>
+                    createdCandidateIds.has(source.source_candidate_id)
+                      ? {
+                          ...source,
+                          ignored: true,
+                          follow_updates: false,
+                          status: 'IGNORED',
+                        }
+                      : source,
+                  ),
+                }
+              : current,
+          )
+        } else if (task.status !== 'FAILED') {
+          setShareUrl('')
+        }
+        return
+      }
+
       const task =
         mediaType === 'movie'
           ? typeof selectedYear === 'number'
@@ -484,6 +838,7 @@ export function QuarkIngestPanel() {
               value={shareUrl}
               onChange={(event) => {
                 setShareUrl(event.target.value)
+                resetMultiPreview()
                 resetSubmitFeedback()
               }}
               aria-label="输入 Quark 分享链接"
@@ -499,7 +854,9 @@ export function QuarkIngestPanel() {
             )}
           >
             {shareUrlValidationMessage ??
-              '只接受 pan.quark.cn 的 HTTPS 分享链接；当前仅支持单条提交。'}
+              (isSeasonMedia
+                ? '只接受 pan.quark.cn 的 HTTPS 分享链接；电视剧和综艺会先展开目录树，再确认季度与改名。'
+                : '只接受 pan.quark.cn 的 HTTPS 分享链接；电影保持现有单条入库流程。')}
           </p>
         </section>
 
@@ -543,6 +900,7 @@ export function QuarkIngestPanel() {
                   const value = Number(event.target.value)
                   if (Number.isInteger(value) && value > 0) {
                     setSelectedSeason(value)
+                    resetMultiPreview()
                     resetSubmitFeedback()
                   }
                 }}
@@ -575,6 +933,302 @@ export function QuarkIngestPanel() {
           </section>
         ) : null}
 
+        {isSeasonMedia && multiPreview ? (
+          <section className="space-y-3">
+            <SectionHeading
+              label="分享目录规划"
+              title="展开目录树，为每个可执行来源设置季度；合集容器只作为批量分组，不会直接交给 QAS。"
+            />
+            <div className="space-y-4 rounded-[24px] border border-slate-200 bg-white p-5 shadow-shell">
+              <ShareTree
+                nodes={multiPreview.entries}
+                ignoredCandidateIds={ignoredMultiCandidateIds}
+                selectionsByCandidateId={multiSelectionsByCandidateId}
+                selectedSeason={selectedSeason}
+                onMapDescendants={mapDescendantSources}
+                followUpdatesEnabled={followUpdatesEnabled}
+                onFollowDescendants={followDescendantSources}
+              />
+              {multiPreview.root_source_candidate_id ? (
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-xs text-indigo-900">
+                  <span>
+                    当前目录直属文件（
+                    {multiPreview.entries.filter((entry) => !entry.directory).length} 个）
+                  </span>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold">
+                    {sourceMappingLabel(
+                      {
+                        name: '当前目录直属文件',
+                        directory: false,
+                        size: 0,
+                        source_candidate_id: multiPreview.root_source_candidate_id,
+                        source_kind: 'DIRECT_FILES',
+                        relative_path: '',
+                        detected_season: rootSourcePlan?.detected_season ?? null,
+                        season_status: rootSourcePlan?.season_status ?? 'UNRECOGNIZED',
+                        children: [],
+                      },
+                      multiSelectionsByCandidateId.get(multiPreview.root_source_candidate_id),
+                    )}
+                  </span>
+                </div>
+              ) : null}
+              <label className="flex items-start gap-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={followUpdatesEnabled}
+                  onChange={(event) => {
+                    const enabled = event.target.checked
+                    setFollowUpdatesEnabled(enabled)
+                    setMultiPreview((current) =>
+                      current
+                        ? {
+                            ...current,
+                            sources: current.sources.map((source) => ({
+                              ...source,
+                              follow_updates: enabled ? source.follow_updates : false,
+                            })),
+                          }
+                        : current,
+                    )
+                    setMultiSelections((current) =>
+                      current.map((source) => ({
+                        ...source,
+                        follow_updates: enabled ? source.follow_updates : false,
+                      })),
+                    )
+                    markMultiPlanDirty()
+                  }}
+                />
+                <span>
+                  <span className="font-semibold text-slate-900">启用更新订阅</span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-500">
+                    开启后请手动勾选需要追更的来源；系统不会自动判断。订阅仅按创建时固定正则每日检查，未来命名变化不会自动适配。
+                  </span>
+                </span>
+              </label>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 px-4 py-3">
+                <p className="text-xs leading-5 text-slate-500">
+                  可将当前目标季批量应用到全部未忽略来源；之后仍可逐来源覆盖。
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={typeof selectedSeason !== 'number'}
+                  onClick={() => {
+                    if (typeof selectedSeason !== 'number') return
+                    setMultiSelections((current) =>
+                      current.map((source) =>
+                        source.ignored ? source : { ...source, season_number: selectedSeason },
+                      ),
+                    )
+                    setMultiPreview((current) =>
+                      current
+                        ? {
+                            ...current,
+                            sources: current.sources.map((source) =>
+                              source.ignored
+                                ? source
+                                : { ...source, selected_season: selectedSeason, status: 'PENDING' },
+                            ),
+                          }
+                        : current,
+                    )
+                    markMultiPlanDirty()
+                  }}
+                >
+                  批量设为 S{String(selectedSeason ?? 0).padStart(2, '0')}
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                {(multiPreview.sources.length > 0
+                  ? multiPreview.sources
+                  : multiSelections.map((selection) => ({
+                      source_candidate_id: selection.source_candidate_id,
+                      source_name:
+                        multiCandidateNames.get(selection.source_candidate_id) ?? '当前目录直属文件',
+                      relative_path: '',
+                      source_kind: 'DIRECT_FILES',
+                      detected_season: null,
+                      season_status: 'MANUAL',
+                      selected_season: selection.season_number,
+                      ignored: selection.ignored,
+                      follow_updates: selection.follow_updates,
+                      save_path: null,
+                      task_name: null,
+                      status: selection.ignored ? 'IGNORED' : 'PENDING',
+                      files: [],
+                      errors: [],
+                      warnings: [],
+                    })))
+                  .map((source) => {
+                    const selection =
+                      multiSelections.find(
+                        (item) => item.source_candidate_id === source.source_candidate_id,
+                      ) ?? {
+                        source_candidate_id: source.source_candidate_id,
+                        season_number: source.selected_season,
+                        ignored: source.ignored,
+                        follow_updates: source.follow_updates,
+                      }
+                    return (
+                      <div
+                        key={source.source_candidate_id}
+                        className={cn(
+                          'rounded-2xl border px-4 py-4',
+                          source.status === 'BLOCKED' || source.errors.length > 0
+                            ? 'border-rose-200 bg-rose-50/60'
+                            : source.ignored
+                              ? 'border-slate-200 bg-slate-50 opacity-75'
+                              : 'border-slate-200 bg-white',
+                        )}
+                      >
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-slate-900">
+                              {source.source_name}
+                              {source.source_kind === 'DIRECT_FILES' ? ' · 当前目录直属文件' : ''}
+                            </p>
+                            <p className="mt-1 truncate text-xs text-slate-500">
+                              {source.relative_path || '分享根目录'} · {source.season_status}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              value={selection.season_number ?? ''}
+                              disabled={selection.ignored}
+                              onChange={(event) => {
+                                const value = Number(event.target.value)
+                                setMultiSelections((current) =>
+                                  current.map((item) =>
+                                    item.source_candidate_id === source.source_candidate_id
+                                      ? { ...item, season_number: value > 0 ? value : null }
+                                      : item,
+                                  ),
+                                )
+                                setMultiPreview((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        sources: current.sources.map((item) =>
+                                          item.source_candidate_id === source.source_candidate_id
+                                            ? {
+                                                ...item,
+                                                selected_season: value > 0 ? value : null,
+                                                status: 'PENDING',
+                                              }
+                                            : item,
+                                        ),
+                                      }
+                                    : current,
+                                )
+                                markMultiPlanDirty()
+                              }}
+                              aria-label={`${source.source_name}季度`}
+                              className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold"
+                            >
+                              <option value="">未设置季度</option>
+                              {[
+                                ...new Set([
+                                  ...Array.from({ length: 99 }, (_, index) => index + 1),
+                                  ...seasonOptions,
+                                  source.detected_season ?? 0,
+                                ]),
+                              ]
+                                .filter((value) => value > 0)
+                                .sort((left, right) => left - right)
+                                .map((value) => (
+                                  <option key={value} value={value}>S{String(value).padStart(2, '0')}</option>
+                                ))}
+                            </select>
+                            <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                              <input
+                                type="checkbox"
+                                checked={selection.ignored}
+                                onChange={(event) => {
+                                  setMultiSelections((current) =>
+                                    current.map((item) =>
+                                      item.source_candidate_id === source.source_candidate_id
+                                        ? {
+                                            ...item,
+                                            ignored: event.target.checked,
+                                            follow_updates: event.target.checked ? false : item.follow_updates,
+                                          }
+                                        : item,
+                                    ),
+                                  )
+                                  setMultiPreview((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          sources: current.sources.map((item) =>
+                                            item.source_candidate_id === source.source_candidate_id
+                                              ? {
+                                                  ...item,
+                                                  ignored: event.target.checked,
+                                                  follow_updates: event.target.checked ? false : item.follow_updates,
+                                                  status: event.target.checked ? 'IGNORED' : 'PENDING',
+                                                  files: event.target.checked ? [] : item.files,
+                                                  errors: event.target.checked ? [] : item.errors,
+                                                }
+                                              : item,
+                                          ),
+                                        }
+                                      : current,
+                                  )
+                                  markMultiPlanDirty()
+                                }}
+                              />
+                              忽略
+                            </label>
+                            {followUpdatesEnabled && !selection.ignored ? (
+                              <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                                <input
+                                  type="checkbox"
+                                  checked={selection.follow_updates}
+                                  onChange={(event) =>
+                                    (() => {
+                                      setMultiSelections((current) =>
+                                        current.map((item) =>
+                                          item.source_candidate_id === source.source_candidate_id
+                                            ? { ...item, follow_updates: event.target.checked }
+                                            : item,
+                                        ),
+                                      )
+                                      markMultiPlanDirty()
+                                    })()
+                                  }
+                                />
+                                订阅
+                              </label>
+                            ) : null}
+                          </div>
+                        </div>
+                        {source.files.length > 0 ? (
+                          <div className="mt-3 max-h-56 overflow-auto rounded-xl bg-slate-950 px-3 py-2 font-mono text-[11px] leading-5 text-slate-200">
+                            {source.files.map((file) => (
+                              <div key={`${file.source_name}:${file.target_name}`} className={file.status === 'CONFLICT' ? 'text-rose-300' : undefined}>
+                                {file.source_name} → {file.target_name} {file.message ? `(${file.message})` : ''}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        {source.errors.length > 0 ? (
+                          <p className="mt-2 text-xs leading-5 text-rose-600">{source.errors.join('；')}</p>
+                        ) : null}
+                      </div>
+                    )
+                  })}
+              </div>
+              <p className={cn('text-sm', multiPreview.ready ? 'text-emerald-700' : 'text-amber-700')}>
+                {multiPreview.message}
+              </p>
+            </div>
+          </section>
+        ) : null}
+
         <section className="space-y-3">
           <SectionHeading
             label="保存信息"
@@ -585,7 +1239,9 @@ export function QuarkIngestPanel() {
               目标路径
             </p>
             <p className="mt-3 break-all font-mono text-sm text-slate-900">
-              {targetPath ?? '选择媒体并确认必要信息后显示'}
+              {plannedSavePaths.length > 0
+                ? plannedSavePaths.map((path) => <span key={path} className="block">{path}</span>)
+                : targetPath ?? '选择媒体并确认必要信息后显示'}
             </p>
           </div>
         </section>
@@ -600,12 +1256,24 @@ export function QuarkIngestPanel() {
           {submitStatus === 'loading' ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              正在创建并触发…
+              {isSeasonMedia
+                ? !multiPreview
+                  ? '正在检查分享目录…'
+                  : !multiPlanReady
+                    ? '正在生成逐文件预览…'
+                    : '正在创建并触发…'
+                : '正在创建并触发…'}
             </>
           ) : (
             <>
               <CloudUpload className="h-4 w-4" />
-              创建并立即执行 QAS 任务
+              {isSeasonMedia
+                ? !multiPreview
+                  ? '检查分享目录树'
+                  : !multiPlanReady
+                    ? '生成逐文件改名预览'
+                    : '创建并立即执行 QAS 任务'
+                : '创建并立即执行 QAS 任务'}
             </>
           )}
         </Button>
@@ -643,6 +1311,41 @@ export function QuarkIngestPanel() {
                     ))}
                   </ul>
                 ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {createdMultiTask ? (
+          <div
+            className={cn(
+              'rounded-2xl px-4 py-4',
+              createdMultiTask.status === 'STARTED'
+                ? 'bg-emerald-50 text-emerald-800'
+                : 'bg-amber-50 text-amber-800',
+            )}
+          >
+            <div className="flex items-start gap-3">
+              {createdMultiTask.status === 'STARTED' ? (
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
+              ) : (
+                <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" />
+              )}
+              <div className="min-w-0 space-y-1">
+                <p className="text-sm font-semibold">{createdMultiTask.message}</p>
+                <p className="text-xs opacity-80">
+                  已创建 {createdMultiTask.created_task_count}/{createdMultiTask.planned_task_count} 个 QAS 任务
+                </p>
+                {createdMultiTask.sources
+                  .filter((source) => source.status !== 'CREATED')
+                  .map((source) => (
+                    <p key={source.source_candidate_id} className="text-xs text-rose-700">
+                      {source.task_name}：{source.message}
+                    </p>
+                  ))}
+                {createdMultiTask.warnings.map((warning) => (
+                  <p key={warning} className="text-xs opacity-80">· {warning}</p>
+                ))}
               </div>
             </div>
           </div>
@@ -694,7 +1397,7 @@ export function QuarkIngestPanel() {
           <div className="mt-4 space-y-3 text-sm leading-6 text-white/70">
             <p>提交后会把任务持久保存到 QAS，并只针对该任务立即执行一次。</p>
             <p>页面确认的是任务已创建和开始执行，不代表夸克转存已经完成。</p>
-            <p>长期任务会在每天 04:15 再次检查分享链接中的新增内容。</p>
+            <p>一次性来源首次执行后不再定时检查；只有手动勾选订阅的来源会在每天 04:15 追更。</p>
           </div>
         </div>
 

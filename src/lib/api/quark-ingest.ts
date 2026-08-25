@@ -3,6 +3,9 @@ import type { JavaApiResponse } from '@/types/magnet-ingest'
 import type {
   CreateMovieQuarkIngestPayload,
   CreateSeasonQuarkIngestPayload,
+  QuarkMultiSourcePayload,
+  QuarkMultiSourcePreview,
+  QuarkMultiSourceTaskResult,
   QuarkIngestPreview,
   QuarkIngestTaskResult,
   QuarkIngestTaskList,
@@ -29,6 +32,78 @@ async function createQuarkIngestTask(
   } catch (error) {
     throw new Error(getJavaErrorMessage(error) || QUARK_INGEST_ERROR_MESSAGE)
   }
+}
+
+async function requestMultiSourcePreview(
+  path: string,
+  payload: QuarkMultiSourcePayload,
+  signal?: AbortSignal,
+): Promise<QuarkMultiSourcePreview> {
+  try {
+    const response = await javaApiClient.post<JavaApiResponse<QuarkMultiSourcePreview>>(
+      path,
+      payload,
+      { signal, timeout: 30_000 },
+    )
+    if (response.data.code !== 200 || !response.data.data) {
+      throw new Error(response.data.message || 'quark multi-source preview failed')
+    }
+    return response.data.data
+  } catch (error) {
+    throw new Error(getJavaErrorMessage(error) || QUARK_PREVIEW_ERROR_MESSAGE)
+  }
+}
+
+async function createMultiSourceTasks(
+  path: string,
+  payload: QuarkMultiSourcePayload,
+): Promise<QuarkMultiSourceTaskResult> {
+  try {
+    const response = await javaApiClient.post<JavaApiResponse<QuarkMultiSourceTaskResult>>(
+      path,
+      payload,
+    )
+    if (response.data.code !== 200 || !response.data.data) {
+      throw new Error(response.data.message || 'quark multi-source task failed')
+    }
+    return response.data.data
+  } catch (error) {
+    throw new Error(getJavaErrorMessage(error) || QUARK_INGEST_ERROR_MESSAGE)
+  }
+}
+
+export function previewQuarkShareTree(
+  mediaType: 'series' | 'variety',
+  payload: QuarkMultiSourcePayload,
+  signal?: AbortSignal,
+) {
+  return requestMultiSourcePreview(
+    `/api/v1/quark-ingest/${mediaType}/tree-preview`,
+    payload,
+    signal,
+  )
+}
+
+export function previewQuarkMultiSourcePlan(
+  mediaType: 'series' | 'variety',
+  payload: QuarkMultiSourcePayload,
+  signal?: AbortSignal,
+) {
+  return requestMultiSourcePreview(
+    `/api/v1/quark-ingest/${mediaType}/plan-preview`,
+    payload,
+    signal,
+  )
+}
+
+export function createQuarkMultiSourceTasks(
+  mediaType: 'series' | 'variety',
+  payload: QuarkMultiSourcePayload,
+) {
+  return createMultiSourceTasks(
+    `/api/v1/quark-ingest/${mediaType}/batch-tasks`,
+    payload,
+  )
 }
 
 export function createMovieQuarkIngestTask(
