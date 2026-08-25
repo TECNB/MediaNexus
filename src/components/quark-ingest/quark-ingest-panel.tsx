@@ -215,7 +215,6 @@ function ShareTree({
           {node.directory ? (
             <details
               className="group"
-              defaultOpen={depth === 0 && !ignoredCandidateIds.has(node.source_candidate_id ?? '')}
             >
               <summary className="flex min-w-0 cursor-pointer list-none items-center gap-2 text-slate-700 marker:hidden">
                 <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500 transition-transform group-open:rotate-0" />
