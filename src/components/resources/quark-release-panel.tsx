@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -20,6 +20,7 @@ import {
   previewMovieQuarkIngest,
 } from '@/lib/api/quark-ingest'
 import {
+  checkQuarkReleaseLinks,
   isRequestCanceledError,
   searchQuarkReleases,
 } from '@/lib/api/resources'
@@ -62,9 +63,15 @@ const availabilityCopy = {
   OK: { label: '链接有效', className: 'bg-emerald-50 text-emerald-700' },
   BAD: { label: '链接失效', className: 'bg-rose-50 text-rose-700' },
   LOCKED: { label: '访问受限', className: 'bg-amber-50 text-amber-700' },
+  PENDING: { label: '检查中', className: 'bg-indigo-50 text-indigo-700' },
   UNCERTAIN: { label: '待确认', className: 'bg-amber-50 text-amber-700' },
+  UNSUPPORTED: { label: '暂不支持检查', className: 'bg-slate-100 text-slate-600' },
   UNCHECKED: { label: '未检查', className: 'bg-slate-100 text-slate-600' },
 } as const
+
+const RELEASE_PAGE_SIZE = 20
+const LINK_CHECK_BATCH_SIZE = 6
+const LINK_CHECK_DEBOUNCE_MS = 220
 
 const relevanceCopy = {
   STRONG: { label: '高度相关', className: 'bg-indigo-50 text-indigo-700' },
@@ -115,6 +122,14 @@ export function QuarkReleasePanel({
   const requestIdRef = useRef(0)
   const searchControllerRef = useRef<AbortController | null>(null)
   const previewControllerRef = useRef<AbortController | null>(null)
+  const validationControllerRef = useRef<AbortController | null>(null)
+  const validationTimerRef = useRef<number | null>(null)
+  const validationGenerationRef = useRef(0)
+  const queuedCandidatesRef = useRef(new Map<string, QuarkRelease>())
+  const inFlightCandidateIdsRef = useRef(new Set<string>())
+  const flushValidationQueueRef = useRef<() => void>(() => undefined)
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
   const [loadState, setLoadState] = useState<LoadState>({
     status: 'loading',
     query: '',
@@ -123,11 +138,161 @@ export function QuarkReleasePanel({
     message: null,
   })
   const [previewState, setPreviewState] = useState<PreviewState | null>(null)
+  const [visibleLimit, setVisibleLimit] = useState(RELEASE_PAGE_SIZE)
+
+  const scheduleValidationFlush = useCallback(() => {
+    if (
+      validationTimerRef.current !== null ||
+      validationControllerRef.current !== null ||
+      queuedCandidatesRef.current.size === 0
+    ) {
+      return
+    }
+    validationTimerRef.current = window.setTimeout(() => {
+      validationTimerRef.current = null
+      flushValidationQueueRef.current()
+    }, LINK_CHECK_DEBOUNCE_MS)
+  }, [])
+
+  flushValidationQueueRef.current = () => {
+    if (
+      validationControllerRef.current !== null ||
+      queuedCandidatesRef.current.size === 0
+    ) {
+      return
+    }
+    const batch = Array.from(queuedCandidatesRef.current.values())
+      .slice(0, LINK_CHECK_BATCH_SIZE)
+    batch.forEach((candidate) => queuedCandidatesRef.current.delete(candidate.id))
+    const batchIds = new Set(batch.map((candidate) => candidate.id))
+    batchIds.forEach((candidateId) => inFlightCandidateIdsRef.current.add(candidateId))
+
+    const generation = validationGenerationRef.current
+    const viewToken = `quark-${generation}`
+    const controller = new AbortController()
+    validationControllerRef.current = controller
+    setLoadState((current) => ({
+      ...current,
+      items: current.items.map((candidate) =>
+        batchIds.has(candidate.id) && candidate.availability === 'UNCHECKED'
+          ? {
+              ...candidate,
+              availability: 'PENDING',
+              availability_summary: '正在检查链接有效性',
+            }
+          : candidate),
+    }))
+
+    void checkQuarkReleaseLinks({
+      view_token: viewToken,
+      items: batch.map((candidate) => ({
+        id: candidate.id,
+        share_url: candidate.share_url,
+      })),
+    }, controller.signal)
+      .then((data) => {
+        if (
+          controller.signal.aborted ||
+          validationGenerationRef.current !== generation ||
+          data.view_token !== viewToken
+        ) {
+          return
+        }
+        const checksById = new Map(data.items.map((checked) => [checked.id, checked]))
+        setLoadState((current) => ({
+          ...current,
+          items: current.items.map((candidate) => {
+            if (!batchIds.has(candidate.id)) return candidate
+            const checked = checksById.get(candidate.id)
+            return checked
+              ? {
+                  ...candidate,
+                  availability: checked.availability,
+                  availability_summary: checked.availability_summary,
+                }
+              : {
+                  ...candidate,
+                  availability: 'UNCERTAIN',
+                  availability_summary: 'PanSou 未返回该链接的检查结果',
+                }
+          }),
+        }))
+      })
+      .catch((error) => {
+        if (
+          controller.signal.aborted ||
+          validationGenerationRef.current !== generation ||
+          isRequestCanceledError(error)
+        ) {
+          return
+        }
+        setLoadState((current) => ({
+          ...current,
+          items: current.items.map((candidate) =>
+            batchIds.has(candidate.id)
+              ? {
+                  ...candidate,
+                  availability: 'UNCERTAIN',
+                  availability_summary: '链接检查暂时失败，可继续检查分享内容',
+                }
+              : candidate),
+        }))
+      })
+      .finally(() => {
+        if (validationControllerRef.current === controller) {
+          validationControllerRef.current = null
+        }
+        if (validationGenerationRef.current === generation) {
+          batchIds.forEach((candidateId) => inFlightCandidateIdsRef.current.delete(candidateId))
+          scheduleValidationFlush()
+        }
+      })
+  }
+
+  const queueCandidateForCheck = useCallback((candidate: QuarkRelease) => {
+    if (
+      candidate.availability !== 'UNCHECKED' ||
+      queuedCandidatesRef.current.has(candidate.id) ||
+      inFlightCandidateIdsRef.current.has(candidate.id)
+    ) {
+      return
+    }
+    queuedCandidatesRef.current.set(candidate.id, candidate)
+    scheduleValidationFlush()
+  }, [scheduleValidationFlush])
+
+  const rankedItems = useMemo(() => [
+    ...loadState.items.filter((candidate) => candidate.availability !== 'BAD'),
+    ...loadState.items.filter((candidate) => candidate.availability === 'BAD'),
+  ], [loadState.items])
+  const visibleItems = useMemo(
+    () => rankedItems.slice(0, visibleLimit),
+    [rankedItems, visibleLimit],
+  )
+  const checkedCount = useMemo(
+    () => loadState.items.filter((candidate) =>
+      !['UNCHECKED', 'PENDING'].includes(candidate.availability)).length,
+    [loadState.items],
+  )
+  const badCount = useMemo(
+    () => loadState.items.filter((candidate) => candidate.availability === 'BAD').length,
+    [loadState.items],
+  )
 
   function search(refresh: boolean) {
     const requestId = requestIdRef.current + 1
     requestIdRef.current = requestId
     searchControllerRef.current?.abort()
+    validationControllerRef.current?.abort()
+    validationControllerRef.current = null
+    if (validationTimerRef.current !== null) {
+      window.clearTimeout(validationTimerRef.current)
+      validationTimerRef.current = null
+    }
+    queuedCandidatesRef.current.clear()
+    inFlightCandidateIdsRef.current.clear()
+    validationGenerationRef.current = requestId
+    setVisibleLimit(RELEASE_PAGE_SIZE)
     const controller = new AbortController()
     searchControllerRef.current = controller
     setLoadState((current) => ({
@@ -188,9 +353,43 @@ export function QuarkReleasePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id, mediaType, seasonNumber, targetMediaType])
 
+  useEffect(() => {
+    if (loadState.status !== 'success' || !listRef.current) return
+    const candidatesById = new Map(visibleItems.map((candidate) => [candidate.id, candidate]))
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting || entry.intersectionRatio < 0.35) return
+        const candidateId = (entry.target as HTMLElement).dataset.quarkCandidateId
+        const candidate = candidateId ? candidatesById.get(candidateId) : undefined
+        if (candidate) queueCandidateForCheck(candidate)
+      })
+    }, { threshold: [0.35, 0.6] })
+    listRef.current
+      .querySelectorAll<HTMLElement>('[data-quark-candidate-id]')
+      .forEach((element) => observer.observe(element))
+    return () => observer.disconnect()
+  }, [loadState.status, queueCandidateForCheck, visibleItems])
+
+  useEffect(() => {
+    if (!loadMoreRef.current || visibleLimit >= rankedItems.length) return
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setVisibleLimit((current) => Math.min(current + RELEASE_PAGE_SIZE, rankedItems.length))
+      }
+    }, { rootMargin: '0px 0px 100px 0px' })
+    observer.observe(loadMoreRef.current)
+    return () => observer.disconnect()
+  }, [rankedItems.length, visibleLimit])
+
   useEffect(
     () => () => {
       previewControllerRef.current?.abort()
+      validationControllerRef.current?.abort()
+      if (validationTimerRef.current !== null) {
+        window.clearTimeout(validationTimerRef.current)
+      }
+      queuedCandidatesRef.current.clear()
+      inFlightCandidateIdsRef.current.clear()
     },
     [],
   )
@@ -320,7 +519,7 @@ export function QuarkReleasePanel({
               PanSou Quark 资源
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              宽松召回全部候选；相关性和冲突仅用于排序，不会删除结果。
+              宽松召回全部候选；相关性决定顺序，可见链接在后台逐批检查。
             </p>
           </div>
           <Button
@@ -341,6 +540,9 @@ export function QuarkReleasePanel({
         </div>
         <p className="mt-4 border-t border-slate-100 pt-4 text-xs text-slate-500">
           查询：{loadState.query || item.title}
+          {loadState.status === 'success' && loadState.items.length > 0
+            ? ` · 找到 ${loadState.items.length} 条 · 已检查 ${checkedCount} 条 · 失效 ${badCount} 条`
+            : ''}
         </p>
       </section>
 
@@ -356,7 +558,7 @@ export function QuarkReleasePanel({
         <div className="rounded-lg bg-white px-8 py-16 text-center">
           <Loader2 className="mx-auto h-7 w-7 animate-spin text-slate-400" />
           <p className="mt-4 text-sm font-medium text-slate-500">
-            正在搜索并检查 Quark 分享链接…
+            正在搜索 Quark 分享链接…
           </p>
         </div>
       ) : loadState.status === 'error' ? (
@@ -374,12 +576,19 @@ export function QuarkReleasePanel({
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {loadState.items.map((candidate) => {
+        <div ref={listRef} className="space-y-3">
+          {visibleItems.map((candidate) => {
             const availability = availabilityCopy[candidate.availability]
             const relevance = relevanceCopy[candidate.relevance]
             return (
-              <article key={candidate.id} className="rounded-lg bg-white p-5">
+              <article
+                key={candidate.id}
+                data-quark-candidate-id={candidate.id}
+                className={cn(
+                  'rounded-lg bg-white p-5',
+                  candidate.availability === 'BAD' && 'opacity-75',
+                )}
+              >
                 <div className="flex flex-col gap-5 xl:flex-row xl:items-center">
                   <div className="min-w-0 flex-1">
                     <h3 className="break-words text-sm font-semibold leading-6 text-slate-950">
@@ -429,16 +638,23 @@ export function QuarkReleasePanel({
                   </div>
                   <Button
                     type="button"
+                    disabled={candidate.availability === 'BAD'}
                     onClick={() => handlePreview(candidate)}
                     className="h-10 shrink-0 rounded-lg bg-slate-950 px-4 text-xs font-semibold text-white shadow-none hover:bg-slate-800"
                   >
                     <ShieldCheck className="h-4 w-4" />
-                    检查内容并确认
+                    {candidate.availability === 'BAD' ? '链接已失效' : '检查内容并确认'}
                   </Button>
                 </div>
               </article>
             )
           })}
+          {visibleLimit < rankedItems.length ? (
+            <div ref={loadMoreRef} className="flex h-14 items-center justify-center text-xs text-slate-400">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              继续向下加载更多候选
+            </div>
+          ) : null}
         </div>
       )}
 

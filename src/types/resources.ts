@@ -179,7 +179,9 @@ export type QuarkReleaseAvailability =
   | 'OK'
   | 'BAD'
   | 'LOCKED'
+  | 'PENDING'
   | 'UNCERTAIN'
+  | 'UNSUPPORTED'
   | 'UNCHECKED'
 
 export type QuarkReleaseRelevance = 'STRONG' | 'POSSIBLE' | 'CONFLICT'
@@ -202,6 +204,23 @@ export type QuarkReleaseSearchData = {
   query: string
   items: QuarkRelease[]
   warnings: string[]
+}
+
+export type QuarkReleaseLinkCheckPayload = {
+  view_token: string
+  items: Array<{
+    id: string
+    share_url: string
+  }>
+}
+
+export type QuarkReleaseLinkCheckData = {
+  view_token: string
+  items: Array<{
+    id: string
+    availability: QuarkReleaseAvailability
+    availability_summary: string
+  }>
 }
 
 export type MovieReleaseRecommendationPayload = {

@@ -23,6 +23,8 @@ import type {
   ProwlarrReleaseRecommendationData,
   ProwlarrReleaseSearchData,
   QuarkReleaseSearchData,
+  QuarkReleaseLinkCheckData,
+  QuarkReleaseLinkCheckPayload,
   QuarkReleaseSearchPayload,
   SearchProwlarrReleasesParams,
   SeriesReleaseRecommendationPayload,
@@ -319,6 +321,37 @@ export async function searchQuarkReleases(
     }
     throw new Error(
       getJavaErrorMessage(error) || 'Quark 资源搜索失败，请稍后重试。',
+    )
+  }
+}
+
+export async function checkQuarkReleaseLinks(
+  payload: QuarkReleaseLinkCheckPayload,
+  signal?: AbortSignal,
+): Promise<QuarkReleaseLinkCheckData> {
+  try {
+    const response = await javaApiClient.post<
+      JavaApiResponse<QuarkReleaseLinkCheckData>
+    >('/api/v1/resources/quark/releases/links/check', payload, {
+      signal,
+      timeout: QUARK_RELEASE_REQUEST_TIMEOUT_MS,
+    })
+
+    if (
+      response.data.code !== 200 ||
+      !response.data.data ||
+      !Array.isArray(response.data.data.items)
+    ) {
+      throw new Error(response.data.message || 'quark release link check failed')
+    }
+
+    return response.data.data
+  } catch (error) {
+    if (isRequestCanceledError(error)) {
+      throw error
+    }
+    throw new Error(
+      getJavaErrorMessage(error) || 'Quark 链接有效性检查失败，请稍后重试。',
     )
   }
 }
