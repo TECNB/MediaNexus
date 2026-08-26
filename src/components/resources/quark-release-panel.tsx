@@ -14,13 +14,10 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { QuarkSeasonIngestWorkspace } from '@/components/quark-ingest/quark-season-ingest-workspace'
 import {
   createMovieQuarkIngestTask,
-  createSeriesQuarkIngestTask,
-  createVarietyQuarkIngestTask,
   previewMovieQuarkIngest,
-  previewSeriesQuarkIngest,
-  previewVarietyQuarkIngest,
 } from '@/lib/api/quark-ingest'
 import {
   isRequestCanceledError,
@@ -210,36 +207,25 @@ export function QuarkReleasePanel({
     }
   }
 
-  function seasonPayload(candidate: QuarkRelease) {
-    return {
-      share_url: candidate.share_url,
-      title: item.title,
-      original_title: item.original_title,
-      season_number: seasonNumber,
-      tmdb_id: item.tmdb_id,
-    }
-  }
-
   function handlePreview(candidate: QuarkRelease) {
     previewControllerRef.current?.abort()
     const controller = new AbortController()
     previewControllerRef.current = controller
     setPreviewState({
       candidate,
-      status: 'loading',
+      status: mediaType === 'movie' ? 'loading' : 'success',
       preview: null,
       result: null,
       message: null,
     })
 
+    if (mediaType !== 'movie') {
+      return
+    }
+
     let request: Promise<QuarkIngestPreview>
     try {
-      request =
-        mediaType === 'movie'
-          ? previewMovieQuarkIngest(moviePayload(candidate), controller.signal)
-          : targetMediaType === 'VARIETY'
-            ? previewVarietyQuarkIngest(seasonPayload(candidate), controller.signal)
-            : previewSeriesQuarkIngest(seasonPayload(candidate), controller.signal)
+      request = previewMovieQuarkIngest(moviePayload(candidate), controller.signal)
     } catch (error) {
       setPreviewState({
         candidate,
@@ -290,12 +276,7 @@ export function QuarkReleasePanel({
       current ? { ...current, status: 'submitting', message: null } : current,
     )
 
-    const request =
-      mediaType === 'movie'
-        ? createMovieQuarkIngestTask(moviePayload(candidate))
-        : targetMediaType === 'VARIETY'
-          ? createVarietyQuarkIngestTask(seasonPayload(candidate))
-          : createSeriesQuarkIngestTask(seasonPayload(candidate))
+    const request = createMovieQuarkIngestTask(moviePayload(candidate))
 
     void request
       .then((result) => {
@@ -519,6 +500,18 @@ export function QuarkReleasePanel({
                   </div>
                 </div>
               </div>
+            ) : mediaType === 'series' ? (
+              <div className="mt-6">
+                <QuarkSeasonIngestWorkspace
+                  mediaType={targetMediaType === 'VARIETY' ? 'variety' : 'series'}
+                  shareUrl={previewState.candidate.share_url}
+                  title={item.title}
+                  originalTitle={item.original_title}
+                  tmdbId={item.tmdb_id}
+                  selectedSeason={seasonNumber}
+                  seasonOptions={[seasonNumber]}
+                />
+              </div>
             ) : previewState.preview ? (
               <>
                 <div className="mt-5 grid gap-3 sm:grid-cols-4">
@@ -574,7 +567,7 @@ export function QuarkReleasePanel({
               >
                 {previewState.status === 'done' ? '关闭' : '取消'}
               </Button>
-              {previewState.status !== 'done' ? (
+              {mediaType === 'movie' && previewState.status !== 'done' ? (
                 <Button
                   type="button"
                   disabled={previewState.status !== 'success'}
