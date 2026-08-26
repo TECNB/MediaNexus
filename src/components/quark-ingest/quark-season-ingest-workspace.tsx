@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { CloudUpload, File, Folder, Loader2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { CloudUpload, File, Folder, Loader2, RefreshCw } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -185,20 +185,7 @@ export function QuarkSeasonIngestWorkspace({
   const [message, setMessage] = useState<string | null>(null)
   const [createdTask, setCreatedTask] = useState<QuarkMultiSourceTaskResult | null>(null)
   const controllerRef = useRef<AbortController | null>(null)
-
-  useEffect(() => () => controllerRef.current?.abort(), [])
-
-  useEffect(() => {
-    controllerRef.current?.abort()
-    controllerRef.current = null
-    setScope('CURRENT_SEASON')
-    setPreview(null)
-    setSelections([])
-    setSubscriptionEnabled(false)
-    setStatus('idle')
-    setMessage(null)
-    setCreatedTask(null)
-  }, [mediaType, shareUrl, title, tmdbId, selectedSeason])
+  const scopeRef = useRef<SaveScope>('CURRENT_SEASON')
 
   const selectionsById = useMemo(
     () => new Map(selections.map((selection) => [selection.source_candidate_id, selection])),
@@ -214,6 +201,50 @@ export function QuarkSeasonIngestWorkspace({
     follow_updates_enabled: subscriptionEnabled,
     sources: selections,
   }
+
+  const inspectShareTree = useCallback(async () => {
+    controllerRef.current?.abort()
+    const controller = new AbortController()
+    controllerRef.current = controller
+    setPreview(null)
+    setSelections([])
+    setStatus('loading')
+    setMessage(null)
+    setCreatedTask(null)
+    try {
+      const inspected = await previewQuarkShareTree(mediaType, {
+        share_url: shareUrl,
+        title,
+        original_title: originalTitle,
+        tmdb_id: tmdbId,
+        preview_id: null,
+        follow_updates_enabled: false,
+        sources: [],
+      }, controller.signal)
+      if (controller.signal.aborted) return
+      setPreview(inspected)
+      setSelections(initialSelections(inspected, scopeRef.current, selectedSeason))
+      setStatus('success')
+    } catch (error) {
+      if (controller.signal.aborted) return
+      setStatus('error')
+      setMessage(error instanceof Error && error.message.trim()
+        ? error.message.trim()
+        : 'Quark 分享目录加载失败，请稍后重试。')
+    } finally {
+      if (controllerRef.current === controller) {
+        controllerRef.current = null
+      }
+    }
+  }, [mediaType, originalTitle, selectedSeason, shareUrl, title, tmdbId])
+
+  useEffect(() => {
+    scopeRef.current = 'CURRENT_SEASON'
+    setScope('CURRENT_SEASON')
+    setSubscriptionEnabled(false)
+    void inspectShareTree()
+    return () => controllerRef.current?.abort()
+  }, [inspectShareTree])
 
   function markPlanDirty() {
     setPreview((current) => (current ? { ...current, ready: false } : current))
@@ -246,6 +277,7 @@ export function QuarkSeasonIngestWorkspace({
   }
 
   function changeScope(nextScope: SaveScope) {
+    scopeRef.current = nextScope
     setScope(nextScope)
     if (preview) {
       setSelections(initialSelections(preview, nextScope, selectedSeason))
@@ -255,20 +287,11 @@ export function QuarkSeasonIngestWorkspace({
   }
 
   async function advance() {
-    if (status === 'loading') return
+    if (status === 'loading' || !preview) return
     setStatus('loading')
     setMessage(null)
     setCreatedTask(null)
     try {
-      if (!preview) {
-        const controller = new AbortController()
-        controllerRef.current = controller
-        const inspected = await previewQuarkShareTree(mediaType, payload, controller.signal)
-        setPreview(inspected)
-        setSelections(initialSelections(inspected, scope, selectedSeason))
-        setStatus('success')
-        return
-      }
       if (!planReady) {
         const controller = new AbortController()
         controllerRef.current = controller
@@ -477,22 +500,40 @@ export function QuarkSeasonIngestWorkspace({
         </div>
       ) : null}
 
-      <Button
-        type="button"
-        size="lg"
-        disabled={status === 'loading'}
-        onClick={() => void advance()}
-        className="h-12 w-full rounded-xl bg-slate-950 text-sm font-semibold text-white shadow-none hover:bg-black"
-      >
-        {status === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4" />}
-        {status === 'loading'
-          ? '正在处理…'
-          : !preview
-            ? '检查分享目录树'
+      {!preview && status === 'loading' ? (
+        <div className="rounded-xl bg-slate-50 px-4 py-10 text-center">
+          <Loader2 className="mx-auto h-6 w-6 animate-spin text-slate-400" />
+          <p className="mt-3 text-sm text-slate-500">正在检查分享目录树…</p>
+        </div>
+      ) : null}
+
+      {preview ? (
+        <Button
+          type="button"
+          size="lg"
+          disabled={status === 'loading'}
+          onClick={() => void advance()}
+          className="h-12 w-full rounded-xl bg-slate-950 text-sm font-semibold text-white shadow-none hover:bg-black"
+        >
+          {status === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4" />}
+          {status === 'loading'
+            ? '正在处理…'
             : !planReady
               ? '生成逐文件改名预览'
               : '创建并立即执行 QAS 任务'}
-      </Button>
+        </Button>
+      ) : status === 'error' ? (
+        <Button
+          type="button"
+          size="lg"
+          variant="outline"
+          onClick={() => void inspectShareTree()}
+          className="h-12 w-full rounded-xl border-slate-200 text-sm font-semibold shadow-none"
+        >
+          <RefreshCw className="h-4 w-4" />
+          重新加载分享目录
+        </Button>
+      ) : null}
 
       {message ? (
         <div className={cn(
