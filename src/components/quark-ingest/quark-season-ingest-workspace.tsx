@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CloudUpload, File, Folder, Loader2, RefreshCw } from 'lucide-react'
+import {
+  ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  CloudUpload,
+  File,
+  Folder,
+  Loader2,
+  RefreshCw,
+} from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -43,6 +52,14 @@ function descendantSourceIds(node: QuarkSourceTreeNode) {
     .filter((candidateId): candidateId is string => Boolean(candidateId))
 }
 
+function directoryPaths(nodes: QuarkSourceTreeNode[], collected: string[] = []) {
+  for (const node of nodes) {
+    if (node.directory) collected.push(node.relative_path)
+    directoryPaths(node.children, collected)
+  }
+  return collected
+}
+
 function initialSelections(
   preview: QuarkMultiSourcePreview,
   scope: SaveScope,
@@ -75,16 +92,20 @@ function SourceTree({
   selections,
   selectedSeason,
   subscriptionEnabled,
+  expandedDirectories,
   onMapDescendants,
   onFollowDescendants,
+  onDirectoryToggle,
   depth = 0,
 }: {
   nodes: QuarkSourceTreeNode[]
   selections: Map<string, QuarkSourceSelection>
   selectedSeason: number
   subscriptionEnabled: boolean
+  expandedDirectories: Set<string>
   onMapDescendants: (candidateIds: string[], seasonNumber: number) => void
   onFollowDescendants: (candidateIds: string[], followUpdates: boolean) => void
+  onDirectoryToggle: (relativePath: string, expanded: boolean) => void
   depth?: number
 }) {
   return (
@@ -97,8 +118,16 @@ function SourceTree({
         return (
           <li key={`${node.relative_path}:${node.name}`}>
             {node.directory ? (
-              <details className="group">
+              <details
+                open={expandedDirectories.has(node.relative_path)}
+                onToggle={(event) => onDirectoryToggle(
+                  node.relative_path,
+                  event.currentTarget.open,
+                )}
+                className="group"
+              >
                 <summary className="flex min-w-0 cursor-pointer list-none items-center gap-2 text-slate-700 marker:hidden">
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90" />
                   <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500" />
                   <span className="break-all">{node.name}</span>
                   {selection ? (
@@ -148,8 +177,10 @@ function SourceTree({
                     selections={selections}
                     selectedSeason={selectedSeason}
                     subscriptionEnabled={subscriptionEnabled}
+                    expandedDirectories={expandedDirectories}
                     onMapDescendants={onMapDescendants}
                     onFollowDescendants={onFollowDescendants}
+                    onDirectoryToggle={onDirectoryToggle}
                     depth={depth + 1}
                   />
                 ) : null}
@@ -184,6 +215,7 @@ export function QuarkSeasonIngestWorkspace({
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [message, setMessage] = useState<string | null>(null)
   const [createdTask, setCreatedTask] = useState<QuarkMultiSourceTaskResult | null>(null)
+  const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set())
   const controllerRef = useRef<AbortController | null>(null)
   const scopeRef = useRef<SaveScope>('CURRENT_SEASON')
 
@@ -208,6 +240,7 @@ export function QuarkSeasonIngestWorkspace({
     controllerRef.current = controller
     setPreview(null)
     setSelections([])
+    setExpandedDirectories(new Set())
     setStatus('loading')
     setMessage(null)
     setCreatedTask(null)
@@ -224,6 +257,7 @@ export function QuarkSeasonIngestWorkspace({
       if (controller.signal.aborted) return
       setPreview(inspected)
       setSelections(initialSelections(inspected, scopeRef.current, selectedSeason))
+      setExpandedDirectories(new Set(directoryPaths(inspected.entries)))
       setStatus('success')
     } catch (error) {
       if (controller.signal.aborted) return
@@ -274,6 +308,19 @@ export function QuarkSeasonIngestWorkspace({
         : selection,
     ))
     markPlanDirty()
+  }
+
+  function toggleDirectory(relativePath: string, expanded: boolean) {
+    setExpandedDirectories((current) => {
+      if (current.has(relativePath) === expanded) return current
+      const next = new Set(current)
+      if (expanded) {
+        next.add(relativePath)
+      } else {
+        next.delete(relativePath)
+      }
+      return next
+    })
   }
 
   function changeScope(nextScope: SaveScope) {
@@ -356,17 +403,39 @@ export function QuarkSeasonIngestWorkspace({
 
       {preview ? (
         <div className="space-y-4">
-          <div className="rounded-xl bg-slate-50 p-4">
-            <SourceTree
-              nodes={preview.entries}
-              selections={selectionsById}
-              selectedSeason={selectedSeason}
-              subscriptionEnabled={subscriptionEnabled}
-              onMapDescendants={(candidateIds, seasonNumber) =>
-                updateDescendants(candidateIds, (selection) => ({ ...selection, season_number: seasonNumber }))}
-              onFollowDescendants={(candidateIds, followUpdates) =>
-                updateDescendants(candidateIds, (selection) => ({ ...selection, follow_updates: followUpdates }))}
-            />
+          <div className="rounded-xl bg-slate-50">
+            <div className="flex items-center justify-end gap-2 border-b border-slate-200 px-4 py-2">
+              <button
+                type="button"
+                onClick={() => setExpandedDirectories(new Set(directoryPaths(preview.entries)))}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[11px] font-semibold text-slate-600 hover:bg-white hover:text-slate-900"
+              >
+                <ChevronsUpDown className="h-3.5 w-3.5" />
+                全部展开
+              </button>
+              <button
+                type="button"
+                onClick={() => setExpandedDirectories(new Set())}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[11px] font-semibold text-slate-600 hover:bg-white hover:text-slate-900"
+              >
+                <ChevronsDownUp className="h-3.5 w-3.5" />
+                全部折叠
+              </button>
+            </div>
+            <div className="max-h-[32rem] overflow-auto p-4">
+              <SourceTree
+                nodes={preview.entries}
+                selections={selectionsById}
+                selectedSeason={selectedSeason}
+                subscriptionEnabled={subscriptionEnabled}
+                expandedDirectories={expandedDirectories}
+                onMapDescendants={(candidateIds, seasonNumber) =>
+                  updateDescendants(candidateIds, (selection) => ({ ...selection, season_number: seasonNumber }))}
+                onFollowDescendants={(candidateIds, followUpdates) =>
+                  updateDescendants(candidateIds, (selection) => ({ ...selection, follow_updates: followUpdates }))}
+                onDirectoryToggle={toggleDirectory}
+              />
+            </div>
           </div>
 
           <label className="flex items-start gap-3 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
