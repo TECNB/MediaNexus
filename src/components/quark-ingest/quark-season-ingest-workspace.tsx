@@ -422,7 +422,7 @@ export function QuarkSeasonIngestWorkspace({
                 全部折叠
               </button>
             </div>
-            <div className="max-h-[32rem] overflow-auto p-4">
+            <div className="p-4">
               <SourceTree
                 nodes={preview.entries}
                 selections={selectionsById}
@@ -544,9 +544,9 @@ export function QuarkSeasonIngestWorkspace({
                     </div>
                   </div>
                   {source.files.length > 0 ? (
-                    <div className="mt-3 max-h-56 overflow-auto rounded-lg bg-slate-950 px-3 py-2 font-mono text-[11px] leading-5 text-slate-200">
+                    <div className="mt-3 rounded-lg bg-slate-950 px-3 py-2 font-mono text-[11px] leading-5 text-slate-200">
                       {source.files.map((file) => (
-                        <div key={`${file.source_name}:${file.target_name}`}>
+                        <div key={`${file.source_name}:${file.target_name}`} className="break-all">
                           {file.source_name} → {file.target_name}
                           {file.message ? ` (${file.message})` : ''}
                         </div>
