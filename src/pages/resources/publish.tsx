@@ -761,6 +761,7 @@ export function ResourcePublishPage() {
           targetMediaType={quarkMediaType}
           item={item}
           seasonNumber={seasonNumber}
+          seasonOptions={seasonOptions}
         />
       ) : (
         <>

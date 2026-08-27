@@ -24,6 +24,7 @@ import type {
   QuarkFileSelection,
   QuarkSourceSelection,
   QuarkSourceTreeNode,
+  QuarkSeasonCoverage,
 } from '@/types/quark-ingest'
 
 type SaveScope = 'CURRENT_SEASON' | 'MULTIPLE_SEASONS'
@@ -61,10 +62,36 @@ function directoryPaths(nodes: QuarkSourceTreeNode[], collected: string[] = []) 
   return collected
 }
 
+function videoCounts(node: QuarkSourceTreeNode): { direct: number; total: number } {
+  if (!node.directory) {
+    return { direct: isVideoFile(node.name) ? 1 : 0, total: isVideoFile(node.name) ? 1 : 0 }
+  }
+  const direct = node.children.filter((child) => !child.directory && isVideoFile(child.name)).length
+  const total = node.children.reduce((sum, child) => sum + videoCounts(child).total, 0)
+  return { direct, total }
+}
+
+function formatEpisodeRanges(episodes: number[], season: number) {
+  const sorted = [...new Set(episodes)].sort((a, b) => a - b)
+  const ranges: string[] = []
+  for (let index = 0; index < sorted.length; index += 1) {
+    const start = sorted[index]
+    let end = start
+    while (index + 1 < sorted.length && sorted[index + 1] === end + 1) {
+      index += 1
+      end = sorted[index]
+    }
+    const prefix = `S${String(season).padStart(2, '0')}E`
+    ranges.push(end === start ? `${prefix}${String(start).padStart(2, '0')}` : `${prefix}${String(start).padStart(2, '0')}-E${String(end).padStart(2, '0')}`)
+  }
+  return ranges.join('、')
+}
+
 function initialSelections(
   preview: QuarkMultiSourcePreview,
   scope: SaveScope,
   selectedSeason: number,
+  seasonOptions: number[],
 ): QuarkSourceSelection[] {
   const exactMatches = preview.sources.filter(
     (source) => source.detected_season === selectedSeason && source.season_status !== 'MIXED',
@@ -76,17 +103,46 @@ function initialSelections(
   )
   return preview.sources.map((source) => {
     const selectedForCurrentSeason = currentSeasonIds.has(source.source_candidate_id)
+    const detectedSeason = source.detected_season != null && seasonOptions.includes(source.detected_season)
+      ? source.detected_season
+      : null
     return {
       source_candidate_id: source.source_candidate_id,
       season_number:
         scope === 'CURRENT_SEASON' && selectedForCurrentSeason
           ? selectedSeason
-          : source.detected_season,
+          : detectedSeason,
       ignored: scope === 'CURRENT_SEASON' ? !selectedForCurrentSeason : false,
       follow_updates: false,
       files: [],
     }
   })
+}
+
+function targetEpisodeNumbers(targetName: string) {
+  const match = /S\d{2}E(\d{1,3})(?:-E(\d{1,3}))?/i.exec(targetName)
+  if (!match) return []
+  const first = Number(match[1])
+  const last = match[2] ? Number(match[2]) : first
+  return Array.from({ length: Math.abs(last - first) + 1 }, (_, index) => Math.min(first, last) + index)
+}
+
+function sourceCoverage(source: QuarkMultiSourcePreview['sources'][number]) {
+  const videos = source.files.filter((file) => isVideoFile(file.source_name))
+  const included = videos.filter((file) => !['IGNORED', 'EXCLUDED', 'UNRECOGNIZED', 'CONFLICT'].includes(file.status))
+  return {
+    videoCount: included.length,
+    episodes: [...new Set(included.flatMap((file) => targetEpisodeNumbers(file.target_name)))].sort((a, b) => a - b),
+    unknownCount: videos.filter((file) => ['UNRECOGNIZED', 'CONFLICT'].includes(file.status)).length,
+    ignoredCount: videos.filter((file) => file.status === 'IGNORED').length,
+  }
+}
+
+function coverageLabel(status: string) {
+  if (status === 'COMPLETE') return '完整'
+  if (status === 'MISSING') return '缺集'
+  if (status === 'NEEDS_REVIEW') return '待确认'
+  return '暂无法判断'
 }
 
 function SourceTree({
@@ -132,6 +188,14 @@ function SourceTree({
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90" />
                   <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500" />
                   <span className="break-all">{node.name}</span>
+                  {node.directory ? (() => {
+                    const counts = videoCounts(node)
+                    return counts.total > 0 ? (
+                      <span className="shrink-0 text-[10px] text-slate-400">
+                        {counts.direct > 0 && counts.direct !== counts.total ? `直属 ${counts.direct} · ` : ''}共 {counts.total} 个视频
+                      </span>
+                    ) : null
+                  })() : null}
                   {selection ? (
                     <span className={cn(
                       'shrink-0 rounded-full px-2 py-0.5 text-[10px]',
@@ -262,7 +326,7 @@ export function QuarkSeasonIngestWorkspace({
       }, controller.signal)
       if (controller.signal.aborted) return
       setPreview(inspected)
-      setSelections(initialSelections(inspected, scopeRef.current, selectedSeason))
+      setSelections(initialSelections(inspected, scopeRef.current, selectedSeason, seasonOptions))
       setExpandedDirectories(new Set(directoryPaths(inspected.entries)))
       setStatus('success')
     } catch (error) {
@@ -276,7 +340,7 @@ export function QuarkSeasonIngestWorkspace({
         controllerRef.current = null
       }
     }
-  }, [mediaType, originalTitle, selectedSeason, shareUrl, title, tmdbId])
+  }, [mediaType, originalTitle, seasonOptions, selectedSeason, shareUrl, title, tmdbId])
 
   useEffect(() => {
     scopeRef.current = 'CURRENT_SEASON'
@@ -350,7 +414,7 @@ export function QuarkSeasonIngestWorkspace({
     scopeRef.current = nextScope
     setScope(nextScope)
     if (preview) {
-      setSelections(initialSelections(preview, nextScope, selectedSeason))
+      setSelections(initialSelections(preview, nextScope, selectedSeason, seasonOptions))
       setSubscriptionEnabled(false)
       markPlanDirty()
     }
@@ -466,6 +530,36 @@ export function QuarkSeasonIngestWorkspace({
             </div>
           </div>
 
+          {preview.season_coverages.length > 0 ? (
+            <div className="space-y-2 rounded-xl bg-slate-50 px-4 py-3">
+              <p className="text-xs font-semibold text-slate-700">季度覆盖</p>
+              {preview.season_coverages.map((coverage: QuarkSeasonCoverage) => (
+                <div key={coverage.season_number} className="text-xs leading-5 text-slate-600">
+                  <p>
+                    第 {coverage.season_number} 季 · 视频 {coverage.video_count} · 覆盖 {coverage.recognized_episode_count}
+                    {coverage.aired_episode_count != null ? `/${coverage.aired_episode_count} 已播` : ''}
+                    {coverage.expected_episode_count != null ? ` · 全季 ${coverage.expected_episode_count}` : ''}
+                    {coverage.ignored_video_count > 0 ? ` · 已忽略 ${coverage.ignored_video_count}` : ''}
+                    {coverage.unknown_video_count > 0 ? ` · 待确认 ${coverage.unknown_video_count}` : ''}
+                    {` · ${coverageLabel(coverage.coverage_status)}`}
+                  </p>
+                  {coverage.missing_episode_numbers.length > 0 ? (
+                    <p className="text-amber-700">缺少：{formatEpisodeRanges(coverage.missing_episode_numbers, coverage.season_number)}</p>
+                  ) : null}
+                  {coverage.extra_episode_numbers.length > 0 ? (
+                    <p className="text-sky-700">额外集号：{formatEpisodeRanges(coverage.extra_episode_numbers, coverage.season_number)}</p>
+                  ) : null}
+                  {coverage.unknown_air_date_numbers.length > 0 ? (
+                    <p className="text-slate-500">播出日期未知：{formatEpisodeRanges(coverage.unknown_air_date_numbers, coverage.season_number)}</p>
+                  ) : null}
+                  {coverage.coverage_status === 'UNAVAILABLE' ? (
+                    <p className="text-slate-500">{coverage.message}</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
           <label className="flex items-start gap-3 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
             <input
               type="checkbox"
@@ -494,6 +588,7 @@ export function QuarkSeasonIngestWorkspace({
             {preview.sources.map((source) => {
               const selection = selectionsById.get(source.source_candidate_id)
               if (!selection) return null
+              const coverage = sourceCoverage(source)
               return (
                 <div
                   key={source.source_candidate_id}
@@ -512,6 +607,16 @@ export function QuarkSeasonIngestWorkspace({
                       <p className="mt-1 truncate text-xs text-slate-500">
                         {source.relative_path || '分享根目录'} · {source.season_status}
                       </p>
+                      {source.files.length > 0 ? (
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          视频 {coverage.videoCount} · 覆盖 {coverage.episodes.length} 集
+                          {coverage.episodes.length > 0 && selection.season_number
+                            ? `（${formatEpisodeRanges(coverage.episodes, selection.season_number)}）`
+                            : ''}
+                          {coverage.unknownCount > 0 ? ` · 待确认 ${coverage.unknownCount}` : ''}
+                          {coverage.ignoredCount > 0 ? ` · 已忽略 ${coverage.ignoredCount}` : ''}
+                        </p>
+                      ) : null}
                       {source.save_path ? (
                         <p className="mt-1 break-all font-mono text-[11px] text-slate-500">
                           {source.save_path}
@@ -533,11 +638,7 @@ export function QuarkSeasonIngestWorkspace({
                         className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold"
                       >
                         <option value="">未设置季度</option>
-                        {[...new Set([
-                          ...Array.from({ length: 99 }, (_, index) => index + 1),
-                          ...seasonOptions,
-                          source.detected_season ?? 0,
-                        ])]
+                        {[...new Set(seasonOptions)]
                           .filter((value) => value > 0)
                           .sort((left, right) => left - right)
                           .map((value) => (

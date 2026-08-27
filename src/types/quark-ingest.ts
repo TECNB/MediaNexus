@@ -147,7 +147,23 @@ export type QuarkMultiSourcePreview = {
   root_source_candidate_id: string | null
   entries: QuarkSourceTreeNode[]
   sources: QuarkSourcePlan[]
+  season_coverages: QuarkSeasonCoverage[]
   warnings: string[]
+  message: string
+}
+
+export type QuarkSeasonCoverage = {
+  season_number: number
+  video_count: number
+  recognized_episode_count: number
+  expected_episode_count: number | null
+  aired_episode_count: number | null
+  missing_episode_numbers: number[]
+  extra_episode_numbers: number[]
+  unknown_video_count: number
+  ignored_video_count: number
+  unknown_air_date_numbers: number[]
+  coverage_status: 'COMPLETE' | 'MISSING' | 'NEEDS_REVIEW' | 'UNAVAILABLE' | string
   message: string
 }
 

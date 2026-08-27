@@ -57,6 +57,7 @@ type QuarkReleasePanelProps = {
   targetMediaType: QuarkReleaseMediaType
   item: SearchableResourceItem
   seasonNumber: number
+  seasonOptions: number[]
 }
 
 const availabilityCopy = {
@@ -118,6 +119,7 @@ export function QuarkReleasePanel({
   targetMediaType,
   item,
   seasonNumber,
+  seasonOptions,
 }: QuarkReleasePanelProps) {
   const requestIdRef = useRef(0)
   const searchControllerRef = useRef<AbortController | null>(null)
@@ -725,7 +727,7 @@ export function QuarkReleasePanel({
                   originalTitle={item.original_title}
                   tmdbId={item.tmdb_id}
                   selectedSeason={seasonNumber}
-                  seasonOptions={[seasonNumber]}
+                  seasonOptions={seasonOptions}
                 />
               </div>
             ) : previewState.preview ? (
