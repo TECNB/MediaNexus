@@ -375,11 +375,16 @@ export function QuarkSeasonIngestWorkspace({
       setStatus(task.status === 'FAILED' ? 'error' : 'success')
       setMessage(task.message)
       if (task.status === 'PARTIAL') {
-        const createdSourceIds = new Set(
-          task.sources
-            .filter((source) => source.status === 'CREATED')
-            .map((source) => source.source_candidate_id),
-        )
+        const sourceResults = new Map<string, string[]>()
+        for (const source of task.sources) {
+          sourceResults.set(source.source_candidate_id, [
+            ...(sourceResults.get(source.source_candidate_id) ?? []),
+            source.status,
+          ])
+        }
+        const createdSourceIds = new Set([...sourceResults.entries()]
+          .filter(([, statuses]) => statuses.length > 0 && statuses.every((item) => item === 'CREATED'))
+          .map(([sourceId]) => sourceId))
         setSelections((current) => current.map((selection) =>
           createdSourceIds.has(selection.source_candidate_id)
             ? { ...selection, ignored: true, follow_updates: false }
@@ -693,7 +698,9 @@ export function QuarkSeasonIngestWorkspace({
             <div className="mt-1 space-y-1 text-xs">
               {createdTask.sources
                 .filter((source) => source.status !== 'CREATED')
-                .map((source) => <p key={`${source.source_candidate_id}:${source.task_name}`}>{source.task_name}：{source.message}</p>)}
+                .map((source) => (
+                  <p key={`${source.source_candidate_id}:${source.task_name}`}>{source.message}</p>
+                ))}
               {createdTask.warnings.map((warning) => <p key={warning}>· {warning}</p>)}
             </div>
           ) : null}
