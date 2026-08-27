@@ -15,11 +15,18 @@ export type CreateSeasonQuarkIngestPayload = {
   tmdb_id: number | null
 }
 
+export type QuarkFileSelection = {
+  file_id: string
+  episode_number: number | null
+  ignored: boolean
+}
+
 export type QuarkSourceSelection = {
   source_candidate_id: string
   season_number: number | null
   ignored: boolean
   follow_updates: boolean
+  files: QuarkFileSelection[]
 }
 
 export type QuarkMultiSourcePayload = {
@@ -94,10 +101,11 @@ export type QuarkIngestPreview = {
 }
 
 export type QuarkRenamePreview = {
+  file_id: string
   source_name: string
   target_name: string
   episode_number: number | null
-  status: 'READY' | 'UNCHANGED' | 'EXCLUDED' | 'UNRECOGNIZED' | 'CONFLICT' | string
+  status: 'READY' | 'MANUAL' | 'IGNORED' | 'UNCHANGED' | 'EXCLUDED' | 'UNRECOGNIZED' | 'CONFLICT' | string
   message: string | null
 }
 

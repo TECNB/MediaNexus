@@ -21,6 +21,7 @@ import type {
   QuarkMultiSourcePayload,
   QuarkMultiSourcePreview,
   QuarkMultiSourceTaskResult,
+  QuarkFileSelection,
   QuarkSourceSelection,
   QuarkSourceTreeNode,
 } from '@/types/quark-ingest'
@@ -83,6 +84,7 @@ function initialSelections(
           : source.detected_season,
       ignored: scope === 'CURRENT_SEASON' ? !selectedForCurrentSeason : false,
       follow_updates: false,
+      files: [],
     }
   })
 }
@@ -198,6 +200,10 @@ function SourceTree({
   )
 }
 
+function isVideoFile(name: string) {
+  return /\.(mkv|mp4|avi|mov|wmv|flv|ts|m2ts|webm|rmvb)$/i.test(name)
+}
+
 export function QuarkSeasonIngestWorkspace({
   mediaType,
   shareUrl,
@@ -295,6 +301,23 @@ export function QuarkSeasonIngestWorkspace({
       selection.source_candidate_id === candidateId ? update(selection) : selection,
     ))
     markPlanDirty()
+  }
+
+  function updateFileSelection(
+    candidateId: string,
+    fileId: string,
+    update: (current: QuarkFileSelection | null) => QuarkFileSelection | null,
+  ) {
+    updateSelection(candidateId, (selection) => {
+      const current = selection.files.find((file) => file.file_id === fileId) ?? null
+      const next = update(current)
+      return {
+        ...selection,
+        files: next
+          ? [...selection.files.filter((file) => file.file_id !== fileId), next]
+          : selection.files.filter((file) => file.file_id !== fileId),
+      }
+    })
   }
 
   function updateDescendants(
@@ -544,13 +567,69 @@ export function QuarkSeasonIngestWorkspace({
                     </div>
                   </div>
                   {source.files.length > 0 ? (
-                    <div className="mt-3 rounded-lg bg-slate-950 px-3 py-2 font-mono text-[11px] leading-5 text-slate-200">
-                      {source.files.map((file) => (
-                        <div key={`${file.source_name}:${file.target_name}`} className="break-all">
-                          {file.source_name} → {file.target_name}
-                          {file.message ? ` (${file.message})` : ''}
-                        </div>
-                      ))}
+                    <div className="mt-3 divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                      {source.files.map((file) => {
+                        const correction = selection.files.find((item) => item.file_id === file.file_id)
+                        const canCorrect = file.status !== 'EXCLUDED' && !selection.ignored
+                        return (
+                          <div key={file.file_id} className="grid gap-2 px-3 py-2.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                            <div className="min-w-0 font-mono text-[11px] leading-5">
+                              <p className="break-all text-slate-700">
+                                {file.source_name} <span className="text-slate-400">→</span> {file.target_name}
+                              </p>
+                              {file.message ? (
+                                <p className={cn(
+                                  'break-all font-sans',
+                                  file.status === 'CONFLICT' || file.status === 'UNRECOGNIZED'
+                                    ? 'text-rose-600'
+                                    : 'text-slate-500',
+                                )}>
+                                  {file.message}
+                                </p>
+                              ) : null}
+                            </div>
+                            {canCorrect ? (
+                              <div className="flex items-center gap-3">
+                                {isVideoFile(file.source_name) ? (
+                                  <label className="flex items-center gap-1.5 text-[11px] text-slate-600">
+                                    <span>手动集数</span>
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={999}
+                                      value={correction?.ignored ? '' : correction?.episode_number ?? ''}
+                                      disabled={correction?.ignored}
+                                      onChange={(event) => {
+                                        const episode = Number(event.target.value)
+                                        updateFileSelection(source.source_candidate_id, file.file_id, () =>
+                                          episode > 0 && episode <= 999
+                                            ? { file_id: file.file_id, episode_number: episode, ignored: false }
+                                            : null)
+                                      }}
+                                      aria-label={`${file.source_name}手动集数`}
+                                      className="h-8 w-16 rounded-md border border-slate-200 px-2 text-center text-xs"
+                                    />
+                                  </label>
+                                ) : null}
+                                <label className="flex items-center gap-1.5 text-[11px] text-slate-600">
+                                  <input
+                                    type="checkbox"
+                                    checked={correction?.ignored === true}
+                                    onChange={(event) => updateFileSelection(
+                                      source.source_candidate_id,
+                                      file.file_id,
+                                      () => event.target.checked
+                                        ? { file_id: file.file_id, episode_number: null, ignored: true }
+                                        : null,
+                                    )}
+                                  />
+                                  忽略文件
+                                </label>
+                              </div>
+                            ) : null}
+                          </div>
+                        )
+                      })}
                     </div>
                   ) : null}
                   {source.errors.length > 0 ? (
@@ -589,7 +668,7 @@ export function QuarkSeasonIngestWorkspace({
             ? '正在处理…'
             : !planReady
               ? '生成逐文件改名预览'
-              : '创建并立即执行 QAS 任务'}
+              : '确认并开始入库'}
         </Button>
       ) : status === 'error' ? (
         <Button
@@ -612,10 +691,9 @@ export function QuarkSeasonIngestWorkspace({
           {message}
           {createdTask ? (
             <div className="mt-1 space-y-1 text-xs">
-              <p>已创建 {createdTask.created_task_count}/{createdTask.planned_task_count} 个 QAS 任务</p>
               {createdTask.sources
                 .filter((source) => source.status !== 'CREATED')
-                .map((source) => <p key={source.source_candidate_id}>{source.task_name}：{source.message}</p>)}
+                .map((source) => <p key={`${source.source_candidate_id}:${source.task_name}`}>{source.task_name}：{source.message}</p>)}
               {createdTask.warnings.map((warning) => <p key={warning}>· {warning}</p>)}
             </div>
           ) : null}
