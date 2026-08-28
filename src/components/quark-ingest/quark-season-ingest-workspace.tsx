@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronRight,
   ChevronsDownUp,
@@ -6,6 +6,7 @@ import {
   CloudUpload,
   File,
   Folder,
+  GripVertical,
   Loader2,
   RefreshCw,
 } from 'lucide-react'
@@ -22,6 +23,9 @@ import type {
   QuarkMultiSourcePreview,
   QuarkMultiSourceTaskResult,
   QuarkFileSelection,
+  QuarkAssignmentType,
+  QuarkEpisodeAlignment,
+  QuarkRenamePreview,
   QuarkSourceSelection,
   QuarkSourceTreeNode,
   QuarkSeasonCoverage,
@@ -143,6 +147,36 @@ function coverageLabel(status: string) {
   if (status === 'MISSING') return '缺集'
   if (status === 'NEEDS_REVIEW') return '待确认'
   return '暂无法判断'
+}
+
+const ASSIGNMENT_TYPE_OPTIONS: Array<{ value: QuarkAssignmentType; label: string }> = [
+  { value: 'PRIMARY', label: '正片' },
+  { value: 'EDITION', label: '版本' },
+  { value: 'SEGMENT', label: '分段' },
+  { value: 'EXTRA', label: '额外内容' },
+  { value: 'UNKNOWN', label: '待确认' },
+]
+
+function assignmentTypeLabel(value: string | null | undefined) {
+  return ASSIGNMENT_TYPE_OPTIONS.find((option) => option.value === value)?.label ?? '正片'
+}
+
+function alignmentStatusLabel(status: string) {
+  if (status === 'MATCHED') return '已对齐'
+  if (status === 'MULTIPLE') return '多版本/分段'
+  if (status === 'MISSING') return '缺集'
+  return '待确认'
+}
+
+function alignmentEpisodeLabel(row: QuarkEpisodeAlignment) {
+  return `S${String(row.season_number).padStart(2, '0')}E${String(row.episode_number).padStart(2, '0')}`
+}
+
+type FileAssignmentPatch = {
+  episodeNumber?: number | null
+  assignmentType?: QuarkAssignmentType | null
+  editionLabel?: string | null
+  segmentLabel?: string | null
 }
 
 function SourceTree({
@@ -293,7 +327,9 @@ export function QuarkSeasonIngestWorkspace({
     () => new Map(selections.map((selection) => [selection.source_candidate_id, selection])),
     [selections],
   )
-  const planReady = Boolean(preview?.ready && preview.sources.length > 0)
+  const planReady = Boolean(
+    preview?.ready && preview.sources.length > 0 && preview.planned_task_count > 0,
+  )
   const payload: QuarkMultiSourcePayload = {
     share_url: shareUrl,
     title,
@@ -303,6 +339,55 @@ export function QuarkSeasonIngestWorkspace({
     follow_updates_enabled: subscriptionEnabled,
     sources: selections,
   }
+
+  const episodeAlignments = useMemo(
+    () => preview?.episode_alignments ?? [],
+    [preview?.episode_alignments],
+  )
+  const episodeOptionsBySeason = useMemo(() => {
+    const numbersBySeason = new Map<number, Set<number>>()
+    const add = (season: number | null | undefined, episode: number) => {
+      if (season == null || episode <= 0 || episode > 999) return
+      const numbers = numbersBySeason.get(season) ?? new Set<number>()
+      numbers.add(episode)
+      numbersBySeason.set(season, numbers)
+    }
+    for (const alignment of episodeAlignments) add(alignment.season_number, alignment.episode_number)
+    for (const coverage of preview?.season_coverages ?? []) {
+      for (const episode of coverage.episodes ?? []) add(coverage.season_number, episode.episode_number)
+      for (const episode of coverage.missing_episode_numbers) add(coverage.season_number, episode)
+    }
+    for (const source of preview?.sources ?? []) {
+      for (const file of source.files) {
+        for (const episode of targetEpisodeNumbers(file.target_name)) add(source.selected_season, episode)
+        if (file.episode_number != null) add(source.selected_season, file.episode_number)
+      }
+    }
+    return new Map([...numbersBySeason.entries()].map(([season, numbers]) => [
+      season,
+      [...numbers].sort((left, right) => left - right),
+    ]))
+  }, [episodeAlignments, preview?.season_coverages, preview?.sources])
+
+  const fileSources = useMemo(() => {
+    const byFileId = new Map<string, { sourceCandidateId: string; file: QuarkRenamePreview }>()
+    for (const source of preview?.sources ?? []) {
+      for (const file of source.files) {
+        byFileId.set(file.file_id, { sourceCandidateId: source.source_candidate_id, file })
+      }
+    }
+    return byFileId
+  }, [preview?.sources])
+
+  const alignedFileIds = useMemo(() => new Set(
+    episodeAlignments.flatMap((alignment) => alignment.files.map((file) => file.file_id)),
+  ), [episodeAlignments])
+
+  const pendingFiles = useMemo(() => [...fileSources.values()]
+    .filter(({ file }) => isVideoFile(file.source_name)
+      && !alignedFileIds.has(file.file_id)
+      && ['UNRECOGNIZED', 'CONFLICT', 'MANUAL'].includes(file.status)),
+  [alignedFileIds, fileSources])
 
   const inspectShareTree = useCallback(async () => {
     controllerRef.current?.abort()
@@ -395,6 +480,53 @@ export function QuarkSeasonIngestWorkspace({
         : selection,
     ))
     markPlanDirty()
+  }
+
+  function updateFileAssignment(
+    candidateId: string,
+    fileId: string,
+    patch: FileAssignmentPatch,
+  ) {
+    updateFileSelection(candidateId, fileId, (current) => {
+      const assignmentType = patch.assignmentType !== undefined
+        ? patch.assignmentType
+        : current?.assignment_type ?? 'PRIMARY'
+      const typeChanged = patch.assignmentType !== undefined
+        && patch.assignmentType !== current?.assignment_type
+      return {
+        file_id: fileId,
+        episode_number: patch.episodeNumber !== undefined
+          ? patch.episodeNumber
+          : current?.episode_number ?? null,
+        ignored: false,
+        assignment_type: assignmentType,
+        edition_label: patch.editionLabel !== undefined
+          ? patch.editionLabel
+          : typeChanged ? null : current?.edition_label ?? null,
+        segment_label: patch.segmentLabel !== undefined
+          ? patch.segmentLabel
+          : typeChanged ? null : current?.segment_label ?? null,
+        forced: true,
+      }
+    })
+  }
+
+  function handleFileDrop(event: DragEvent<HTMLDivElement>, seasonNumber: number, episodeNumber: number) {
+    event.preventDefault()
+    const fileId = event.dataTransfer.getData('text/plain')
+    if (!fileId) return
+    const source = fileSources.get(fileId)
+    if (!source) return
+    updateSelection(source.sourceCandidateId, (selection) => ({
+      ...selection,
+      season_number: seasonNumber,
+    }))
+    updateFileAssignment(source.sourceCandidateId, fileId, {
+      episodeNumber,
+      assignmentType: (source.file.assignment_type as QuarkAssignmentType | null) ?? 'PRIMARY',
+      editionLabel: source.file.edition_label ?? null,
+      segmentLabel: source.file.segment_label ?? null,
+    })
   }
 
   function toggleDirectory(relativePath: string, expanded: boolean) {
@@ -560,6 +692,111 @@ export function QuarkSeasonIngestWorkspace({
             </div>
           ) : null}
 
+          {episodeAlignments.length > 0 || pendingFiles.length > 0 ? (
+            <section className="space-y-3 rounded-xl border border-indigo-100 bg-indigo-50/40 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold text-slate-800">TMDB 对齐工作台</p>
+                  <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                    拖动文件到目标集数，或在下方文件列表使用 Select 精确调整。缺集只提示，不阻止提交；待确认文件必须处置。
+                  </p>
+                </div>
+                <span className={cn(
+                  'rounded-full px-2 py-1 text-[10px] font-semibold',
+                  preview.ready ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700',
+                )}>
+                  {preview.ready
+                    ? `预览可提交 · ${preview.planned_task_count} 个执行任务`
+                    : '调整后请重新生成预览'}
+                </span>
+              </div>
+              {episodeAlignments.length > 0 ? (
+                <div className="space-y-2">
+                  {episodeAlignments.map((alignment) => (
+                    <div
+                      key={`${alignment.season_number}:${alignment.episode_number}`}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => handleFileDrop(event, alignment.season_number, alignment.episode_number)}
+                      className="rounded-lg border border-indigo-100 bg-white px-3 py-2.5"
+                    >
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                        <span className="font-semibold text-slate-900">
+                          {alignmentEpisodeLabel(alignment)}
+                        </span>
+                        {alignment.air_date ? <span className="text-slate-500">{alignment.air_date}</span> : null}
+                        {alignment.episode_title ? <span className="truncate text-slate-600">{alignment.episode_title}</span> : null}
+                        <span className={cn(
+                          'rounded-full px-1.5 py-0.5 text-[10px]',
+                          alignment.status === 'MISSING'
+                            ? 'bg-amber-100 text-amber-700'
+                            : alignment.status === 'MULTIPLE'
+                              ? 'bg-indigo-100 text-indigo-700'
+                              : 'bg-emerald-100 text-emerald-700',
+                        )}>
+                          {alignmentStatusLabel(alignment.status)}
+                        </span>
+                      </div>
+                      {alignment.files.length > 0 ? (
+                        <div className="mt-2 space-y-1">
+                          {alignment.files.map((file) => (
+                            <div
+                              key={file.file_id}
+                              draggable={isVideoFile(file.source_name)}
+                              onDragStart={(event) => {
+                                event.dataTransfer.setData('text/plain', file.file_id)
+                                event.dataTransfer.effectAllowed = 'move'
+                              }}
+                              className="flex min-w-0 cursor-grab items-start gap-1.5 rounded-md bg-slate-50 px-2 py-1 text-[11px] active:cursor-grabbing"
+                            >
+                              <GripVertical className="mt-0.5 h-3 w-3 shrink-0 text-slate-400" />
+                              <span className="min-w-0 break-all font-mono text-slate-600">
+                                {file.source_name}
+                              </span>
+                              <span className="shrink-0 text-slate-400">→</span>
+                              <span className="min-w-0 break-all font-mono text-slate-800">
+                                {file.target_name}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-2 rounded-md border border-dashed border-indigo-200 px-2 py-2 text-[11px] text-indigo-500">
+                          将待确认视频拖到这里，映射为该 TMDB 集数
+                        </p>
+                      )}
+                      {alignment.message ? (
+                        <p className="mt-1 text-[11px] text-slate-500">{alignment.message}</p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {pendingFiles.length > 0 ? (
+                <div className="rounded-lg border border-dashed border-rose-200 bg-rose-50/50 px-3 py-2">
+                  <p className="text-[11px] font-semibold text-rose-700">待处置视频</p>
+                  <p className="mt-1 text-[11px] text-rose-600">拖入上方集数，或在来源文件行中指定集数、版本/分段，亦可明确忽略。</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {pendingFiles.map(({ file }) => (
+                      <span
+                        key={file.file_id}
+                        draggable
+                        onDragStart={(event) => {
+                          event.dataTransfer.setData('text/plain', file.file_id)
+                          event.dataTransfer.effectAllowed = 'move'
+                        }}
+                        className="inline-flex max-w-full cursor-grab items-center gap-1 rounded-md border border-rose-200 bg-white px-2 py-1 font-mono text-[10px] text-rose-700 active:cursor-grabbing"
+                        title={file.source_name}
+                      >
+                        <GripVertical className="h-3 w-3 shrink-0 text-rose-400" />
+                        <span className="truncate">{file.source_name}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
           <label className="flex items-start gap-3 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
             <input
               type="checkbox"
@@ -589,6 +826,9 @@ export function QuarkSeasonIngestWorkspace({
               const selection = selectionsById.get(source.source_candidate_id)
               if (!selection) return null
               const coverage = sourceCoverage(source)
+              const sourceEpisodeOptions = episodeOptionsBySeason.get(
+                selection.season_number ?? source.selected_season ?? selectedSeason,
+              ) ?? []
               return (
                 <div
                   key={source.source_candidate_id}
@@ -678,9 +918,21 @@ export function QuarkSeasonIngestWorkspace({
                         const correction = selection.files.find((item) => item.file_id === file.file_id)
                         const canCorrect = file.status !== 'EXCLUDED' && !selection.ignored
                         return (
-                          <div key={file.file_id} className="grid gap-2 px-3 py-2.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                          <div
+                            key={file.file_id}
+                            draggable={isVideoFile(file.source_name) && !selection.ignored}
+                            onDragStart={(event) => {
+                              if (!isVideoFile(file.source_name) || selection.ignored) return
+                              event.dataTransfer.setData('text/plain', file.file_id)
+                              event.dataTransfer.effectAllowed = 'move'
+                            }}
+                            className="grid gap-2 px-3 py-2.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                          >
                             <div className="min-w-0 font-mono text-[11px] leading-5">
                               <p className="break-all text-slate-700">
+                                {isVideoFile(file.source_name) ? (
+                                  <GripVertical className="mr-1 inline h-3 w-3 text-slate-400" />
+                                ) : null}
                                 {file.source_name} <span className="text-slate-400">→</span> {file.target_name}
                               </p>
                               {file.message ? (
@@ -695,28 +947,123 @@ export function QuarkSeasonIngestWorkspace({
                               ) : null}
                             </div>
                             {canCorrect ? (
-                              <div className="flex items-center gap-3">
+                              <div className="flex flex-wrap items-center gap-3">
                                 {isVideoFile(file.source_name) ? (
                                   <label className="flex items-center gap-1.5 text-[11px] text-slate-600">
-                                    <span>手动集数</span>
+                                    <span>目标集数</span>
+                                    <select
+                                      value={correction?.ignored ? '' : correction?.episode_number ?? file.episode_number ?? ''}
+                                      disabled={correction?.ignored}
+                                      onChange={(event) => {
+                                        const episode = Number(event.target.value)
+                                        updateFileAssignment(source.source_candidate_id, file.file_id, {
+                                          episodeNumber: episode > 0 && episode <= 999 ? episode : null,
+                                        })
+                                      }}
+                                      aria-label={`${file.source_name}目标集数`}
+                                      className="h-8 max-w-[9rem] rounded-md border border-slate-200 bg-white px-1.5 text-xs"
+                                    >
+                                      <option value="">选择集数</option>
+                                      {sourceEpisodeOptions.map((episode) => (
+                                        <option key={episode} value={episode}>
+                                          S{String(selection.season_number ?? selectedSeason).padStart(2, '0')}E{String(episode).padStart(2, '0')}
+                                        </option>
+                                      ))}
+                                    </select>
                                     <input
                                       type="number"
                                       min={1}
                                       max={999}
-                                      value={correction?.ignored ? '' : correction?.episode_number ?? ''}
+                                      value={correction?.ignored ? '' : correction?.episode_number ?? file.episode_number ?? ''}
                                       disabled={correction?.ignored}
                                       onChange={(event) => {
                                         const episode = Number(event.target.value)
-                                        updateFileSelection(source.source_candidate_id, file.file_id, () =>
-                                          episode > 0 && episode <= 999
-                                            ? { file_id: file.file_id, episode_number: episode, ignored: false }
-                                            : null)
+                                        if (episode > 0 && episode <= 999) {
+                                          updateFileAssignment(source.source_candidate_id, file.file_id, {
+                                            episodeNumber: episode,
+                                          })
+                                        } else {
+                                          updateFileSelection(source.source_candidate_id, file.file_id, () => null)
+                                        }
                                       }}
-                                      aria-label={`${file.source_name}手动集数`}
+                                      aria-label={`${file.source_name}自定义集数`}
                                       className="h-8 w-16 rounded-md border border-slate-200 px-2 text-center text-xs"
                                     />
                                   </label>
                                 ) : null}
+                                {isVideoFile(file.source_name) ? (() => {
+                                  const assignmentType = correction?.assignment_type
+                                    ?? file.assignment_type
+                                    ?? 'PRIMARY'
+                                  const label = assignmentType === 'SEGMENT'
+                                    ? correction?.segment_label ?? file.segment_label ?? ''
+                                    : correction?.edition_label ?? file.edition_label ?? ''
+                                  return (
+                                    <>
+                                      {!correction && assignmentType !== 'PRIMARY' && assignmentType !== 'UNKNOWN' ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => updateFileAssignment(
+                                            source.source_candidate_id,
+                                            file.file_id,
+                                            {
+                                              episodeNumber: file.episode_number,
+                                              assignmentType: assignmentType as QuarkAssignmentType,
+                                              editionLabel: file.edition_label ?? null,
+                                              segmentLabel: file.segment_label ?? null,
+                                            },
+                                          )}
+                                          className="h-8 rounded-md border border-indigo-200 bg-indigo-50 px-2 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100"
+                                        >
+                                          采用识别
+                                        </button>
+                                      ) : null}
+                                      <select
+                                        value={assignmentType}
+                                        onChange={(event) => updateFileAssignment(
+                                          source.source_candidate_id,
+                                          file.file_id,
+                                          {
+                                            episodeNumber: correction?.episode_number ?? file.episode_number ?? null,
+                                            assignmentType: event.target.value as QuarkAssignmentType,
+                                          },
+                                        )}
+                                        aria-label={`${file.source_name}处置类型`}
+                                        className="h-8 rounded-md border border-slate-200 bg-white px-1.5 text-xs"
+                                      >
+                                        {ASSIGNMENT_TYPE_OPTIONS.map((option) => (
+                                          <option key={option.value} value={option.value}>{option.label}</option>
+                                        ))}
+                                      </select>
+                                      {(assignmentType === 'EDITION' || assignmentType === 'SEGMENT' || assignmentType === 'EXTRA') ? (
+                                        <input
+                                          type="text"
+                                          value={label}
+                                          onChange={(event) => updateFileAssignment(
+                                            source.source_candidate_id,
+                                            file.file_id,
+                                            assignmentType === 'SEGMENT'
+                                              ? {
+                                                  episodeNumber: correction?.episode_number ?? file.episode_number ?? null,
+                                                  segmentLabel: event.target.value,
+                                                  editionLabel: null,
+                                                }
+                                              : {
+                                                  episodeNumber: correction?.episode_number ?? file.episode_number ?? null,
+                                                  editionLabel: event.target.value,
+                                                  segmentLabel: null,
+                                                },
+                                          )}
+                                          placeholder={assignmentType === 'SEGMENT'
+                                            ? '如：上'
+                                            : assignmentType === 'EXTRA' ? '如：加更' : '如：VIP'}
+                                          aria-label={`${file.source_name}${assignmentTypeLabel(assignmentType)}标签`}
+                                          className="h-8 w-20 rounded-md border border-slate-200 px-2 text-xs"
+                                        />
+                                      ) : null}
+                                    </>
+                                  )
+                                })() : null}
                                 <label className="flex items-center gap-1.5 text-[11px] text-slate-600">
                                   <input
                                     type="checkbox"
@@ -725,7 +1072,15 @@ export function QuarkSeasonIngestWorkspace({
                                       source.source_candidate_id,
                                       file.file_id,
                                       () => event.target.checked
-                                        ? { file_id: file.file_id, episode_number: null, ignored: true }
+                                        ? {
+                                            file_id: file.file_id,
+                                            episode_number: null,
+                                            ignored: true,
+                                            assignment_type: null,
+                                            edition_label: null,
+                                            segment_label: null,
+                                            forced: false,
+                                          }
                                         : null,
                                     )}
                                   />

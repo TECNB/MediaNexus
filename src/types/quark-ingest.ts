@@ -19,7 +19,13 @@ export type QuarkFileSelection = {
   file_id: string
   episode_number: number | null
   ignored: boolean
+  assignment_type?: QuarkAssignmentType | null
+  edition_label?: string | null
+  segment_label?: string | null
+  forced?: boolean
 }
+
+export type QuarkAssignmentType = 'PRIMARY' | 'EDITION' | 'SEGMENT' | 'EXTRA' | 'UNKNOWN'
 
 export type QuarkSourceSelection = {
   source_candidate_id: string
@@ -107,6 +113,35 @@ export type QuarkRenamePreview = {
   episode_number: number | null
   status: 'READY' | 'MANUAL' | 'IGNORED' | 'UNCHANGED' | 'EXCLUDED' | 'UNRECOGNIZED' | 'CONFLICT' | string
   message: string | null
+  detected_episode?: number | null
+  detected_date?: string | null
+  tmdb_air_date?: string | null
+  group_id?: string | null
+  assignment_type?: QuarkAssignmentType | string | null
+  edition_label?: string | null
+  segment_label?: string | null
+  confidence?: number | null
+  reason_codes?: string[]
+  forced?: boolean
+}
+
+export type QuarkSeasonEpisode = {
+  episode_number: number
+  air_date: string | null
+  episode_title: string | null
+  file_ids: string[]
+  status: 'MISSING' | 'MATCHED' | 'MULTIPLE' | string
+  message: string | null
+}
+
+export type QuarkEpisodeAlignment = {
+  season_number: number
+  episode_number: number
+  air_date: string | null
+  episode_title: string | null
+  files: QuarkRenamePreview[]
+  status: 'MISSING' | 'MATCHED' | 'MULTIPLE' | string
+  message: string | null
 }
 
 export type QuarkSourceTreeNode = {
@@ -148,6 +183,8 @@ export type QuarkMultiSourcePreview = {
   entries: QuarkSourceTreeNode[]
   sources: QuarkSourcePlan[]
   season_coverages: QuarkSeasonCoverage[]
+  episode_alignments?: QuarkEpisodeAlignment[]
+  planned_task_count: number
   warnings: string[]
   message: string
 }
@@ -165,6 +202,7 @@ export type QuarkSeasonCoverage = {
   unknown_air_date_numbers: number[]
   coverage_status: 'COMPLETE' | 'MISSING' | 'NEEDS_REVIEW' | 'UNAVAILABLE' | string
   message: string
+  episodes?: QuarkSeasonEpisode[]
 }
 
 export type QuarkSourceTaskResult = {
