@@ -36,6 +36,7 @@ export function projectQuarkAlignmentWorkspace(
   pendingFiles: QuarkPendingAlignmentFile[],
   fileSources: Map<string, QuarkAlignmentFileSource>,
   selections: QuarkSourceSelection[],
+  detachedFileIds: Set<string> = new Set(),
 ): QuarkAlignmentWorkspaceProjection {
   const selectionsById = new Map(
     selections.map((selection) => [selection.source_candidate_id, selection]),
@@ -55,7 +56,10 @@ export function projectQuarkAlignmentWorkspace(
         ? selectionsById.get(source.sourceCandidateId)
         : null
       const local = correctionsByFileId.get(file.file_id)
-      if (sourceSelection?.ignored || local?.correction.ignored || local?.correction.episode_number != null) {
+      if (detachedFileIds.has(file.file_id)
+        || sourceSelection?.ignored
+        || local?.correction.ignored
+        || local?.correction.episode_number != null) {
         continue
       }
       filesById.set(file.file_id, file)
@@ -64,7 +68,9 @@ export function projectQuarkAlignmentWorkspace(
     for (const selection of selections) {
       if (selection.ignored || selection.season_number !== alignment.season_number) continue
       for (const correction of selection.files) {
-        if (correction.ignored || correction.episode_number !== alignment.episode_number) continue
+        if (detachedFileIds.has(correction.file_id)
+          || correction.ignored
+          || correction.episode_number !== alignment.episode_number) continue
         const source = fileSources.get(correction.file_id)
         if (!source) continue
         filesById.set(correction.file_id, {
@@ -93,16 +99,28 @@ export function projectQuarkAlignmentWorkspace(
     }
   })
 
-  const projectedPendingFiles = pendingFiles.filter((pending) => {
+  const projectedPendingFiles = new Map<string, QuarkPendingAlignmentFile>()
+  for (const pending of pendingFiles) {
     const selection = selectionsById.get(pending.sourceCandidateId)
     const correction = correctionsByFileId.get(pending.file.file_id)?.correction
-    return !selection?.ignored
+    if (!selection?.ignored
       && !correction?.ignored
-      && correction?.episode_number == null
-  })
+      && (detachedFileIds.has(pending.file.file_id) || correction?.episode_number == null)) {
+      projectedPendingFiles.set(pending.file.file_id, pending)
+    }
+  }
+  for (const fileId of detachedFileIds) {
+    const source = fileSources.get(fileId)
+    if (!source) continue
+    const selection = selectionsById.get(source.sourceCandidateId)
+    const correction = correctionsByFileId.get(fileId)?.correction
+    if (!selection?.ignored && !correction?.ignored) {
+      projectedPendingFiles.set(fileId, source)
+    }
+  }
 
   return {
     episodeAlignments: projectedAlignments,
-    pendingFiles: projectedPendingFiles,
+    pendingFiles: [...projectedPendingFiles.values()],
   }
 }

@@ -139,3 +139,39 @@ test('clears a manual mapping when the file is dropped back into pending', () =>
     ['file-1'],
   )
 })
+
+test('projects an automatically aligned file back into pending when detached', () => {
+  const automaticFile = {
+    ...file('file-1'),
+    source_name: '.EP06.2019.1080p.mp4',
+    target_name: '欢乐喜剧人 - S05E06 - 1080p.mp4',
+    episode_number: 6,
+    status: 'READY',
+  }
+  const automaticAlignment = {
+    ...alignment(5, 6),
+    files: [automaticFile],
+    status: 'MATCHED' as const,
+  }
+  const selections: QuarkSourceSelection[] = [{
+    source_candidate_id: 'source-1',
+    season_number: 5,
+    ignored: false,
+    follow_updates: false,
+    files: [],
+  }]
+
+  const projection = projectQuarkAlignmentWorkspace(
+    [automaticAlignment],
+    [],
+    new Map([['file-1', { sourceCandidateId: 'source-1', file: automaticFile }]]),
+    selections,
+    new Set(['file-1']),
+  )
+
+  assert.equal(projection.episodeAlignments[0].files.length, 0)
+  assert.deepEqual(
+    projection.pendingFiles.map((pending) => pending.file.file_id),
+    ['file-1'],
+  )
+})

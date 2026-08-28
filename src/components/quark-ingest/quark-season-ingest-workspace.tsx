@@ -324,6 +324,7 @@ export function QuarkSeasonIngestWorkspace({
   const [message, setMessage] = useState<string | null>(null)
   const [createdTask, setCreatedTask] = useState<QuarkMultiSourceTaskResult | null>(null)
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set())
+  const [detachedFileIds, setDetachedFileIds] = useState<Set<string>>(new Set())
   const [alignmentSeason, setAlignmentSeason] = useState<number | null>(selectedSeason)
   const controllerRef = useRef<AbortController | null>(null)
   const scopeRef = useRef<SaveScope>('CURRENT_SEASON')
@@ -399,7 +400,8 @@ export function QuarkSeasonIngestWorkspace({
     previewPendingFiles,
     fileSources,
     selections,
-  ), [fileSources, previewEpisodeAlignments, previewPendingFiles, selections])
+    detachedFileIds,
+  ), [detachedFileIds, fileSources, previewEpisodeAlignments, previewPendingFiles, selections])
   const episodeAlignments = alignmentProjection.episodeAlignments
   const pendingFiles = alignmentProjection.pendingFiles
 
@@ -439,6 +441,7 @@ export function QuarkSeasonIngestWorkspace({
     if (alignmentSeason == null) return true
     return selectionsById.get(pending.sourceCandidateId)?.season_number === alignmentSeason
   }), [alignmentSeason, pendingFiles, selectionsById])
+  const pendingPanelResolved = visiblePendingFiles.length === 0
 
   const inspectShareTree = useCallback(async () => {
     controllerRef.current?.abort()
@@ -447,6 +450,7 @@ export function QuarkSeasonIngestWorkspace({
     setPreview(null)
     setSelections([])
     setExpandedDirectories(new Set())
+    setDetachedFileIds(new Set())
     setStatus('loading')
     setMessage(null)
     setCreatedTask(null)
@@ -568,6 +572,12 @@ export function QuarkSeasonIngestWorkspace({
     if (!fileId) return
     const source = fileSources.get(fileId)
     if (!source) return
+    setDetachedFileIds((current) => {
+      if (!current.has(fileId)) return current
+      const next = new Set(current)
+      next.delete(fileId)
+      return next
+    })
     updateSelection(source.sourceCandidateId, (selection) => ({
       ...selection,
       season_number: seasonNumber,
@@ -586,6 +596,7 @@ export function QuarkSeasonIngestWorkspace({
     if (!fileId) return
     const source = fileSources.get(fileId)
     if (!source) return
+    setDetachedFileIds((current) => new Set(current).add(fileId))
     const originalSeason = preview?.sources.find(
       (item) => item.source_candidate_id === source.sourceCandidateId,
     )?.selected_season
@@ -616,6 +627,7 @@ export function QuarkSeasonIngestWorkspace({
     setScope(nextScope)
     if (preview) {
       setSelections(initialSelections(preview, nextScope, selectedSeason, seasonOptions))
+      setDetachedFileIds(new Set())
       setSubscriptionEnabled(false)
       markPlanDirty()
     }
@@ -632,6 +644,7 @@ export function QuarkSeasonIngestWorkspace({
         controllerRef.current = controller
         const planned = await previewQuarkMultiSourcePlan(mediaType, payload, controller.signal)
         setPreview(planned)
+        setDetachedFileIds(new Set())
         setStatus('success')
         return
       }
@@ -867,14 +880,32 @@ export function QuarkSeasonIngestWorkspace({
                     event.dataTransfer.dropEffect = 'move'
                   }}
                   onDrop={handlePendingDrop}
-                  className="max-h-40 min-h-0 overflow-y-auto rounded-lg border border-rose-200 bg-rose-50/70 px-3 py-3 lg:max-h-none"
+                  className={cn(
+                    'max-h-40 min-h-0 overflow-y-auto rounded-lg border px-3 py-3 lg:max-h-none',
+                    pendingPanelResolved
+                      ? 'border-emerald-200 bg-emerald-50/70'
+                      : 'border-rose-200 bg-rose-50/70',
+                  )}
                 >
-                  <div className="sticky top-0 z-10 -mx-3 -mt-3 border-b border-rose-100 bg-rose-50 px-3 py-3">
-                    <p className="text-[11px] font-semibold text-rose-700">
+                  <div className={cn(
+                    'sticky top-0 z-10 -mx-3 -mt-3 border-b px-3 py-3',
+                    pendingPanelResolved
+                      ? 'border-emerald-100 bg-emerald-50'
+                      : 'border-rose-100 bg-rose-50',
+                  )}>
+                    <p className={cn(
+                      'text-[11px] font-semibold',
+                      pendingPanelResolved ? 'text-emerald-700' : 'text-rose-700',
+                    )}>
                       第 {alignmentSeason ?? selectedSeason} 季待处置视频 · {visiblePendingFiles.length}
                     </p>
-                    <p className="mt-1 text-[10px] leading-4 text-rose-600">
-                      拖到左侧目标集数；已手动映射的文件可拖回此处撤销，版本、分段或忽略可在下方继续调整。
+                    <p className={cn(
+                      'mt-1 text-[10px] leading-4',
+                      pendingPanelResolved ? 'text-emerald-600' : 'text-rose-600',
+                    )}>
+                      {pendingPanelResolved
+                        ? '当前季度已完成对齐；仍可将左侧文件拖回此处重新调整。'
+                        : '拖到左侧目标集数；已映射的文件可拖回此处撤销，版本、分段或忽略可在下方继续调整。'}
                     </p>
                   </div>
                   {visiblePendingFiles.length > 0 ? (
@@ -929,8 +960,19 @@ export function QuarkSeasonIngestWorkspace({
             </span>
           </label>
 
-          <div className="space-y-3">
-            {preview.sources.map((source) => {
+          <details className="group rounded-xl border border-slate-200 bg-slate-50/70">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 marker:hidden">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">季度来源明细</p>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {preview.sources.length} 个来源 · 展开后可调整集数、版本、分段或忽略
+                </p>
+              </div>
+              <ChevronRight className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-90" />
+            </summary>
+            <div className="max-h-[min(60vh,36rem)] overflow-y-auto overscroll-contain border-t border-slate-200 p-3">
+              <div className="space-y-3">
+                {preview.sources.map((source) => {
               const selection = selectionsById.get(source.source_candidate_id)
               if (!selection) return null
               const coverage = sourceCoverage(source)
@@ -1206,8 +1248,10 @@ export function QuarkSeasonIngestWorkspace({
                   ) : null}
                 </div>
               )
-            })}
-          </div>
+                })}
+              </div>
+            </div>
+          </details>
           <p className={cn('text-sm', preview.ready ? 'text-emerald-700' : 'text-amber-700')}>
             {preview.message}
           </p>
