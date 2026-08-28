@@ -320,6 +320,7 @@ export function QuarkSeasonIngestWorkspace({
   const [message, setMessage] = useState<string | null>(null)
   const [createdTask, setCreatedTask] = useState<QuarkMultiSourceTaskResult | null>(null)
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set())
+  const [alignmentSeason, setAlignmentSeason] = useState<number | null>(selectedSeason)
   const controllerRef = useRef<AbortController | null>(null)
   const scopeRef = useRef<SaveScope>('CURRENT_SEASON')
 
@@ -388,6 +389,43 @@ export function QuarkSeasonIngestWorkspace({
       && !alignedFileIds.has(file.file_id)
       && ['UNRECOGNIZED', 'CONFLICT', 'MANUAL'].includes(file.status)),
   [alignedFileIds, fileSources])
+
+  const alignmentSeasons = useMemo(() => [...new Set([
+    ...episodeAlignments.map((alignment) => alignment.season_number),
+    ...(preview?.season_coverages ?? []).map((coverage) => coverage.season_number),
+  ])].filter((season) => season > 0).sort((left, right) => left - right), [
+    episodeAlignments,
+    preview?.season_coverages,
+  ])
+
+  useEffect(() => {
+    setAlignmentSeason((current) => {
+      if (current != null && alignmentSeasons.includes(current)) return current
+      if (alignmentSeasons.includes(selectedSeason)) return selectedSeason
+      return alignmentSeasons[0] ?? null
+    })
+  }, [alignmentSeasons, selectedSeason])
+
+  const visibleEpisodeAlignments = useMemo(
+    () => alignmentSeason == null
+      ? episodeAlignments
+      : episodeAlignments.filter((alignment) => alignment.season_number === alignmentSeason),
+    [alignmentSeason, episodeAlignments],
+  )
+
+  const pendingCountBySeason = useMemo(() => {
+    const counts = new Map<number, number>()
+    for (const pending of pendingFiles) {
+      const season = selectionsById.get(pending.sourceCandidateId)?.season_number
+      if (season != null) counts.set(season, (counts.get(season) ?? 0) + 1)
+    }
+    return counts
+  }, [pendingFiles, selectionsById])
+
+  const visiblePendingFiles = useMemo(() => pendingFiles.filter((pending) => {
+    if (alignmentSeason == null) return true
+    return selectionsById.get(pending.sourceCandidateId)?.season_number === alignmentSeason
+  }), [alignmentSeason, pendingFiles, selectionsById])
 
   const inspectShareTree = useCallback(async () => {
     controllerRef.current?.abort()
@@ -693,12 +731,12 @@ export function QuarkSeasonIngestWorkspace({
           ) : null}
 
           {episodeAlignments.length > 0 || pendingFiles.length > 0 ? (
-            <section className="space-y-3 rounded-xl border border-indigo-100 bg-indigo-50/40 px-4 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+            <section className="flex h-[min(76vh,46rem)] min-h-[34rem] flex-col overflow-hidden rounded-xl border border-indigo-100 bg-indigo-50/40 px-4 py-3">
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-xs font-semibold text-slate-800">TMDB 对齐工作台</p>
                   <p className="mt-1 text-[11px] leading-5 text-slate-500">
-                    拖动文件到目标集数，或在下方文件列表使用 Select 精确调整。缺集只提示，不阻止提交；待确认文件必须处置。
+                    按季度查看目标集数，从右侧待处置区拖动文件完成映射。缺集只提示，不阻止提交；待确认文件必须处置。
                   </p>
                 </div>
                 <span className={cn(
@@ -710,9 +748,31 @@ export function QuarkSeasonIngestWorkspace({
                     : '调整后请重新生成预览'}
                 </span>
               </div>
-              {episodeAlignments.length > 0 ? (
-                <div className="space-y-2">
-                  {episodeAlignments.map((alignment) => (
+              {alignmentSeasons.length > 0 ? (
+                <div className="mt-3 flex shrink-0 gap-1 overflow-x-auto border-b border-indigo-100 pb-2">
+                  {alignmentSeasons.map((season) => (
+                    <button
+                      key={season}
+                      type="button"
+                      onClick={() => setAlignmentSeason(season)}
+                      className={cn(
+                        'shrink-0 rounded-md px-3 py-1.5 text-[11px] font-semibold transition-colors',
+                        alignmentSeason === season
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-white text-slate-600 hover:bg-indigo-50 hover:text-indigo-700',
+                      )}
+                    >
+                      第 {season} 季
+                      {(pendingCountBySeason.get(season) ?? 0) > 0
+                        ? ` · 待处理 ${pendingCountBySeason.get(season)}`
+                        : ''}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <div className="mt-3 grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-3 lg:grid-cols-[minmax(0,1fr)_20rem] lg:grid-rows-1">
+                <div className="min-h-0 space-y-2 overflow-y-auto pr-1">
+                  {visibleEpisodeAlignments.length > 0 ? visibleEpisodeAlignments.map((alignment) => (
                     <div
                       key={`${alignment.season_number}:${alignment.episode_number}`}
                       onDragOver={(event) => event.preventDefault()}
@@ -749,51 +809,61 @@ export function QuarkSeasonIngestWorkspace({
                               className="flex min-w-0 cursor-grab items-start gap-1.5 rounded-md bg-slate-50 px-2 py-1 text-[11px] active:cursor-grabbing"
                             >
                               <GripVertical className="mt-0.5 h-3 w-3 shrink-0 text-slate-400" />
-                              <span className="min-w-0 break-all font-mono text-slate-600">
-                                {file.source_name}
-                              </span>
+                              <span className="min-w-0 break-all font-mono text-slate-600">{file.source_name}</span>
                               <span className="shrink-0 text-slate-400">→</span>
-                              <span className="min-w-0 break-all font-mono text-slate-800">
-                                {file.target_name}
-                              </span>
+                              <span className="min-w-0 break-all font-mono text-slate-800">{file.target_name}</span>
                             </div>
                           ))}
                         </div>
                       ) : (
                         <p className="mt-2 rounded-md border border-dashed border-indigo-200 px-2 py-2 text-[11px] text-indigo-500">
-                          将待确认视频拖到这里，映射为该 TMDB 集数
+                          将右侧待确认视频拖到这里，映射为该 TMDB 集数
                         </p>
                       )}
                       {alignment.message ? (
                         <p className="mt-1 text-[11px] text-slate-500">{alignment.message}</p>
                       ) : null}
                     </div>
-                  ))}
+                  )) : (
+                    <div className="rounded-lg border border-dashed border-indigo-200 bg-white px-3 py-8 text-center text-xs text-indigo-500">
+                      当前季度没有可用的 TMDB 集数信息，请在来源文件列表中手动指定集数。
+                    </div>
+                  )}
                 </div>
-              ) : null}
-              {pendingFiles.length > 0 ? (
-                <div className="rounded-lg border border-dashed border-rose-200 bg-rose-50/50 px-3 py-2">
-                  <p className="text-[11px] font-semibold text-rose-700">待处置视频</p>
-                  <p className="mt-1 text-[11px] text-rose-600">拖入上方集数，或在来源文件行中指定集数、版本/分段，亦可明确忽略。</p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {pendingFiles.map(({ file }) => (
-                      <span
-                        key={file.file_id}
-                        draggable
-                        onDragStart={(event) => {
-                          event.dataTransfer.setData('text/plain', file.file_id)
-                          event.dataTransfer.effectAllowed = 'move'
-                        }}
-                        className="inline-flex max-w-full cursor-grab items-center gap-1 rounded-md border border-rose-200 bg-white px-2 py-1 font-mono text-[10px] text-rose-700 active:cursor-grabbing"
-                        title={file.source_name}
-                      >
-                        <GripVertical className="h-3 w-3 shrink-0 text-rose-400" />
-                        <span className="truncate">{file.source_name}</span>
-                      </span>
-                    ))}
+                <aside className="max-h-40 min-h-0 overflow-y-auto rounded-lg border border-rose-200 bg-rose-50/70 px-3 py-3 lg:max-h-none">
+                  <div className="sticky top-0 z-10 -mx-3 -mt-3 border-b border-rose-100 bg-rose-50 px-3 py-3">
+                    <p className="text-[11px] font-semibold text-rose-700">
+                      第 {alignmentSeason ?? selectedSeason} 季待处置视频 · {visiblePendingFiles.length}
+                    </p>
+                    <p className="mt-1 text-[10px] leading-4 text-rose-600">
+                      拖到左侧目标集数；版本、分段或忽略可在下方来源文件列表继续调整。
+                    </p>
                   </div>
-                </div>
-              ) : null}
+                  {visiblePendingFiles.length > 0 ? (
+                    <div className="mt-2 space-y-1.5">
+                      {visiblePendingFiles.map(({ file }) => (
+                        <div
+                          key={file.file_id}
+                          draggable
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData('text/plain', file.file_id)
+                            event.dataTransfer.effectAllowed = 'move'
+                          }}
+                          className="flex cursor-grab items-start gap-1.5 rounded-md border border-rose-200 bg-white px-2 py-1.5 font-mono text-[10px] text-rose-700 active:cursor-grabbing"
+                          title={file.source_name}
+                        >
+                          <GripVertical className="mt-0.5 h-3 w-3 shrink-0 text-rose-400" />
+                          <span className="min-w-0 break-all">{file.source_name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 rounded-md border border-dashed border-emerald-200 bg-white px-2 py-3 text-center text-[11px] text-emerald-700">
+                      当前季度没有待处置视频
+                    </p>
+                  )}
+                </aside>
+              </div>
             </section>
           ) : null}
 
