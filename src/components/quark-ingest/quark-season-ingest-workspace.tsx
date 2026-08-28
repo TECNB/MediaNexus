@@ -1,5 +1,6 @@
 import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  CircleAlert,
   ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
@@ -36,6 +37,7 @@ import type {
 } from '@/types/quark-ingest'
 
 type SaveScope = 'CURRENT_SEASON' | 'MULTIPLE_SEASONS'
+type SourceDetailSeason = number | 'unassigned'
 
 type QuarkSeasonIngestWorkspaceProps = {
   mediaType: 'series' | 'variety'
@@ -326,6 +328,7 @@ export function QuarkSeasonIngestWorkspace({
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set())
   const [detachedFileIds, setDetachedFileIds] = useState<Set<string>>(new Set())
   const [alignmentSeason, setAlignmentSeason] = useState<number | null>(selectedSeason)
+  const [sourceDetailSeason, setSourceDetailSeason] = useState<SourceDetailSeason>(selectedSeason)
   const controllerRef = useRef<AbortController | null>(null)
   const scopeRef = useRef<SaveScope>('CURRENT_SEASON')
 
@@ -442,6 +445,54 @@ export function QuarkSeasonIngestWorkspace({
     return selectionsById.get(pending.sourceCandidateId)?.season_number === alignmentSeason
   }), [alignmentSeason, pendingFiles, selectionsById])
   const pendingPanelResolved = visiblePendingFiles.length === 0
+
+  const sourceDetailSeasons = useMemo(() => {
+    const seasons = new Set<number>()
+    let includesUnassigned = false
+    for (const source of preview?.sources ?? []) {
+      const season = selectionsById.get(source.source_candidate_id)?.season_number
+        ?? source.selected_season
+      if (season != null && season > 0) {
+        seasons.add(season)
+      } else {
+        includesUnassigned = true
+      }
+    }
+    return [
+      ...[...seasons].sort((left, right) => left - right),
+      ...(includesUnassigned ? ['unassigned' as const] : []),
+    ]
+  }, [preview?.sources, selectionsById])
+
+  useEffect(() => {
+    setSourceDetailSeason((current) => {
+      if (sourceDetailSeasons.includes(current)) return current
+      if (sourceDetailSeasons.includes(selectedSeason)) return selectedSeason
+      return sourceDetailSeasons[0] ?? selectedSeason
+    })
+  }, [selectedSeason, sourceDetailSeasons])
+
+  const visibleSourceDetails = useMemo(() => (preview?.sources ?? []).filter((source) => {
+    const season = selectionsById.get(source.source_candidate_id)?.season_number
+      ?? source.selected_season
+    return sourceDetailSeason === 'unassigned'
+      ? season == null || season <= 0
+      : season === sourceDetailSeason
+  }), [preview?.sources, selectionsById, sourceDetailSeason])
+
+  const sourceDetailSummary = useMemo(() => new Map(sourceDetailSeasons.map((season) => {
+    const sources = (preview?.sources ?? []).filter((source) => {
+      const sourceSeason = selectionsById.get(source.source_candidate_id)?.season_number
+        ?? source.selected_season
+      return season === 'unassigned'
+        ? sourceSeason == null || sourceSeason <= 0
+        : sourceSeason === season
+    })
+    return [season, {
+      sourceCount: sources.length,
+      errorCount: sources.reduce((count, source) => count + source.errors.length, 0),
+    }]
+  })), [preview?.sources, selectionsById, sourceDetailSeasons])
 
   const inspectShareTree = useCallback(async () => {
     controllerRef.current?.abort()
@@ -775,17 +826,18 @@ export function QuarkSeasonIngestWorkspace({
           ) : null}
 
           {episodeAlignments.length > 0 || pendingFiles.length > 0 ? (
-            <section className="flex h-[min(76vh,46rem)] min-h-[34rem] flex-col overflow-hidden rounded-xl border border-indigo-100 bg-indigo-50/40 px-4 py-3">
-              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+            <section className="flex h-[min(76vh,46rem)] min-h-[34rem] flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+              <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold text-slate-800">TMDB 对齐工作台</p>
+                  <p className="text-sm font-semibold text-slate-900">TMDB 对齐工作台</p>
                   <p className="mt-1 text-[11px] leading-5 text-slate-500">
                     按季度查看目标集数，从右侧待处置区拖动文件完成映射。缺集只提示，不阻止提交；待确认文件必须处置。
                   </p>
                 </div>
                 <span className={cn(
-                  'rounded-full px-2 py-1 text-[10px] font-semibold',
+                  'rounded-full border px-2.5 py-1 text-[10px] font-semibold',
                   preview.ready ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700',
+                  preview.ready ? 'border-emerald-200' : 'border-amber-200',
                 )}>
                   {preview.ready
                     ? `预览可提交 · ${preview.planned_task_count} 个执行任务`
@@ -793,17 +845,23 @@ export function QuarkSeasonIngestWorkspace({
                 </span>
               </div>
               {alignmentSeasons.length > 0 ? (
-                <div className="mt-3 flex shrink-0 gap-1 overflow-x-auto border-b border-indigo-100 pb-2">
+                <div
+                  role="tablist"
+                  aria-label="TMDB 对齐季度"
+                  className="mt-3 flex w-full shrink-0 gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1"
+                >
                   {alignmentSeasons.map((season) => (
                     <button
                       key={season}
                       type="button"
+                      role="tab"
+                      aria-selected={alignmentSeason === season}
                       onClick={() => setAlignmentSeason(season)}
                       className={cn(
                         'shrink-0 rounded-md px-3 py-1.5 text-[11px] font-semibold transition-colors',
                         alignmentSeason === season
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-white text-slate-600 hover:bg-indigo-50 hover:text-indigo-700',
+                          ? 'bg-white text-slate-950 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-900',
                       )}
                     >
                       第 {season} 季
@@ -815,61 +873,65 @@ export function QuarkSeasonIngestWorkspace({
                 </div>
               ) : null}
               <div className="mt-3 grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-3 lg:grid-cols-[minmax(0,1fr)_20rem] lg:grid-rows-1">
-                <div className="min-h-0 space-y-2 overflow-y-auto pr-1">
-                  {visibleEpisodeAlignments.length > 0 ? visibleEpisodeAlignments.map((alignment) => (
-                    <div
-                      key={`${alignment.season_number}:${alignment.episode_number}`}
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={(event) => handleFileDrop(event, alignment.season_number, alignment.episode_number)}
-                      className="rounded-lg border border-indigo-100 bg-white px-3 py-2.5"
-                    >
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                        <span className="font-semibold text-slate-900">
-                          {alignmentEpisodeLabel(alignment)}
-                        </span>
-                        {alignment.air_date ? <span className="text-slate-500">{alignment.air_date}</span> : null}
-                        {alignment.episode_title ? <span className="truncate text-slate-600">{alignment.episode_title}</span> : null}
-                        <span className={cn(
-                          'rounded-full px-1.5 py-0.5 text-[10px]',
-                          alignment.status === 'MISSING'
-                            ? 'bg-amber-100 text-amber-700'
-                            : alignment.status === 'MULTIPLE'
-                              ? 'bg-indigo-100 text-indigo-700'
-                              : 'bg-emerald-100 text-emerald-700',
-                        )}>
-                          {alignmentStatusLabel(alignment.status)}
-                        </span>
-                      </div>
-                      {alignment.files.length > 0 ? (
-                        <div className="mt-2 space-y-1">
-                          {alignment.files.map((file) => (
-                            <div
-                              key={file.file_id}
-                              draggable={isVideoFile(file.source_name)}
-                              onDragStart={(event) => {
-                                event.dataTransfer.setData('text/plain', file.file_id)
-                                event.dataTransfer.effectAllowed = 'move'
-                              }}
-                              className="flex min-w-0 cursor-grab items-start gap-1.5 rounded-md bg-slate-50 px-2 py-1 text-[11px] active:cursor-grabbing"
-                            >
-                              <GripVertical className="mt-0.5 h-3 w-3 shrink-0 text-slate-400" />
-                              <span className="min-w-0 break-all font-mono text-slate-600">{file.source_name}</span>
-                              <span className="shrink-0 text-slate-400">→</span>
-                              <span className="min-w-0 break-all font-mono text-slate-800">{file.target_name}</span>
+                <div className="min-h-0 overflow-y-auto pr-1">
+                  {visibleEpisodeAlignments.length > 0 ? (
+                    <div className="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                      {visibleEpisodeAlignments.map((alignment) => (
+                        <div
+                          key={`${alignment.season_number}:${alignment.episode_number}`}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={(event) => handleFileDrop(event, alignment.season_number, alignment.episode_number)}
+                          className="px-3 py-3 transition-colors hover:bg-slate-50/80"
+                        >
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                            <span className="font-semibold text-slate-900">
+                              {alignmentEpisodeLabel(alignment)}
+                            </span>
+                            {alignment.air_date ? <span className="text-slate-500">{alignment.air_date}</span> : null}
+                            {alignment.episode_title ? <span className="truncate text-slate-600">{alignment.episode_title}</span> : null}
+                            <span className={cn(
+                              'rounded-full px-1.5 py-0.5 text-[10px]',
+                              alignment.status === 'MISSING'
+                                ? 'bg-amber-100 text-amber-700'
+                                : alignment.status === 'MULTIPLE'
+                                  ? 'bg-slate-200 text-slate-700'
+                                  : 'bg-emerald-100 text-emerald-700',
+                            )}>
+                              {alignmentStatusLabel(alignment.status)}
+                            </span>
+                          </div>
+                          {alignment.files.length > 0 ? (
+                            <div className="mt-2 space-y-1">
+                              {alignment.files.map((file) => (
+                                <div
+                                  key={file.file_id}
+                                  draggable={isVideoFile(file.source_name)}
+                                  onDragStart={(event) => {
+                                    event.dataTransfer.setData('text/plain', file.file_id)
+                                    event.dataTransfer.effectAllowed = 'move'
+                                  }}
+                                  className="flex min-w-0 cursor-grab items-start gap-1.5 rounded-md bg-slate-50 px-2 py-1 text-[11px] active:cursor-grabbing"
+                                >
+                                  <GripVertical className="mt-0.5 h-3 w-3 shrink-0 text-slate-400" />
+                                  <span className="min-w-0 break-all font-mono text-slate-600">{file.source_name}</span>
+                                  <span className="shrink-0 text-slate-400">→</span>
+                                  <span className="min-w-0 break-all font-mono text-slate-800">{file.target_name}</span>
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          ) : (
+                            <p className="mt-2 rounded-md border border-dashed border-slate-300 bg-slate-50 px-2 py-2 text-[11px] text-slate-500">
+                              将右侧待确认视频拖到这里，映射为该 TMDB 集数
+                            </p>
+                          )}
+                          {alignment.message ? (
+                            <p className="mt-1 text-[11px] text-slate-500">{alignment.message}</p>
+                          ) : null}
                         </div>
-                      ) : (
-                        <p className="mt-2 rounded-md border border-dashed border-indigo-200 px-2 py-2 text-[11px] text-indigo-500">
-                          将右侧待确认视频拖到这里，映射为该 TMDB 集数
-                        </p>
-                      )}
-                      {alignment.message ? (
-                        <p className="mt-1 text-[11px] text-slate-500">{alignment.message}</p>
-                      ) : null}
+                      ))}
                     </div>
-                  )) : (
-                    <div className="rounded-lg border border-dashed border-indigo-200 bg-white px-3 py-8 text-center text-xs text-indigo-500">
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-8 text-center text-xs text-slate-500">
                       当前季度没有可用的 TMDB 集数信息，请在来源文件列表中手动指定集数。
                     </div>
                   )}
@@ -880,29 +942,21 @@ export function QuarkSeasonIngestWorkspace({
                     event.dataTransfer.dropEffect = 'move'
                   }}
                   onDrop={handlePendingDrop}
-                  className={cn(
-                    'max-h-40 min-h-0 overflow-y-auto rounded-lg border px-3 py-3 lg:max-h-none',
-                    pendingPanelResolved
-                      ? 'border-emerald-200 bg-emerald-50/70'
-                      : 'border-rose-200 bg-rose-50/70',
-                  )}
+                  className="max-h-40 min-h-0 overflow-y-auto rounded-lg border border-slate-200 bg-white px-3 py-3 lg:max-h-none"
                 >
-                  <div className={cn(
-                    'sticky top-0 z-10 -mx-3 -mt-3 border-b px-3 py-3',
-                    pendingPanelResolved
-                      ? 'border-emerald-100 bg-emerald-50'
-                      : 'border-rose-100 bg-rose-50',
-                  )}>
-                    <p className={cn(
-                      'text-[11px] font-semibold',
-                      pendingPanelResolved ? 'text-emerald-700' : 'text-rose-700',
-                    )}>
-                      第 {alignmentSeason ?? selectedSeason} 季待处置视频 · {visiblePendingFiles.length}
+                  <div className="sticky top-0 z-10 -mx-3 -mt-3 border-b border-slate-200 bg-white px-3 py-3">
+                    <p className="flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-800">
+                      <span>第 {alignmentSeason ?? selectedSeason} 季待处置视频</span>
+                      <span className={cn(
+                        'rounded-full px-2 py-0.5 text-[10px]',
+                        pendingPanelResolved
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-rose-100 text-rose-700',
+                      )}>
+                        {visiblePendingFiles.length}
+                      </span>
                     </p>
-                    <p className={cn(
-                      'mt-1 text-[10px] leading-4',
-                      pendingPanelResolved ? 'text-emerald-600' : 'text-rose-600',
-                    )}>
+                    <p className="mt-1 text-[10px] leading-4 text-slate-500">
                       {pendingPanelResolved
                         ? '当前季度已完成对齐；仍可将左侧文件拖回此处重新调整。'
                         : '拖到左侧目标集数；已映射的文件可拖回此处撤销，版本、分段或忽略可在下方继续调整。'}
@@ -918,16 +972,16 @@ export function QuarkSeasonIngestWorkspace({
                             event.dataTransfer.setData('text/plain', file.file_id)
                             event.dataTransfer.effectAllowed = 'move'
                           }}
-                          className="flex cursor-grab items-start gap-1.5 rounded-md border border-rose-200 bg-white px-2 py-1.5 font-mono text-[10px] text-rose-700 active:cursor-grabbing"
+                          className="flex cursor-grab items-start gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-[10px] text-slate-700 active:cursor-grabbing"
                           title={file.source_name}
                         >
-                          <GripVertical className="mt-0.5 h-3 w-3 shrink-0 text-rose-400" />
+                          <GripVertical className="mt-0.5 h-3 w-3 shrink-0 text-slate-400" />
                           <span className="min-w-0 break-all">{file.source_name}</span>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="mt-3 rounded-md border border-dashed border-emerald-200 bg-white px-2 py-3 text-center text-[11px] text-emerald-700">
+                    <p className="mt-3 rounded-md border border-dashed border-emerald-200 bg-emerald-50/70 px-2 py-3 text-center text-[11px] text-emerald-700">
                       当前季度没有待处置视频
                     </p>
                   )}
@@ -960,7 +1014,7 @@ export function QuarkSeasonIngestWorkspace({
             </span>
           </label>
 
-          <details className="group rounded-xl border border-slate-200 bg-slate-50/70">
+          <details className="group overflow-hidden rounded-xl border border-slate-200 bg-white">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 marker:hidden">
               <div>
                 <p className="text-sm font-semibold text-slate-800">季度来源明细</p>
@@ -970,9 +1024,42 @@ export function QuarkSeasonIngestWorkspace({
               </div>
               <ChevronRight className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-90" />
             </summary>
-            <div className="max-h-[min(60vh,36rem)] overflow-y-auto overscroll-contain border-t border-slate-200 p-3">
+            <div className="border-t border-slate-200 bg-slate-50/70 p-3 pb-2">
+              <div
+                role="tablist"
+                aria-label="季度来源明细"
+                className="flex gap-1 overflow-x-auto rounded-lg bg-slate-200/70 p-1"
+              >
+                {sourceDetailSeasons.map((season) => {
+                  const summary = sourceDetailSummary.get(season)
+                  const active = sourceDetailSeason === season
+                  return (
+                    <button
+                      key={season}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setSourceDetailSeason(season)}
+                      className={cn(
+                        'shrink-0 rounded-md px-3 py-1.5 text-[11px] font-semibold transition-colors',
+                        active
+                          ? 'bg-white text-slate-950 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-900',
+                      )}
+                    >
+                      {season === 'unassigned' ? '未分季' : `第 ${season} 季`}
+                      {` · ${summary?.sourceCount ?? 0}`}
+                      {(summary?.errorCount ?? 0) > 0 ? (
+                        <span className="ml-1 text-rose-600">异常 {summary?.errorCount}</span>
+                      ) : null}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="max-h-[min(60vh,36rem)] overflow-y-auto overscroll-contain bg-slate-50/70 p-3 pt-1">
               <div className="space-y-3">
-                {preview.sources.map((source) => {
+                {visibleSourceDetails.map((source) => {
               const selection = selectionsById.get(source.source_candidate_id)
               if (!selection) return null
               const coverage = sourceCoverage(source)
@@ -985,7 +1072,7 @@ export function QuarkSeasonIngestWorkspace({
                   className={cn(
                     'rounded-xl border px-4 py-4',
                     source.status === 'BLOCKED' || source.errors.length > 0
-                      ? 'border-rose-200 bg-rose-50/60'
+                      ? 'border-rose-200 bg-white'
                       : selection.ignored
                         ? 'border-slate-200 bg-slate-50 opacity-75'
                         : 'border-slate-200 bg-white',
@@ -1244,7 +1331,23 @@ export function QuarkSeasonIngestWorkspace({
                     </div>
                   ) : null}
                   {source.errors.length > 0 ? (
-                    <p className="mt-2 text-xs leading-5 text-rose-600">{source.errors.join('；')}</p>
+                    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5" role="alert">
+                      <p className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-700">
+                        <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                        需要处理
+                      </p>
+                      <ul className="mt-2 space-y-1.5">
+                        {source.errors.map((error, index) => (
+                          <li
+                            key={`${source.source_candidate_id}:error:${index}`}
+                            className="flex items-start gap-2 text-xs leading-5 text-slate-700"
+                          >
+                            <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-rose-500" />
+                            <span className="min-w-0 break-words">{error}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   ) : null}
                 </div>
               )
