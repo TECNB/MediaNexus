@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -148,13 +149,26 @@ export function QuarkReleasePanel({
     const body = document.body
     const previousRootOverflow = documentElement.style.overflow
     const previousBodyOverflow = body.style.overflow
+    const previousBodyPosition = body.style.position
+    const previousBodyTop = body.style.top
+    const previousBodyWidth = body.style.width
+    const previousScrollY = window.scrollY
     if (previewOpen) {
       documentElement.style.overflow = 'hidden'
       body.style.overflow = 'hidden'
+      body.style.position = 'fixed'
+      body.style.top = `-${previousScrollY}px`
+      body.style.width = '100%'
     }
     return () => {
       documentElement.style.overflow = previousRootOverflow
       body.style.overflow = previousBodyOverflow
+      body.style.position = previousBodyPosition
+      body.style.top = previousBodyTop
+      body.style.width = previousBodyWidth
+      if (previewOpen) {
+        window.scrollTo(0, previousScrollY)
+      }
     }
   }, [previewOpen])
 
@@ -676,14 +690,14 @@ export function QuarkReleasePanel({
         </div>
       )}
 
-      {previewState ? (
-        <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-hidden overscroll-auto bg-slate-950/55 px-3 py-3 backdrop-blur-sm sm:px-4 sm:py-8">
+      {previewState ? createPortal(
+        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-hidden bg-slate-950/55 px-3 py-3 backdrop-blur-sm sm:px-4 sm:py-8">
           <div
             role="dialog"
             aria-modal="true"
-            className="scrollbar-none my-0 max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl overflow-y-auto overscroll-auto rounded-2xl bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.22)] sm:my-0 sm:max-h-[calc(100dvh-4rem)] sm:p-6"
+            className="flex h-[min(92dvh,56rem)] max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.22)] [overflow-anchor:none] sm:max-h-[calc(100dvh-4rem)] sm:p-6"
           >
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex shrink-0 items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                   Quark 分享确认
@@ -706,6 +720,7 @@ export function QuarkReleasePanel({
               </button>
             </div>
 
+            <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto overscroll-auto [overflow-anchor:none]">
             {previewState.status === 'loading' ? (
               <div className="py-16 text-center">
                 <Loader2 className="mx-auto h-7 w-7 animate-spin text-slate-400" />
@@ -790,8 +805,9 @@ export function QuarkReleasePanel({
                 {previewState.message}
               </div>
             ) : null}
+            </div>
 
-            <div className="mt-6 flex justify-end gap-3">
+            <div className="mt-6 flex shrink-0 justify-end gap-3">
               <Button
                 type="button"
                 variant="outline"
@@ -820,7 +836,8 @@ export function QuarkReleasePanel({
               ) : null}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </>
   )
