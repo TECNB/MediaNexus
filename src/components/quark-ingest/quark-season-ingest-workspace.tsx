@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import {
   clearQuarkFileAlignment,
   projectQuarkAlignmentWorkspace,
+  sortQuarkPendingFiles,
 } from '@/components/quark-ingest/quark-alignment-workspace'
 import {
   createQuarkMultiSourceTasks,
@@ -491,10 +492,10 @@ export function QuarkSeasonIngestWorkspace({
     return counts
   }, [pendingFiles, selectionsById])
 
-  const visiblePendingFiles = useMemo(() => pendingFiles.filter((pending) => {
+  const visiblePendingFiles = useMemo(() => sortQuarkPendingFiles(pendingFiles.filter((pending) => {
     if (alignmentSeason == null) return true
     return selectionsById.get(pending.sourceCandidateId)?.season_number === alignmentSeason
-  }), [alignmentSeason, pendingFiles, selectionsById])
+  })), [alignmentSeason, pendingFiles, selectionsById])
   const pendingPanelResolved = visiblePendingFiles.length === 0
 
   const sourceDetailSeasons = useMemo(() => {

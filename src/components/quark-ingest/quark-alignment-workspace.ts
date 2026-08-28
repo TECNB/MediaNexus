@@ -16,6 +16,56 @@ export type QuarkAlignmentWorkspaceProjection = {
   pendingFiles: QuarkPendingAlignmentFile[]
 }
 
+const PENDING_EPISODE_PATTERNS = [
+  /(?:^|[^a-z0-9])s\d{1,2}[ ._-]*e(\d{1,3})(?=$|[^0-9])/i,
+  /(?:^|[^a-z0-9])(?:ep|e)[ ._-]*(\d{1,3})(?=$|[ ._-])/i,
+  /(?:^|[^\d])第\s*(\d{1,3})\s*[集话期]/,
+  /(?:^|[^\d])(\d{1,3})\s*[集话期](?=$|[^\d])/,
+]
+const PENDING_DATE_PATTERN = /(?<!\d)(20\d{2})[ ._-]?(\d{2})[ ._-]?(\d{2})(?!\d)/
+const PENDING_SHORT_DATE_PATTERN = /(?<!\d)(\d{2})(\d{2})(\d{2})(?!\d)/
+const PENDING_FILE_COLLATOR = new Intl.Collator('zh-CN', {
+  numeric: true,
+  sensitivity: 'base',
+})
+
+function pendingFileSortKey(name: string): [number, number, number, string] {
+  const episode = PENDING_EPISODE_PATTERNS
+    .map((pattern) => pattern.exec(name)?.[1])
+    .find((value) => value != null)
+  const episodeNumber = episode == null ? null : Number(episode)
+  const dateMatch = PENDING_DATE_PATTERN.exec(name)
+  const shortDateMatch = PENDING_SHORT_DATE_PATTERN.exec(name)
+  const dateNumber = dateMatch
+    ? Number(dateMatch[1] + dateMatch[2] + dateMatch[3])
+    : shortDateMatch
+      ? Number('20' + shortDateMatch[1] + shortDateMatch[2] + shortDateMatch[3])
+      : Number.MAX_SAFE_INTEGER
+  if (episodeNumber != null && episodeNumber > 0) {
+    return [0, episodeNumber, dateNumber, name]
+  }
+  if (dateNumber !== Number.MAX_SAFE_INTEGER) {
+    return [1, dateNumber, Number.MAX_SAFE_INTEGER, name]
+  }
+  return [2, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, name]
+}
+
+export function sortQuarkPendingFiles(files: QuarkPendingAlignmentFile[]) {
+  return [...files].sort((left, right) => {
+    const leftKey = pendingFileSortKey(left.file.source_name)
+    const rightKey = pendingFileSortKey(right.file.source_name)
+    for (let index = 0; index < leftKey.length - 1; index += 1) {
+      if (leftKey[index] !== rightKey[index]) {
+        return Number(leftKey[index]) - Number(rightKey[index])
+      }
+    }
+    const nameOrder = PENDING_FILE_COLLATOR.compare(leftKey[3], rightKey[3])
+    return nameOrder !== 0
+      ? nameOrder
+      : left.file.file_id.localeCompare(right.file.file_id)
+  })
+}
+
 export function clearQuarkFileAlignment(
   selections: QuarkSourceSelection[],
   sourceCandidateId: string,

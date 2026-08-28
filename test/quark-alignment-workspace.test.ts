@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   clearQuarkFileAlignment,
   projectQuarkAlignmentWorkspace,
+  sortQuarkPendingFiles,
 } from '../src/components/quark-ingest/quark-alignment-workspace.ts'
 import type {
   QuarkEpisodeAlignment,
@@ -173,5 +174,32 @@ test('projects an automatically aligned file back into pending when detached', (
   assert.deepEqual(
     projection.pendingFiles.map((pending) => pending.file.file_id),
     ['file-1'],
+  )
+})
+
+test('sorts pending files by episode number before date and natural filename order', () => {
+  const files = [
+    '【Mic迈扣】女高推理班 E02.240503 中字 1080P.mp4',
+    '【Mic迈扣】女高推理班 E08.240607 中字 1080P.mp4',
+    '【Mic迈扣】女高推理班 E01.240426 中字 1080P.mp4',
+    '【Mic迈扣】女高推理班 E00.240419 中字 1080P.mp4',
+    '【Mic迈扣】女高推理班 E03.240510 中字 1080P.mp4',
+  ].map((source_name, index) => ({
+    sourceCandidateId: 'source-1',
+    file: {
+      ...file(`file-${index}`),
+      source_name,
+    },
+  }))
+
+  assert.deepEqual(
+    sortQuarkPendingFiles(files).map((pending) => pending.file.source_name),
+    [
+      '【Mic迈扣】女高推理班 E01.240426 中字 1080P.mp4',
+      '【Mic迈扣】女高推理班 E02.240503 中字 1080P.mp4',
+      '【Mic迈扣】女高推理班 E03.240510 中字 1080P.mp4',
+      '【Mic迈扣】女高推理班 E08.240607 中字 1080P.mp4',
+      '【Mic迈扣】女高推理班 E00.240419 中字 1080P.mp4',
+    ],
   )
 })
