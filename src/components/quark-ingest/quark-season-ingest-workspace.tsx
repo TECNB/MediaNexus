@@ -49,6 +49,7 @@ type QuarkSeasonIngestWorkspaceProps = {
   selectedSeason: number
   seasonOptions?: number[]
   onTaskCreated?: (task: QuarkMultiSourceTaskResult) => void
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 function sourceNodes(nodes: QuarkSourceTreeNode[], collected: QuarkSourceTreeNode[] = []) {
@@ -360,6 +361,7 @@ export function QuarkSeasonIngestWorkspace({
   selectedSeason,
   seasonOptions = [],
   onTaskCreated,
+  onDirtyChange,
 }: QuarkSeasonIngestWorkspaceProps) {
   const [scope, setScope] = useState<SaveScope>('CURRENT_SEASON')
   const [preview, setPreview] = useState<QuarkMultiSourcePreview | null>(null)
@@ -373,8 +375,13 @@ export function QuarkSeasonIngestWorkspace({
   const [alignmentSeason, setAlignmentSeason] = useState<number | null>(selectedSeason)
   const [sourceDetailSeason, setSourceDetailSeason] = useState<SourceDetailSeason>(selectedSeason)
   const [renamePreviewGenerated, setRenamePreviewGenerated] = useState(false)
+  const [hasPendingChanges, setHasPendingChanges] = useState(false)
   const controllerRef = useRef<AbortController | null>(null)
   const scopeRef = useRef<SaveScope>('CURRENT_SEASON')
+
+  useEffect(() => {
+    onDirtyChange?.(hasPendingChanges)
+  }, [hasPendingChanges, onDirtyChange])
 
   const selectionsById = useMemo(
     () => new Map(selections.map((selection) => [selection.source_candidate_id, selection])),
@@ -549,6 +556,7 @@ export function QuarkSeasonIngestWorkspace({
     setExpandedDirectories(new Set())
     setDetachedFileIds(new Set())
     setRenamePreviewGenerated(false)
+    setHasPendingChanges(false)
     setStatus('loading')
     setMessage(null)
     setCreatedTask(null)
@@ -589,6 +597,7 @@ export function QuarkSeasonIngestWorkspace({
   }, [inspectShareTree])
 
   function markPlanDirty() {
+    setHasPendingChanges(true)
     setPreview((current) => (current ? { ...current, ready: false } : current))
     setStatus('idle')
     setMessage(null)
@@ -772,6 +781,9 @@ export function QuarkSeasonIngestWorkspace({
           ready: false,
           message: '已创建的来源已标记为忽略，可重新预览并重试失败来源。',
         } : current)
+        setHasPendingChanges(true)
+      } else if (task.status === 'STARTED' || task.status === 'SCHEDULED') {
+        setHasPendingChanges(false)
       }
       onTaskCreated?.(task)
     } catch (error) {
@@ -1285,24 +1297,6 @@ export function QuarkSeasonIngestWorkspace({
                                     : correction?.edition_label ?? file.edition_label ?? ''
                                   return (
                                     <>
-                                      {!correction && assignmentType !== 'PRIMARY' && assignmentType !== 'UNKNOWN' ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => updateFileAssignment(
-                                            source.source_candidate_id,
-                                            file.file_id,
-                                            {
-                                              episodeNumber: file.episode_number,
-                                              assignmentType: assignmentType as QuarkAssignmentType,
-                                              editionLabel: file.edition_label ?? null,
-                                              segmentLabel: file.segment_label ?? null,
-                                            },
-                                          )}
-                                          className="h-8 rounded-md border border-indigo-200 bg-indigo-50 px-2 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100"
-                                        >
-                                          采用识别
-                                        </button>
-                                      ) : null}
                                       <select
                                         value={assignmentType}
                                         onChange={(event) => updateFileAssignment(

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -11,7 +10,6 @@ import {
   Loader2,
   RefreshCw,
   ShieldCheck,
-  X,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -142,35 +140,8 @@ export function QuarkReleasePanel({
   })
   const [previewState, setPreviewState] = useState<PreviewState | null>(null)
   const [visibleLimit, setVisibleLimit] = useState(RELEASE_PAGE_SIZE)
-  const previewOpen = previewState !== null
-
-  useEffect(() => {
-    const documentElement = document.documentElement
-    const body = document.body
-    const previousRootOverflow = documentElement.style.overflow
-    const previousBodyOverflow = body.style.overflow
-    const previousBodyPosition = body.style.position
-    const previousBodyTop = body.style.top
-    const previousBodyWidth = body.style.width
-    const previousScrollY = window.scrollY
-    if (previewOpen) {
-      documentElement.style.overflow = 'hidden'
-      body.style.overflow = 'hidden'
-      body.style.position = 'fixed'
-      body.style.top = `-${previousScrollY}px`
-      body.style.width = '100%'
-    }
-    return () => {
-      documentElement.style.overflow = previousRootOverflow
-      body.style.overflow = previousBodyOverflow
-      body.style.position = previousBodyPosition
-      body.style.top = previousBodyTop
-      body.style.width = previousBodyWidth
-      if (previewOpen) {
-        window.scrollTo(0, previousScrollY)
-      }
-    }
-  }, [previewOpen])
+  const [workspaceVisible, setWorkspaceVisible] = useState(false)
+  const [workspaceDirty, setWorkspaceDirty] = useState(false)
 
   const scheduleValidationFlush = useCallback(() => {
     if (
@@ -379,6 +350,9 @@ export function QuarkReleasePanel({
   }
 
   useEffect(() => {
+    setPreviewState(null)
+    setWorkspaceVisible(false)
+    setWorkspaceDirty(false)
     search(false)
     return () => searchControllerRef.current?.abort()
     // Search is intentionally keyed by the selected media identity and target season/type.
@@ -439,6 +413,21 @@ export function QuarkReleasePanel({
   }
 
   function handlePreview(candidate: QuarkRelease) {
+    if (previewState?.candidate.id === candidate.id) {
+      setWorkspaceVisible(true)
+      return
+    }
+    if (
+      previewState &&
+      previewState.candidate.id !== candidate.id &&
+      workspaceDirty &&
+      !window.confirm('当前链接有未提交的调整，切换后这些调整会丢失。确定切换吗？')
+    ) {
+      return
+    }
+    if (previewState?.status === 'submitting') {
+      return
+    }
     previewControllerRef.current?.abort()
     const controller = new AbortController()
     previewControllerRef.current = controller
@@ -449,6 +438,8 @@ export function QuarkReleasePanel({
       result: null,
       message: null,
     })
+    setWorkspaceVisible(true)
+    setWorkspaceDirty(false)
 
     if (mediaType !== 'movie') {
       return
@@ -538,19 +529,47 @@ export function QuarkReleasePanel({
       return
     }
     previewControllerRef.current?.abort()
-    setPreviewState(null)
+    setWorkspaceVisible(false)
   }
 
   return (
-    <>
-      <section className="rounded-lg bg-white p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className={cn(
+      'space-y-4',
+      workspaceVisible && 'xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] xl:items-start xl:gap-5 xl:space-y-0',
+    )}>
+      {!workspaceVisible && previewState ? (
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="min-w-0 truncate text-sm text-slate-600">
+              已收起入库工作台：<span className="font-semibold text-slate-950">{previewState.candidate.title}</span>
+            </p>
+            <Button
+              type="button"
+              onClick={() => setWorkspaceVisible(true)}
+              className="h-9 rounded-lg bg-slate-950 px-3 text-xs font-semibold text-white shadow-none hover:bg-slate-800"
+            >
+              继续处理
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className={cn(
+        'scrollbar-none space-y-4',
+        workspaceVisible && 'min-w-0 xl:sticky xl:top-20 xl:col-start-2 xl:row-start-1 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto',
+        workspaceVisible && 'max-xl:hidden',
+      )}>
+      <section className={cn('rounded-lg bg-white', workspaceVisible ? 'p-4' : 'p-5')}>
+        <div className={cn(
+          'flex flex-col gap-3',
+          !workspaceVisible && 'sm:flex-row sm:items-center sm:justify-between',
+        )}>
           <div>
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
               <Link2 className="h-4 w-4" />
               PanSou Quark 资源
             </div>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className={cn('mt-1 text-xs text-slate-500', workspaceVisible && 'hidden')}>
               宽松召回全部候选；相关性决定顺序，可见链接在后台逐批检查。
             </p>
           </div>
@@ -559,7 +578,10 @@ export function QuarkReleasePanel({
             variant="outline"
             disabled={loadState.status === 'loading'}
             onClick={() => search(true)}
-            className="h-10 rounded-lg border-slate-200 shadow-none"
+            className={cn(
+              'h-10 rounded-lg border-slate-200 shadow-none',
+              workspaceVisible && 'w-full',
+            )}
           >
             <RefreshCw
               className={cn(
@@ -617,11 +639,16 @@ export function QuarkReleasePanel({
                 key={candidate.id}
                 data-quark-candidate-id={candidate.id}
                 className={cn(
-                  'rounded-lg bg-white p-5',
+                  'rounded-lg bg-white',
+                  workspaceVisible ? 'border border-slate-200 p-4' : 'p-5',
+                  previewState?.candidate.id === candidate.id && 'border-slate-950 ring-1 ring-slate-950',
                   candidate.availability === 'BAD' && 'opacity-75',
                 )}
               >
-                <div className="flex flex-col gap-5 xl:flex-row xl:items-center">
+                <div className={cn(
+                  'flex flex-col',
+                  workspaceVisible ? 'gap-3' : 'gap-5 xl:flex-row xl:items-center',
+                )}>
                   <div className="min-w-0 flex-1">
                     <h3 className="break-words text-sm font-semibold leading-6 text-slate-950">
                       {candidate.title}
@@ -638,22 +665,22 @@ export function QuarkReleasePanel({
                       >
                         {availability.label}
                       </span>
-                      {candidate.match_reasons.map((reason) => (
+                      {!workspaceVisible ? candidate.match_reasons.map((reason) => (
                         <span
                           key={reason}
                           className="rounded-md bg-emerald-50 px-2 py-1 text-emerald-700"
                         >
                           {reason}
                         </span>
-                      ))}
-                      {candidate.tags.map((tag) => (
+                      )) : null}
+                      {!workspaceVisible ? candidate.tags.map((tag) => (
                         <span
                           key={tag}
                           className="rounded-md bg-slate-100 px-2 py-1 text-slate-600"
                         >
                           {tag}
                         </span>
-                      ))}
+                      )) : null}
                     </div>
                     {candidate.conflicts.length > 0 ? (
                       <div className="mt-3 space-y-1 text-xs text-orange-700">
@@ -662,7 +689,10 @@ export function QuarkReleasePanel({
                         ))}
                       </div>
                     ) : null}
-                    <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">
+                    <div className={cn(
+                      'mt-4 flex gap-x-5 gap-y-2 text-xs text-slate-500',
+                      workspaceVisible ? 'flex-col' : 'flex-wrap',
+                    )}>
                       <span>来源：{candidate.source || '未知'}</span>
                       <span>时间：{candidate.published_at || '未知'}</span>
                       <span>{candidate.availability_summary}</span>
@@ -672,10 +702,17 @@ export function QuarkReleasePanel({
                     type="button"
                     disabled={candidate.availability === 'BAD'}
                     onClick={() => handlePreview(candidate)}
-                    className="h-10 shrink-0 rounded-lg bg-slate-950 px-4 text-xs font-semibold text-white shadow-none hover:bg-slate-800"
+                    className={cn(
+                      'h-10 shrink-0 rounded-lg bg-slate-950 px-4 text-xs font-semibold text-white shadow-none hover:bg-slate-800',
+                      workspaceVisible && 'w-full',
+                    )}
                   >
                     <ShieldCheck className="h-4 w-4" />
-                    {candidate.availability === 'BAD' ? '链接已失效' : '检查内容并确认'}
+                    {candidate.availability === 'BAD'
+                      ? '链接已失效'
+                      : previewState?.candidate.id === candidate.id
+                        ? '继续处理'
+                        : '检查内容并确认'}
                   </Button>
                 </div>
               </article>
@@ -690,37 +727,34 @@ export function QuarkReleasePanel({
         </div>
       )}
 
-      {previewState ? createPortal(
-        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-hidden bg-slate-950/55 px-3 py-3 backdrop-blur-sm sm:px-4 sm:py-8">
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="flex h-[min(92dvh,56rem)] max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.22)] [overflow-anchor:none] sm:max-h-[calc(100dvh-4rem)] sm:p-6"
-          >
-            <div className="flex shrink-0 items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Quark 分享确认
-                </p>
-                <h2 className="mt-2 text-xl font-semibold text-slate-950">
-                  检查分享内容后立即入库
-                </h2>
-                <p className="mt-2 break-words text-sm text-slate-500">
-                  {previewState.candidate.title}
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label="关闭确认窗口"
-                disabled={previewState.status === 'submitting'}
-                onClick={closePreview}
-                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+      </div>
 
-            <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto overscroll-auto [overflow-anchor:none]">
+      {previewState ? (
+        <aside className={cn(
+          'scrollbar-none min-w-0 space-y-4 xl:sticky xl:top-20 xl:col-start-1 xl:row-start-1 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto',
+          !workspaceVisible && 'hidden',
+        )}>
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                入库工作台
+              </p>
+              <p className="mt-1 truncate text-sm font-semibold text-slate-950">
+                {previewState.candidate.title}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={previewState.status === 'submitting'}
+              onClick={closePreview}
+              className="h-9 shrink-0 rounded-lg border-slate-200 px-3 text-xs shadow-none"
+            >
+              收起
+            </Button>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-4">
             {previewState.status === 'loading' ? (
               <div className="py-16 text-center">
                 <Loader2 className="mx-auto h-7 w-7 animate-spin text-slate-400" />
@@ -759,6 +793,7 @@ export function QuarkReleasePanel({
                   tmdbId={item.tmdb_id}
                   selectedSeason={seasonNumber}
                   seasonOptions={seasonOptions}
+                  onDirtyChange={setWorkspaceDirty}
                 />
               </div>
             ) : previewState.preview ? (
@@ -805,9 +840,7 @@ export function QuarkReleasePanel({
                 {previewState.message}
               </div>
             ) : null}
-            </div>
-
-            <div className="mt-6 flex shrink-0 justify-end gap-3">
+            <div className="mt-6 flex justify-end gap-3">
               <Button
                 type="button"
                 variant="outline"
@@ -836,9 +869,9 @@ export function QuarkReleasePanel({
               ) : null}
             </div>
           </div>
-        </div>,
-        document.body,
+        </aside>
       ) : null}
-    </>
+
+    </div>
   )
 }
