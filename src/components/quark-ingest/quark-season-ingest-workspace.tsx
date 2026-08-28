@@ -841,7 +841,7 @@ export function QuarkSeasonIngestWorkspace({
                 全部折叠
               </button>
             </div>
-            <div className="scrollbar-none max-h-[min(42vh,24rem)] overflow-y-auto overscroll-auto p-4">
+            <div className="scrollbar-none max-h-[min(32vh,18rem)] overflow-y-auto overscroll-auto p-4">
               <SourceTree
                 nodes={preview.entries}
                 selections={selectionsById}
@@ -1121,7 +1121,7 @@ export function QuarkSeasonIngestWorkspace({
               </div>
             ) : null}
             <div className={cn(
-              'scrollbar-none max-h-[min(60vh,36rem)] overflow-y-auto overscroll-auto bg-slate-50/70 p-3',
+              'scrollbar-none max-h-[min(48vh,28rem)] overflow-y-auto overscroll-auto bg-slate-50/70 p-3',
               showSourceDetailTabs ? 'pt-1' : 'border-t border-slate-200',
             )}>
               <div className="space-y-3">
@@ -1223,7 +1223,7 @@ export function QuarkSeasonIngestWorkspace({
                               event.dataTransfer.setData('text/plain', file.file_id)
                               event.dataTransfer.effectAllowed = 'move'
                             }}
-                            className="grid gap-2 px-3 py-2.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                            className="grid gap-2 px-3 py-2.5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center"
                           >
                             <div className="min-w-0 font-mono text-[11px] leading-5">
                               <p className="break-all text-slate-700">
@@ -1244,9 +1244,9 @@ export function QuarkSeasonIngestWorkspace({
                               ) : null}
                             </div>
                             {canCorrect ? (
-                              <div className="flex flex-wrap items-center gap-3">
+                              <div className="flex flex-wrap items-center gap-2">
                                 {isVideoFile(file.source_name) ? (
-                                  <label className="flex items-center gap-1.5 text-[11px] text-slate-600">
+                                  <label className="flex items-center gap-1 text-[11px] text-slate-600">
                                     <span>目标集数</span>
                                     <select
                                       value={correction?.ignored ? '' : correction?.episode_number ?? file.episode_number ?? ''}
@@ -1267,25 +1267,6 @@ export function QuarkSeasonIngestWorkspace({
                                         </option>
                                       ))}
                                     </select>
-                                    <input
-                                      type="number"
-                                      min={1}
-                                      max={999}
-                                      value={correction?.ignored ? '' : correction?.episode_number ?? file.episode_number ?? ''}
-                                      disabled={correction?.ignored}
-                                      onChange={(event) => {
-                                        const episode = Number(event.target.value)
-                                        if (episode > 0 && episode <= 999) {
-                                          updateFileAssignment(source.source_candidate_id, file.file_id, {
-                                            episodeNumber: episode,
-                                          })
-                                        } else {
-                                          updateFileSelection(source.source_candidate_id, file.file_id, () => null)
-                                        }
-                                      }}
-                                      aria-label={`${file.source_name}自定义集数`}
-                                      className="h-8 w-16 rounded-md border border-slate-200 px-2 text-center text-xs"
-                                    />
                                   </label>
                                 ) : null}
                                 {isVideoFile(file.source_name) ? (() => {

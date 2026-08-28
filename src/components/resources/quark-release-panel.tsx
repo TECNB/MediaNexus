@@ -555,8 +555,8 @@ export function QuarkReleasePanel({
       ) : null}
 
       <div className={cn(
-        'scrollbar-none space-y-4',
-        workspaceVisible && 'min-w-0 xl:sticky xl:top-20 xl:col-start-2 xl:row-start-1 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto',
+        'space-y-4',
+        workspaceVisible && 'min-w-0 xl:sticky xl:top-20 xl:col-start-2 xl:row-start-1',
         workspaceVisible && 'max-xl:hidden',
       )}>
       <section className={cn('rounded-lg bg-white', workspaceVisible ? 'p-4' : 'p-5')}>
@@ -641,7 +641,8 @@ export function QuarkReleasePanel({
                 className={cn(
                   'rounded-lg bg-white',
                   workspaceVisible ? 'border border-slate-200 p-4' : 'p-5',
-                  previewState?.candidate.id === candidate.id && 'border-slate-950 ring-1 ring-slate-950',
+                  previewState?.candidate.id === candidate.id && 'border-slate-300 bg-slate-50',
+                  workspaceVisible && 'border border-transparent transition-colors hover:border-slate-200',
                   candidate.availability === 'BAD' && 'opacity-75',
                 )}
               >
@@ -731,7 +732,7 @@ export function QuarkReleasePanel({
 
       {previewState ? (
         <aside className={cn(
-          'scrollbar-none min-w-0 space-y-4 xl:sticky xl:top-20 xl:col-start-1 xl:row-start-1 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto',
+          'min-w-0 space-y-4 xl:sticky xl:top-20 xl:col-start-1 xl:row-start-1',
           !workspaceVisible && 'hidden',
         )}>
           <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
