@@ -661,11 +661,11 @@ export function QuarkReleasePanel({
       )}
 
       {previewState ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-slate-950/45 px-3 py-3 backdrop-blur-sm sm:px-4 sm:py-8">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-auto bg-slate-950/45 px-3 py-3 backdrop-blur-sm sm:px-4 sm:py-8">
           <div
             role="dialog"
             aria-modal="true"
-            className="max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl overflow-y-auto overscroll-contain rounded-2xl bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.22)] sm:max-h-[calc(100dvh-4rem)] sm:p-6"
+            className="scrollbar-none my-0 max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl overflow-y-auto overscroll-auto rounded-2xl bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.22)] sm:my-0 sm:max-h-[calc(100dvh-4rem)] sm:p-6"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -760,7 +760,7 @@ export function QuarkReleasePanel({
                     ))}
                   </div>
                 ) : null}
-                <div className="mt-5 max-h-72 overflow-y-auto rounded-xl border border-slate-200 p-4">
+                <div className="scrollbar-none mt-5 max-h-72 overflow-y-auto overscroll-auto rounded-xl border border-slate-200 p-4">
                   <p className="mb-3 text-xs font-semibold text-slate-500">
                     分享目录（只读）
                   </p>

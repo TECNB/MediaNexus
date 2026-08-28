@@ -269,10 +269,10 @@ function SourceTree({
                 )}
                 className="group"
               >
-                <summary className="flex min-w-0 cursor-pointer list-none items-center gap-2 text-slate-700 marker:hidden">
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90" />
-                  <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-                  <span className="break-all">{node.name}</span>
+                <summary className="flex min-w-0 cursor-pointer list-none items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 marker:hidden">
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform group-open:rotate-90" />
+                  <Folder className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                  <span className="min-w-0 break-all font-medium">{node.name}</span>
                   {node.directory ? (() => {
                     const counts = videoCounts(node)
                     return counts.total > 0 ? (
@@ -297,7 +297,7 @@ function SourceTree({
                   ) : null}
                 </summary>
                 {descendants.length > 0 ? (
-                  <div className="ml-5 mt-1 flex flex-wrap gap-2">
+                  <div className="ml-5 mt-1 flex flex-wrap gap-2 px-1">
                     <button
                       type="button"
                       className="rounded-lg border border-indigo-100 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-50"
@@ -309,16 +309,14 @@ function SourceTree({
                       后代映射为 S{String(selectedSeason).padStart(2, '0')}
                     </button>
                     {subscriptionEnabled ? (
-                      <label className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-600">
-                        <input
-                          type="checkbox"
-                          checked={descendants
-                            .filter((candidateId) => !selections.get(candidateId)?.ignored)
-                            .every((candidateId) => selections.get(candidateId)?.follow_updates === true)}
-                          onChange={(event) => onFollowDescendants(descendants, event.target.checked)}
-                        />
-                        更新后代
-                      </label>
+                      <CompactCheckbox
+                        checked={descendants
+                          .filter((candidateId) => !selections.get(candidateId)?.ignored)
+                          .every((candidateId) => selections.get(candidateId)?.follow_updates === true)}
+                        label="更新后代"
+                        className="h-7 px-2"
+                        onChange={(followUpdates) => onFollowDescendants(descendants, followUpdates)}
+                      />
                     ) : null}
                   </div>
                 ) : null}
@@ -337,9 +335,9 @@ function SourceTree({
                 ) : null}
               </details>
             ) : (
-              <div className="flex min-w-0 items-center gap-2 text-slate-700">
+              <div className="flex min-w-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-slate-600 transition-colors hover:bg-white hover:text-slate-900">
                 <File className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                <span className="break-all">{node.name}</span>
+                <span className="min-w-0 break-all">{node.name}</span>
               </div>
             )}
           </li>
@@ -829,7 +827,7 @@ export function QuarkSeasonIngestWorkspace({
                 全部折叠
               </button>
             </div>
-            <div className="scrollbar-none max-h-[min(42vh,24rem)] overflow-y-auto overscroll-contain p-4">
+            <div className="scrollbar-none max-h-[min(42vh,24rem)] overflow-y-auto overscroll-auto p-4">
               <SourceTree
                 nodes={preview.entries}
                 selections={selectionsById}
@@ -923,7 +921,7 @@ export function QuarkSeasonIngestWorkspace({
                 </div>
               ) : null}
               <div className="mt-3 grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-3 lg:grid-cols-[minmax(0,1fr)_20rem] lg:grid-rows-1">
-                <div className="scrollbar-none min-h-0 overflow-y-auto pr-1">
+                <div className="scrollbar-none min-h-0 overflow-y-auto overscroll-auto pr-1">
                   {visibleEpisodeAlignments.length > 0 ? (
                     <div className="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
                       {visibleEpisodeAlignments.map((alignment) => (
@@ -992,7 +990,7 @@ export function QuarkSeasonIngestWorkspace({
                     event.dataTransfer.dropEffect = 'move'
                   }}
                   onDrop={handlePendingDrop}
-                  className="scrollbar-none max-h-40 min-h-0 overflow-y-auto rounded-lg border border-slate-200 bg-white lg:max-h-none"
+                  className="scrollbar-none max-h-40 min-h-0 overflow-y-auto overscroll-auto rounded-lg border border-slate-200 bg-white lg:max-h-none"
                 >
                   <div className="sticky top-0 z-10 border-b border-slate-200 bg-white px-3 py-3">
                     <p className="flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-800">
@@ -1099,7 +1097,6 @@ export function QuarkSeasonIngestWorkspace({
                         )}
                       >
                         {season === 'unassigned' ? '未分季' : `第 ${season} 季`}
-                        {` · ${summary?.sourceCount ?? 0}`}
                         {(summary?.errorCount ?? 0) > 0 ? (
                           <span className="ml-1 text-rose-600">异常 {summary?.errorCount}</span>
                         ) : null}
@@ -1110,7 +1107,7 @@ export function QuarkSeasonIngestWorkspace({
               </div>
             ) : null}
             <div className={cn(
-              'scrollbar-none max-h-[min(60vh,36rem)] overflow-y-auto overscroll-contain bg-slate-50/70 p-3',
+              'scrollbar-none max-h-[min(60vh,36rem)] overflow-y-auto overscroll-auto bg-slate-50/70 p-3',
               showSourceDetailTabs ? 'pt-1' : 'border-t border-slate-200',
             )}>
               <div className="space-y-3">
