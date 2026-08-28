@@ -141,6 +141,22 @@ export function QuarkReleasePanel({
   })
   const [previewState, setPreviewState] = useState<PreviewState | null>(null)
   const [visibleLimit, setVisibleLimit] = useState(RELEASE_PAGE_SIZE)
+  const previewOpen = previewState !== null
+
+  useEffect(() => {
+    const documentElement = document.documentElement
+    const body = document.body
+    const previousRootOverflow = documentElement.style.overflow
+    const previousBodyOverflow = body.style.overflow
+    if (previewOpen) {
+      documentElement.style.overflow = 'hidden'
+      body.style.overflow = 'hidden'
+    }
+    return () => {
+      documentElement.style.overflow = previousRootOverflow
+      body.style.overflow = previousBodyOverflow
+    }
+  }, [previewOpen])
 
   const scheduleValidationFlush = useCallback(() => {
     if (
@@ -661,7 +677,7 @@ export function QuarkReleasePanel({
       )}
 
       {previewState ? (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-auto bg-slate-950/45 px-3 py-3 backdrop-blur-sm sm:px-4 sm:py-8">
+        <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-hidden overscroll-auto bg-slate-950/55 px-3 py-3 backdrop-blur-sm sm:px-4 sm:py-8">
           <div
             role="dialog"
             aria-modal="true"

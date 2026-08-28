@@ -786,7 +786,7 @@ export function QuarkSeasonIngestWorkspace({
 
   return (
     <div className="space-y-4">
-      <div className="flex w-full rounded-xl bg-slate-100 p-1 sm:w-fit">
+      <div className="flex w-full rounded-lg border border-slate-200 bg-white p-1 sm:w-fit">
         {([
           ['CURRENT_SEASON', `仅保存第 ${selectedSeason} 季`],
           ['MULTIPLE_SEASONS', '保存多季'],
@@ -798,7 +798,9 @@ export function QuarkSeasonIngestWorkspace({
             onClick={() => changeScope(value)}
             className={cn(
               'flex-1 rounded-lg px-4 py-2 text-xs font-semibold sm:flex-none',
-              scope === value ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500',
+              scope === value
+                ? 'bg-slate-950 text-white shadow-sm'
+                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
             )}
           >
             {label}
