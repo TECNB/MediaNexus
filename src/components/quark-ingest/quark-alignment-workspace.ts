@@ -16,6 +16,21 @@ export type QuarkAlignmentWorkspaceProjection = {
   pendingFiles: QuarkPendingAlignmentFile[]
 }
 
+export function clearQuarkFileAlignment(
+  selections: QuarkSourceSelection[],
+  sourceCandidateId: string,
+  fileId: string,
+  originalSeason: number | null | undefined,
+): QuarkSourceSelection[] {
+  return selections.map((selection) => selection.source_candidate_id === sourceCandidateId
+    ? {
+        ...selection,
+        season_number: originalSeason ?? selection.season_number,
+        files: selection.files.filter((file) => file.file_id !== fileId),
+      }
+    : selection)
+}
+
 export function projectQuarkAlignmentWorkspace(
   episodeAlignments: QuarkEpisodeAlignment[],
   pendingFiles: QuarkPendingAlignmentFile[],

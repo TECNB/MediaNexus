@@ -12,7 +12,10 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { projectQuarkAlignmentWorkspace } from '@/components/quark-ingest/quark-alignment-workspace'
+import {
+  clearQuarkFileAlignment,
+  projectQuarkAlignmentWorkspace,
+} from '@/components/quark-ingest/quark-alignment-workspace'
 import {
   createQuarkMultiSourceTasks,
   previewQuarkMultiSourcePlan,
@@ -577,6 +580,24 @@ export function QuarkSeasonIngestWorkspace({
     })
   }
 
+  function handlePendingDrop(event: DragEvent<HTMLElement>) {
+    event.preventDefault()
+    const fileId = event.dataTransfer.getData('text/plain')
+    if (!fileId) return
+    const source = fileSources.get(fileId)
+    if (!source) return
+    const originalSeason = preview?.sources.find(
+      (item) => item.source_candidate_id === source.sourceCandidateId,
+    )?.selected_season
+    setSelections((current) => clearQuarkFileAlignment(
+      current,
+      source.sourceCandidateId,
+      fileId,
+      originalSeason,
+    ))
+    markPlanDirty()
+  }
+
   function toggleDirectory(relativePath: string, expanded: boolean) {
     setExpandedDirectories((current) => {
       if (current.has(relativePath) === expanded) return current
@@ -694,7 +715,7 @@ export function QuarkSeasonIngestWorkspace({
                 全部折叠
               </button>
             </div>
-            <div className="p-4">
+            <div className="max-h-[min(42vh,24rem)] overflow-y-auto overscroll-contain p-4">
               <SourceTree
                 nodes={preview.entries}
                 selections={selectionsById}
@@ -840,13 +861,20 @@ export function QuarkSeasonIngestWorkspace({
                     </div>
                   )}
                 </div>
-                <aside className="max-h-40 min-h-0 overflow-y-auto rounded-lg border border-rose-200 bg-rose-50/70 px-3 py-3 lg:max-h-none">
+                <aside
+                  onDragOver={(event) => {
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'move'
+                  }}
+                  onDrop={handlePendingDrop}
+                  className="max-h-40 min-h-0 overflow-y-auto rounded-lg border border-rose-200 bg-rose-50/70 px-3 py-3 lg:max-h-none"
+                >
                   <div className="sticky top-0 z-10 -mx-3 -mt-3 border-b border-rose-100 bg-rose-50 px-3 py-3">
                     <p className="text-[11px] font-semibold text-rose-700">
                       第 {alignmentSeason ?? selectedSeason} 季待处置视频 · {visiblePendingFiles.length}
                     </p>
                     <p className="mt-1 text-[10px] leading-4 text-rose-600">
-                      拖到左侧目标集数；版本、分段或忽略可在下方来源文件列表继续调整。
+                      拖到左侧目标集数；已手动映射的文件可拖回此处撤销，版本、分段或忽略可在下方继续调整。
                     </p>
                   </div>
                   {visiblePendingFiles.length > 0 ? (

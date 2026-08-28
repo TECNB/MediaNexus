@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { projectQuarkAlignmentWorkspace } from '../src/components/quark-ingest/quark-alignment-workspace.ts'
+import {
+  clearQuarkFileAlignment,
+  projectQuarkAlignmentWorkspace,
+} from '../src/components/quark-ingest/quark-alignment-workspace.ts'
 import type {
   QuarkEpisodeAlignment,
   QuarkRenamePreview,
@@ -103,4 +106,36 @@ test('moves an aligned file to another TMDB episode without leaving a duplicate'
     ['file-1'],
   )
   assert.equal(projection.episodeAlignments[1].status, 'MATCHED')
+})
+
+test('clears a manual mapping when the file is dropped back into pending', () => {
+  const pendingFile = file('file-1')
+  const selections: QuarkSourceSelection[] = [{
+    source_candidate_id: 'source-1',
+    season_number: 2,
+    ignored: false,
+    follow_updates: false,
+    files: [{
+      file_id: 'file-1',
+      episode_number: 7,
+      ignored: false,
+      assignment_type: 'PRIMARY',
+      forced: true,
+    }],
+  }]
+
+  const cleared = clearQuarkFileAlignment(selections, 'source-1', 'file-1', 1)
+  const projection = projectQuarkAlignmentWorkspace(
+    [alignment(1, 7)],
+    [{ sourceCandidateId: 'source-1', file: pendingFile }],
+    new Map([['file-1', { sourceCandidateId: 'source-1', file: pendingFile }]]),
+    cleared,
+  )
+
+  assert.equal(cleared[0].season_number, 1)
+  assert.deepEqual(cleared[0].files, [])
+  assert.deepEqual(
+    projection.pendingFiles.map((pending) => pending.file.file_id),
+    ['file-1'],
+  )
 })
