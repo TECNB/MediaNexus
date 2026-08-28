@@ -1,5 +1,6 @@
 import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Check,
   CircleAlert,
   ChevronRight,
   ChevronsDownUp,
@@ -178,6 +179,50 @@ function alignmentEpisodeLabel(row: QuarkEpisodeAlignment) {
   return `S${String(row.season_number).padStart(2, '0')}E${String(row.episode_number).padStart(2, '0')}`
 }
 
+function userFacingMessage(message: string) {
+  return message.replace(/TMDB\s*/gi, '').trim()
+}
+
+function CompactCheckbox({
+  checked,
+  disabled = false,
+  label,
+  onChange,
+  className,
+}: {
+  checked: boolean
+  disabled?: boolean
+  label: string
+  onChange: (checked: boolean) => void
+  className?: string
+}) {
+  return (
+    <label className={cn(
+      'inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border px-2.5 text-[11px] font-medium transition-colors',
+      checked
+        ? 'border-slate-300 bg-slate-100 text-slate-900'
+        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900',
+      disabled && 'cursor-not-allowed opacity-50',
+      className,
+    )}>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        className="sr-only"
+      />
+      <span className={cn(
+        'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors',
+        checked ? 'border-slate-950 bg-slate-950' : 'border-slate-300 bg-white',
+      )}>
+        <Check className={cn('h-3 w-3 text-white', checked ? 'opacity-100' : 'opacity-0')} />
+      </span>
+      <span>{label}</span>
+    </label>
+  )
+}
+
 type FileAssignmentPatch = {
   episodeNumber?: number | null
   assignmentType?: QuarkAssignmentType | null
@@ -329,6 +374,7 @@ export function QuarkSeasonIngestWorkspace({
   const [detachedFileIds, setDetachedFileIds] = useState<Set<string>>(new Set())
   const [alignmentSeason, setAlignmentSeason] = useState<number | null>(selectedSeason)
   const [sourceDetailSeason, setSourceDetailSeason] = useState<SourceDetailSeason>(selectedSeason)
+  const [renamePreviewGenerated, setRenamePreviewGenerated] = useState(false)
   const controllerRef = useRef<AbortController | null>(null)
   const scopeRef = useRef<SaveScope>('CURRENT_SEASON')
 
@@ -473,12 +519,13 @@ export function QuarkSeasonIngestWorkspace({
   }, [selectedSeason, sourceDetailSeasons])
 
   const visibleSourceDetails = useMemo(() => (preview?.sources ?? []).filter((source) => {
+    if (!renamePreviewGenerated || sourceDetailSeasons.length <= 1) return true
     const season = selectionsById.get(source.source_candidate_id)?.season_number
       ?? source.selected_season
     return sourceDetailSeason === 'unassigned'
       ? season == null || season <= 0
       : season === sourceDetailSeason
-  }), [preview?.sources, selectionsById, sourceDetailSeason])
+  }), [preview?.sources, renamePreviewGenerated, selectionsById, sourceDetailSeason, sourceDetailSeasons.length])
 
   const sourceDetailSummary = useMemo(() => new Map(sourceDetailSeasons.map((season) => {
     const sources = (preview?.sources ?? []).filter((source) => {
@@ -493,6 +540,7 @@ export function QuarkSeasonIngestWorkspace({
       errorCount: sources.reduce((count, source) => count + source.errors.length, 0),
     }]
   })), [preview?.sources, selectionsById, sourceDetailSeasons])
+  const showSourceDetailTabs = renamePreviewGenerated && sourceDetailSeasons.length > 1
 
   const inspectShareTree = useCallback(async () => {
     controllerRef.current?.abort()
@@ -502,6 +550,7 @@ export function QuarkSeasonIngestWorkspace({
     setSelections([])
     setExpandedDirectories(new Set())
     setDetachedFileIds(new Set())
+    setRenamePreviewGenerated(false)
     setStatus('loading')
     setMessage(null)
     setCreatedTask(null)
@@ -696,6 +745,7 @@ export function QuarkSeasonIngestWorkspace({
         const planned = await previewQuarkMultiSourcePlan(mediaType, payload, controller.signal)
         setPreview(planned)
         setDetachedFileIds(new Set())
+        setRenamePreviewGenerated(true)
         setStatus('success')
         return
       }
@@ -779,7 +829,7 @@ export function QuarkSeasonIngestWorkspace({
                 全部折叠
               </button>
             </div>
-            <div className="max-h-[min(42vh,24rem)] overflow-y-auto overscroll-contain p-4">
+            <div className="scrollbar-none max-h-[min(42vh,24rem)] overflow-y-auto overscroll-contain p-4">
               <SourceTree
                 nodes={preview.entries}
                 selections={selectionsById}
@@ -829,7 +879,7 @@ export function QuarkSeasonIngestWorkspace({
             <section className="flex h-[min(76vh,46rem)] min-h-[34rem] flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-4">
               <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">TMDB 对齐工作台</p>
+                  <p className="text-sm font-semibold text-slate-900">集数对齐</p>
                   <p className="mt-1 text-[11px] leading-5 text-slate-500">
                     按季度查看目标集数，从右侧待处置区拖动文件完成映射。缺集只提示，不阻止提交；待确认文件必须处置。
                   </p>
@@ -847,8 +897,8 @@ export function QuarkSeasonIngestWorkspace({
               {alignmentSeasons.length > 0 ? (
                 <div
                   role="tablist"
-                  aria-label="TMDB 对齐季度"
-                  className="mt-3 flex w-full shrink-0 gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1"
+                  aria-label="集数对齐季度"
+                  className="scrollbar-none mt-3 flex w-full shrink-0 gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1"
                 >
                   {alignmentSeasons.map((season) => (
                     <button
@@ -873,7 +923,7 @@ export function QuarkSeasonIngestWorkspace({
                 </div>
               ) : null}
               <div className="mt-3 grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-3 lg:grid-cols-[minmax(0,1fr)_20rem] lg:grid-rows-1">
-                <div className="min-h-0 overflow-y-auto pr-1">
+                <div className="scrollbar-none min-h-0 overflow-y-auto pr-1">
                   {visibleEpisodeAlignments.length > 0 ? (
                     <div className="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
                       {visibleEpisodeAlignments.map((alignment) => (
@@ -925,14 +975,14 @@ export function QuarkSeasonIngestWorkspace({
                             </p>
                           )}
                           {alignment.message ? (
-                            <p className="mt-1 text-[11px] text-slate-500">{alignment.message}</p>
+                            <p className="mt-1 text-[11px] text-slate-500">{userFacingMessage(alignment.message)}</p>
                           ) : null}
                         </div>
                       ))}
                     </div>
                   ) : (
                     <div className="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-8 text-center text-xs text-slate-500">
-                      当前季度没有可用的 TMDB 集数信息，请在来源文件列表中手动指定集数。
+                      当前季度没有可用的目标集数信息，请在来源文件列表中手动指定集数。
                     </div>
                   )}
                 </div>
@@ -942,9 +992,9 @@ export function QuarkSeasonIngestWorkspace({
                     event.dataTransfer.dropEffect = 'move'
                   }}
                   onDrop={handlePendingDrop}
-                  className="max-h-40 min-h-0 overflow-y-auto rounded-lg border border-slate-200 bg-white px-3 py-3 lg:max-h-none"
+                  className="scrollbar-none max-h-40 min-h-0 overflow-y-auto rounded-lg border border-slate-200 bg-white lg:max-h-none"
                 >
-                  <div className="sticky top-0 z-10 -mx-3 -mt-3 border-b border-slate-200 bg-white px-3 py-3">
+                  <div className="sticky top-0 z-10 border-b border-slate-200 bg-white px-3 py-3">
                     <p className="flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-800">
                       <span>第 {alignmentSeason ?? selectedSeason} 季待处置视频</span>
                       <span className={cn(
@@ -963,7 +1013,7 @@ export function QuarkSeasonIngestWorkspace({
                     </p>
                   </div>
                   {visiblePendingFiles.length > 0 ? (
-                    <div className="mt-2 space-y-1.5">
+                    <div className="space-y-1.5 px-3 pb-3 pt-2">
                       {visiblePendingFiles.map(({ file }) => (
                         <div
                           key={file.file_id}
@@ -981,7 +1031,7 @@ export function QuarkSeasonIngestWorkspace({
                       ))}
                     </div>
                   ) : (
-                    <p className="mt-3 rounded-md border border-dashed border-emerald-200 bg-emerald-50/70 px-2 py-3 text-center text-[11px] text-emerald-700">
+                    <p className="m-3 rounded-md border border-dashed border-emerald-200 bg-emerald-50/70 px-2 py-3 text-center text-[11px] text-emerald-700">
                       当前季度没有待处置视频
                     </p>
                   )}
@@ -1024,40 +1074,45 @@ export function QuarkSeasonIngestWorkspace({
               </div>
               <ChevronRight className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-90" />
             </summary>
-            <div className="border-t border-slate-200 bg-slate-50/70 p-3 pb-2">
-              <div
-                role="tablist"
-                aria-label="季度来源明细"
-                className="flex gap-1 overflow-x-auto rounded-lg bg-slate-200/70 p-1"
-              >
-                {sourceDetailSeasons.map((season) => {
-                  const summary = sourceDetailSummary.get(season)
-                  const active = sourceDetailSeason === season
-                  return (
-                    <button
-                      key={season}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      onClick={() => setSourceDetailSeason(season)}
-                      className={cn(
-                        'shrink-0 rounded-md px-3 py-1.5 text-[11px] font-semibold transition-colors',
-                        active
-                          ? 'bg-white text-slate-950 shadow-sm'
-                          : 'text-slate-500 hover:text-slate-900',
-                      )}
-                    >
-                      {season === 'unassigned' ? '未分季' : `第 ${season} 季`}
-                      {` · ${summary?.sourceCount ?? 0}`}
-                      {(summary?.errorCount ?? 0) > 0 ? (
-                        <span className="ml-1 text-rose-600">异常 {summary?.errorCount}</span>
-                      ) : null}
-                    </button>
-                  )
-                })}
+            {showSourceDetailTabs ? (
+              <div className="border-t border-slate-200 bg-slate-50/70 p-3 pb-2">
+                <div
+                  role="tablist"
+                  aria-label="季度来源明细"
+                  className="scrollbar-none flex gap-1 overflow-x-auto rounded-lg bg-slate-200/70 p-1"
+                >
+                  {sourceDetailSeasons.map((season) => {
+                    const summary = sourceDetailSummary.get(season)
+                    const active = sourceDetailSeason === season
+                    return (
+                      <button
+                        key={season}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => setSourceDetailSeason(season)}
+                        className={cn(
+                          'shrink-0 rounded-md px-3 py-1.5 text-[11px] font-semibold transition-colors',
+                          active
+                            ? 'bg-white text-slate-950 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-900',
+                        )}
+                      >
+                        {season === 'unassigned' ? '未分季' : `第 ${season} 季`}
+                        {` · ${summary?.sourceCount ?? 0}`}
+                        {(summary?.errorCount ?? 0) > 0 ? (
+                          <span className="ml-1 text-rose-600">异常 {summary?.errorCount}</span>
+                        ) : null}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-            <div className="max-h-[min(60vh,36rem)] overflow-y-auto overscroll-contain bg-slate-50/70 p-3 pt-1">
+            ) : null}
+            <div className={cn(
+              'scrollbar-none max-h-[min(60vh,36rem)] overflow-y-auto overscroll-contain bg-slate-50/70 p-3',
+              showSourceDetailTabs ? 'pt-1' : 'border-t border-slate-200',
+            )}>
               <div className="space-y-3">
                 {visibleSourceDetails.map((source) => {
               const selection = selectionsById.get(source.source_candidate_id)
@@ -1122,30 +1177,24 @@ export function QuarkSeasonIngestWorkspace({
                             <option key={value} value={value}>S{String(value).padStart(2, '0')}</option>
                           ))}
                       </select>
-                      <label className="flex items-center gap-1.5 text-xs text-slate-600">
-                        <input
-                          type="checkbox"
-                          checked={selection.ignored}
-                          onChange={(event) => updateSelection(source.source_candidate_id, (current) => ({
+                      <CompactCheckbox
+                        checked={selection.ignored}
+                        label="忽略"
+                        onChange={(ignored) => updateSelection(source.source_candidate_id, (current) => ({
+                          ...current,
+                          ignored,
+                          follow_updates: ignored ? false : current.follow_updates,
+                        }))}
+                      />
+                      {subscriptionEnabled && !selection.ignored ? (
+                        <CompactCheckbox
+                          checked={selection.follow_updates}
+                          label="更新文件夹"
+                          onChange={(followUpdates) => updateSelection(source.source_candidate_id, (current) => ({
                             ...current,
-                            ignored: event.target.checked,
-                            follow_updates: event.target.checked ? false : current.follow_updates,
+                            follow_updates: followUpdates,
                           }))}
                         />
-                        忽略
-                      </label>
-                      {subscriptionEnabled && !selection.ignored ? (
-                        <label className="flex items-center gap-1.5 text-xs text-slate-600">
-                          <input
-                            type="checkbox"
-                            checked={selection.follow_updates}
-                            onChange={(event) => updateSelection(source.source_candidate_id, (current) => ({
-                              ...current,
-                              follow_updates: event.target.checked,
-                            }))}
-                          />
-                          更新文件夹
-                        </label>
                       ) : null}
                     </div>
                   </div>
@@ -1301,28 +1350,25 @@ export function QuarkSeasonIngestWorkspace({
                                     </>
                                   )
                                 })() : null}
-                                <label className="flex items-center gap-1.5 text-[11px] text-slate-600">
-                                  <input
-                                    type="checkbox"
-                                    checked={correction?.ignored === true}
-                                    onChange={(event) => updateFileSelection(
-                                      source.source_candidate_id,
-                                      file.file_id,
-                                      () => event.target.checked
-                                        ? {
-                                            file_id: file.file_id,
-                                            episode_number: null,
-                                            ignored: true,
-                                            assignment_type: null,
-                                            edition_label: null,
-                                            segment_label: null,
-                                            forced: false,
-                                          }
-                                        : null,
-                                    )}
-                                  />
-                                  忽略文件
-                                </label>
+                                <CompactCheckbox
+                                  checked={correction?.ignored === true}
+                                  label="忽略文件"
+                                  onChange={(ignored) => updateFileSelection(
+                                    source.source_candidate_id,
+                                    file.file_id,
+                                    () => ignored
+                                      ? {
+                                          file_id: file.file_id,
+                                          episode_number: null,
+                                          ignored: true,
+                                          assignment_type: null,
+                                          edition_label: null,
+                                          segment_label: null,
+                                          forced: false,
+                                        }
+                                      : null,
+                                  )}
+                                />
                               </div>
                             ) : null}
                           </div>
@@ -1355,8 +1401,13 @@ export function QuarkSeasonIngestWorkspace({
               </div>
             </div>
           </details>
-          <p className={cn('text-sm', preview.ready ? 'text-emerald-700' : 'text-amber-700')}>
-            {preview.message}
+          <p className={cn(
+            'text-sm',
+            preview.ready ? 'text-emerald-700' : 'text-amber-700',
+          )}>
+            {preview.ready
+              ? '预览已生成，可以确认入库。'
+              : '预览已更新，请检查需要处理的文件后继续。'}
           </p>
           {preview.warnings.map((warning) => (
             <p key={warning} className="text-xs text-amber-700">· {warning}</p>
