@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { projectQuarkAlignmentWorkspace } from '@/components/quark-ingest/quark-alignment-workspace'
 import {
   createQuarkMultiSourceTasks,
   previewQuarkMultiSourcePlan,
@@ -341,7 +342,7 @@ export function QuarkSeasonIngestWorkspace({
     sources: selections,
   }
 
-  const episodeAlignments = useMemo(
+  const previewEpisodeAlignments = useMemo(
     () => preview?.episode_alignments ?? [],
     [preview?.episode_alignments],
   )
@@ -353,7 +354,7 @@ export function QuarkSeasonIngestWorkspace({
       numbers.add(episode)
       numbersBySeason.set(season, numbers)
     }
-    for (const alignment of episodeAlignments) add(alignment.season_number, alignment.episode_number)
+    for (const alignment of previewEpisodeAlignments) add(alignment.season_number, alignment.episode_number)
     for (const coverage of preview?.season_coverages ?? []) {
       for (const episode of coverage.episodes ?? []) add(coverage.season_number, episode.episode_number)
       for (const episode of coverage.missing_episode_numbers) add(coverage.season_number, episode)
@@ -368,7 +369,7 @@ export function QuarkSeasonIngestWorkspace({
       season,
       [...numbers].sort((left, right) => left - right),
     ]))
-  }, [episodeAlignments, preview?.season_coverages, preview?.sources])
+  }, [previewEpisodeAlignments, preview?.season_coverages, preview?.sources])
 
   const fileSources = useMemo(() => {
     const byFileId = new Map<string, { sourceCandidateId: string; file: QuarkRenamePreview }>()
@@ -381,14 +382,23 @@ export function QuarkSeasonIngestWorkspace({
   }, [preview?.sources])
 
   const alignedFileIds = useMemo(() => new Set(
-    episodeAlignments.flatMap((alignment) => alignment.files.map((file) => file.file_id)),
-  ), [episodeAlignments])
+    previewEpisodeAlignments.flatMap((alignment) => alignment.files.map((file) => file.file_id)),
+  ), [previewEpisodeAlignments])
 
-  const pendingFiles = useMemo(() => [...fileSources.values()]
+  const previewPendingFiles = useMemo(() => [...fileSources.values()]
     .filter(({ file }) => isVideoFile(file.source_name)
       && !alignedFileIds.has(file.file_id)
       && ['UNRECOGNIZED', 'CONFLICT', 'MANUAL'].includes(file.status)),
   [alignedFileIds, fileSources])
+
+  const alignmentProjection = useMemo(() => projectQuarkAlignmentWorkspace(
+    previewEpisodeAlignments,
+    previewPendingFiles,
+    fileSources,
+    selections,
+  ), [fileSources, previewEpisodeAlignments, previewPendingFiles, selections])
+  const episodeAlignments = alignmentProjection.episodeAlignments
+  const pendingFiles = alignmentProjection.pendingFiles
 
   const alignmentSeasons = useMemo(() => [...new Set([
     ...episodeAlignments.map((alignment) => alignment.season_number),
