@@ -20,6 +20,7 @@ import {
   sortQuarkRenamePreviews,
   sortQuarkPendingFiles,
 } from '@/components/quark-ingest/quark-alignment-workspace'
+import type { QuarkPendingAlignmentFile } from '@/components/quark-ingest/quark-alignment-workspace'
 import {
   createQuarkMultiSourceTasks,
   previewQuarkMultiSourcePlan,
@@ -682,6 +683,33 @@ export function QuarkSeasonIngestWorkspace({
     })
   }
 
+  function ignorePendingFiles(files: QuarkPendingAlignmentFile[]) {
+    const fileIdsBySource = new Map<string, Set<string>>()
+    for (const pending of files) {
+      const fileIds = fileIdsBySource.get(pending.sourceCandidateId) ?? new Set<string>()
+      fileIds.add(pending.file.file_id)
+      fileIdsBySource.set(pending.sourceCandidateId, fileIds)
+    }
+    setSelections((current) => current.map((selection) => {
+      const fileIds = fileIdsBySource.get(selection.source_candidate_id)
+      if (!fileIds) return selection
+      const nextFiles = new Map(selection.files.map((file) => [file.file_id, file]))
+      for (const fileId of fileIds) {
+        nextFiles.set(fileId, {
+          file_id: fileId,
+          episode_number: null,
+          ignored: true,
+          assignment_type: null,
+          edition_label: null,
+          segment_label: null,
+          forced: false,
+        })
+      }
+      return { ...selection, files: [...nextFiles.values()] }
+    }))
+    markPlanDirty()
+  }
+
   function handleFileDrop(event: DragEvent<HTMLDivElement>, seasonNumber: number, episodeNumber: number) {
     event.preventDefault()
     const fileId = event.dataTransfer.getData('text/plain')
@@ -1018,13 +1046,24 @@ export function QuarkSeasonIngestWorkspace({
                   <div className="sticky top-0 z-10 border-b border-slate-200 bg-white px-3 py-3">
                     <p className="flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-800">
                       <span>第 {alignmentSeason ?? selectedSeason} 季待处置视频</span>
-                      <span className={cn(
-                        'rounded-full px-2 py-0.5 text-[10px]',
-                        pendingPanelResolved
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-rose-100 text-rose-700',
-                      )}>
-                        {visiblePendingFiles.length}
+                      <span className="flex items-center gap-2">
+                        <span className={cn(
+                          'rounded-full px-2 py-0.5 text-[10px]',
+                          pendingPanelResolved
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-rose-100 text-rose-700',
+                        )}>
+                          {visiblePendingFiles.length}
+                        </span>
+                        {visiblePendingFiles.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => ignorePendingFiles(visiblePendingFiles)}
+                            className="rounded-md border border-slate-200 px-2 py-1 text-[10px] font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                          >
+                            全部忽略
+                          </button>
+                        ) : null}
                       </span>
                     </p>
                     <p className="mt-1 text-[10px] leading-4 text-slate-500">
