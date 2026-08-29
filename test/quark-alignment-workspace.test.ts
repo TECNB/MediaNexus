@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   clearQuarkFileAlignment,
   projectQuarkAlignmentWorkspace,
+  sortQuarkRenamePreviews,
   sortQuarkPendingFiles,
 } from '../src/components/quark-ingest/quark-alignment-workspace.ts'
 import type {
@@ -200,6 +201,26 @@ test('sorts pending files by episode number before date and natural filename ord
       '【Mic迈扣】女高推理班 E03.240510 中字 1080P.mp4',
       '【Mic迈扣】女高推理班 E08.240607 中字 1080P.mp4',
       '【Mic迈扣】女高推理班 E00.240419 中字 1080P.mp4',
+    ],
+  )
+})
+
+test('sorts source detail files with the same episode-first order as pending files', () => {
+  const files = [
+    'S1游戏的法则 E10 监禁欺诈赛马.mp4',
+    'S1游戏的法则 E02 大选游戏.mp4',
+    'S1游戏的法则 E01 123游戏.mp4',
+  ].map((source_name, index) => ({
+    ...file(`source-file-${index}`),
+    source_name,
+  }))
+
+  assert.deepEqual(
+    sortQuarkRenamePreviews(files).map((item) => item.source_name),
+    [
+      'S1游戏的法则 E01 123游戏.mp4',
+      'S1游戏的法则 E02 大选游戏.mp4',
+      'S1游戏的法则 E10 监禁欺诈赛马.mp4',
     ],
   )
 })

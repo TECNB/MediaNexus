@@ -50,20 +50,39 @@ function pendingFileSortKey(name: string): [number, number, number, string] {
   return [2, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, name]
 }
 
-export function sortQuarkPendingFiles(files: QuarkPendingAlignmentFile[]) {
-  return [...files].sort((left, right) => {
-    const leftKey = pendingFileSortKey(left.file.source_name)
-    const rightKey = pendingFileSortKey(right.file.source_name)
-    for (let index = 0; index < leftKey.length - 1; index += 1) {
-      if (leftKey[index] !== rightKey[index]) {
-        return Number(leftKey[index]) - Number(rightKey[index])
-      }
+function compareQuarkFileNames(
+  leftName: string,
+  rightName: string,
+  leftId: string,
+  rightId: string,
+) {
+  const leftKey = pendingFileSortKey(leftName)
+  const rightKey = pendingFileSortKey(rightName)
+  for (let index = 0; index < leftKey.length - 1; index += 1) {
+    if (leftKey[index] !== rightKey[index]) {
+      return Number(leftKey[index]) - Number(rightKey[index])
     }
-    const nameOrder = PENDING_FILE_COLLATOR.compare(leftKey[3], rightKey[3])
-    return nameOrder !== 0
-      ? nameOrder
-      : left.file.file_id.localeCompare(right.file.file_id)
-  })
+  }
+  const nameOrder = PENDING_FILE_COLLATOR.compare(leftKey[3], rightKey[3])
+  return nameOrder !== 0 ? nameOrder : leftId.localeCompare(rightId)
+}
+
+export function sortQuarkPendingFiles(files: QuarkPendingAlignmentFile[]) {
+  return [...files].sort((left, right) => compareQuarkFileNames(
+    left.file.source_name,
+    right.file.source_name,
+    left.file.file_id,
+    right.file.file_id,
+  ))
+}
+
+export function sortQuarkRenamePreviews(files: QuarkRenamePreview[]) {
+  return [...files].sort((left, right) => compareQuarkFileNames(
+    left.source_name,
+    right.source_name,
+    left.file_id,
+    right.file_id,
+  ))
 }
 
 export function clearQuarkFileAlignment(

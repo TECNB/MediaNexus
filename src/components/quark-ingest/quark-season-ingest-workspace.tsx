@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import {
   clearQuarkFileAlignment,
   projectQuarkAlignmentWorkspace,
+  sortQuarkRenamePreviews,
   sortQuarkPendingFiles,
 } from '@/components/quark-ingest/quark-alignment-workspace'
 import {
@@ -175,6 +176,13 @@ function alignmentStatusLabel(status: string) {
   if (status === 'MULTIPLE') return '多版本/分段'
   if (status === 'MISSING') return '缺集'
   return '待确认'
+}
+
+function sourceSeasonStatusLabel(status: string) {
+  if (status === 'AUTO') return '已自动识别季度'
+  if (status === 'MIXED') return '季度标记冲突'
+  if (status === 'UNRECOGNIZED') return '待设置季度'
+  return status
 }
 
 function alignmentEpisodeLabel(row: QuarkEpisodeAlignment) {
@@ -1149,7 +1157,7 @@ export function QuarkSeasonIngestWorkspace({
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-slate-900">{source.source_name}</p>
                       <p className="mt-1 truncate text-xs text-slate-500">
-                        {source.relative_path || '分享根目录'} · {source.season_status}
+                        {source.relative_path || '分享根目录'} · {sourceSeasonStatusLabel(source.season_status)}
                       </p>
                       {source.files.length > 0 ? (
                         <p className="mt-1 text-[11px] text-slate-500">
@@ -1212,7 +1220,7 @@ export function QuarkSeasonIngestWorkspace({
                   </div>
                   {source.files.length > 0 ? (
                     <div className="mt-3 divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
-                      {source.files.map((file) => {
+                      {sortQuarkRenamePreviews(source.files).map((file) => {
                         const correction = selection.files.find((item) => item.file_id === file.file_id)
                         const canCorrect = file.status !== 'EXCLUDED' && !selection.ignored
                         return (
