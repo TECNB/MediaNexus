@@ -30,7 +30,13 @@ import type {
 
 const POLL_INTERVAL_MS = 5000
 const LOG_PAGE_SIZE = 100
-const terminalLogStages = new Set(['succeeded', 'completed', 'failed', 'interrupted'])
+const terminalLogStages = new Set([
+  'succeeded',
+  'completed',
+  'smartstrm',
+  'failed',
+  'interrupted',
+])
 
 const statusCopy: Record<string, string> = {
   IN_PROGRESS: '进行中',
@@ -49,6 +55,7 @@ const stageCopy: Record<string, string> = {
   queued: '排队中',
   processing: '处理中',
   submitted: '已提交处理',
+  smartstrm: '后续媒体处理',
   completed: '完成收束',
   failed: '失败收束',
 }
