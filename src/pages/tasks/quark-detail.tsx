@@ -165,7 +165,7 @@ export function QuarkTaskCenterDetailPage() {
         currentDetail ? 0 : LOG_PAGE_SIZE,
       )
       if (currentDetail?.id === nextDetail.id) {
-        const latestLogId = currentDetail.logs.at(-1)?.id
+        const latestLogId = currentDetail.logs[currentDetail.logs.length - 1]?.id
         const logPage = latestLogId
           ? await listQuarkTaskCenterLogs(
               taskId,
