@@ -14,6 +14,13 @@ import type {
   OpenListTaskCenterLogsData,
   OpenListTaskCenterTaskType,
 } from '@/types/task-center'
+import type {
+  QuarkTaskCenterAction,
+  QuarkTaskCenterDetail,
+  QuarkTaskCenterListData,
+  QuarkTaskCenterListParams,
+  QuarkTaskCenterLogsData,
+} from '@/types/quark-task-center'
 
 const JAVA_TASK_CENTER_ERROR_MESSAGE = '任务中心加载失败，请稍后重试。'
 
@@ -297,6 +304,152 @@ export async function retryOpenListWithSelectedRelease(
   } catch (error) {
     throw new Error(
       getJavaErrorMessage(error) || '发布资源重试创建失败，请稍后重试。',
+    )
+  }
+}
+
+const QUARK_TASK_CENTER_ERROR_MESSAGE = 'Quark 入库任务加载失败，请稍后重试。'
+
+export async function listQuarkTaskCenterItems(
+  params: QuarkTaskCenterListParams,
+  signal?: AbortSignal,
+): Promise<QuarkTaskCenterListData> {
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<QuarkTaskCenterListData>
+    >('/api/v1/task-center/quark-ingest/tasks', {
+      params: {
+        view: params.view,
+        product_type: params.product_type,
+        source_type: params.source_type,
+        subscription: params.subscription,
+        keyword: params.keyword?.trim() || undefined,
+        page: params.page,
+        page_size: params.page_size,
+      },
+      signal,
+    })
+
+    if (
+      response.data.code !== 200 ||
+      !response.data.data ||
+      !Array.isArray(response.data.data.items) ||
+      typeof response.data.data.total !== 'number'
+    ) {
+      throw new Error(response.data.message || 'Quark task center fetch failed')
+    }
+
+    return response.data.data
+  } catch (error) {
+    if (isJavaRequestCanceledError(error)) throw error
+    throw new Error(
+      getJavaErrorMessage(error) || QUARK_TASK_CENTER_ERROR_MESSAGE,
+    )
+  }
+}
+
+export async function getQuarkTaskCenterDetail(
+  taskId: string,
+  signal?: AbortSignal,
+  logLimit = 100,
+): Promise<QuarkTaskCenterDetail> {
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<QuarkTaskCenterDetail>
+    >(
+      `/api/v1/task-center/quark-ingest/tasks/${encodeURIComponent(taskId)}`,
+      { params: { log_limit: logLimit }, signal },
+    )
+    if (response.data.code !== 200 || !response.data.data) {
+      throw new Error(response.data.message || 'Quark task detail fetch failed')
+    }
+    return response.data.data
+  } catch (error) {
+    if (isJavaRequestCanceledError(error)) throw error
+    throw new Error(
+      getJavaErrorMessage(error) || 'Quark 任务详情加载失败，请稍后重试。',
+    )
+  }
+}
+
+export async function listQuarkTaskCenterLogs(
+  taskId: string,
+  params: { beforeId?: number; afterId?: number; limit?: number } = {},
+  signal?: AbortSignal,
+): Promise<QuarkTaskCenterLogsData> {
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<QuarkTaskCenterLogsData>
+    >(
+      `/api/v1/task-center/quark-ingest/tasks/${encodeURIComponent(taskId)}/logs`,
+      {
+        params: {
+          before_id: params.beforeId,
+          after_id: params.afterId,
+          limit: params.limit,
+        },
+        signal,
+      },
+    )
+    if (
+      response.data.code !== 200 ||
+      !response.data.data ||
+      !Array.isArray(response.data.data.logs)
+    ) {
+      throw new Error(response.data.message || 'Quark task logs fetch failed')
+    }
+    return response.data.data
+  } catch (error) {
+    if (isJavaRequestCanceledError(error)) throw error
+    throw new Error(
+      getJavaErrorMessage(error) || 'Quark 任务日志加载失败，请稍后重试。',
+    )
+  }
+}
+
+export async function retryQuarkTaskCenter(
+  taskId: string,
+  childTaskIds: string[] = [],
+): Promise<QuarkTaskCenterAction> {
+  try {
+    const response = await javaApiClient.post<
+      JavaApiResponse<QuarkTaskCenterAction>
+    >(
+      `/api/v1/task-center/quark-ingest/tasks/${encodeURIComponent(taskId)}/retry`,
+      { child_task_ids: childTaskIds },
+    )
+    if (response.data.code !== 200 || !response.data.data) {
+      throw new Error(response.data.message || 'Quark retry failed')
+    }
+    return response.data.data
+  } catch (error) {
+    throw new Error(
+      getJavaErrorMessage(error) || 'Quark 任务重试提交失败，请稍后重试。',
+    )
+  }
+}
+
+export async function updateQuarkTaskSubscription(
+  taskId: string,
+  childId: string,
+  enabled: boolean,
+): Promise<QuarkTaskCenterAction> {
+  try {
+    const response = await javaApiClient.patch<
+      JavaApiResponse<QuarkTaskCenterAction>
+    >(
+      `/api/v1/task-center/quark-ingest/tasks/${encodeURIComponent(
+        taskId,
+      )}/children/${encodeURIComponent(childId)}/subscription`,
+      { enabled },
+    )
+    if (response.data.code !== 200 || !response.data.data) {
+      throw new Error(response.data.message || 'Quark subscription update failed')
+    }
+    return response.data.data
+  } catch (error) {
+    throw new Error(
+      getJavaErrorMessage(error) || '自动更新设置失败，请稍后重试。',
     )
   }
 }

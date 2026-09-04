@@ -7,6 +7,7 @@ import { DashboardPage } from '@/pages/dashboard'
 import { DocsPage } from '@/pages/docs'
 import { EmbyWatchRankingsPage } from '@/pages/emby-watch-rankings'
 import { MagnetIngestPage } from '@/pages/magnet-ingest'
+import { MediaLibraryPage } from '@/pages/media-library'
 import { LegacyResourceIngestRedirect } from '@/pages/resources/legacy-ingest-redirect'
 import { ResourcePublishPage } from '@/pages/resources/publish'
 import { ResourceSearchPage } from '@/pages/resources'
@@ -14,6 +15,7 @@ import { SettingsPage } from '@/pages/settings'
 import { SubtitleManagePage } from '@/pages/subtitles'
 import { TaskCenterPage } from '@/pages/tasks'
 import { TaskCenterDetailPage } from '@/pages/tasks/detail'
+import { QuarkTaskCenterDetailPage } from '@/pages/tasks/quark-detail'
 import { UserManagementPage } from '@/pages/users'
 
 export const router = createBrowserRouter([
@@ -37,6 +39,14 @@ export const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+      {
+        path: 'media-library',
+        element: (
+          <ProtectedRoute requiredRole="ADMIN">
+            <MediaLibraryPage />
+          </ProtectedRoute>
+        ),
+      },
       { path: 'resources', element: <ResourceSearchPage /> },
       { path: 'resources/publish', element: <ResourcePublishPage /> },
       {
@@ -45,6 +55,7 @@ export const router = createBrowserRouter([
       },
       { path: 'magnet-ingest', element: <MagnetIngestPage /> },
       { path: 'tasks', element: <TaskCenterPage /> },
+      { path: 'tasks/quark/:taskId', element: <QuarkTaskCenterDetailPage /> },
       { path: 'tasks/:taskType/:taskId', element: <TaskCenterDetailPage /> },
       { path: 'subtitles', element: <SubtitleManagePage /> },
       { path: 'emby-watch-rankings', element: <EmbyWatchRankingsPage /> },

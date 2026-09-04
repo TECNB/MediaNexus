@@ -51,6 +51,7 @@ type QuarkSeasonIngestWorkspaceProps = {
   tmdbId: number | null
   selectedSeason: number
   seasonOptions?: number[]
+  sourceType?: 'MANUAL_QUARK' | 'PANSOU_SEARCH'
   onTaskCreated?: (task: QuarkMultiSourceTaskResult) => void
   onDirtyChange?: (dirty: boolean) => void
 }
@@ -370,6 +371,7 @@ export function QuarkSeasonIngestWorkspace({
   tmdbId,
   selectedSeason,
   seasonOptions = [],
+  sourceType = 'MANUAL_QUARK',
   onTaskCreated,
   onDirtyChange,
 }: QuarkSeasonIngestWorkspaceProps) {
@@ -408,6 +410,7 @@ export function QuarkSeasonIngestWorkspace({
     preview_id: preview?.preview_id ?? null,
     follow_updates_enabled: subscriptionEnabled,
     sources: selections,
+    source_type: sourceType,
   }
 
   const previewEpisodeAlignments = useMemo(

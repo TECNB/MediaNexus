@@ -50,6 +50,14 @@ function pendingFileSortKey(name: string): [number, number, number, string] {
   return [2, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, name]
 }
 
+/** Extract the Chinese variety episode marker (e.g. 第3期/第4集). */
+export function parseVarietyEpisodeNumber(name: string): number | null {
+  const match = /(?:^|[^\d])第\s*(\d{1,3})\s*[期集话](?=$|[^\d])/i.exec(name)
+  if (!match) return null
+  const episode = Number(match[1])
+  return episode > 0 && episode <= 999 ? episode : null
+}
+
 function compareQuarkFileNames(
   leftName: string,
   rightName: string,

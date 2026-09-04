@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 
 import { PageContainer } from '@/components/layout/page-container'
+import { QuarkTaskCenterPanel } from '@/components/task-center/quark-task-center-panel'
 import { Button } from '@/components/ui/button'
 import { SelectControl } from '@/components/ui/form-control'
 import { listOpenListTaskCenterItems } from '@/lib/api/task-center'
@@ -279,6 +280,7 @@ function TaskCard({
 
 export function TaskCenterPage() {
   const { user } = useAuth()
+  const [activeTab, setActiveTab] = useState<'magnet' | 'quark'>('magnet')
   const [view, setView] = useState<OpenListTaskCenterView>('ALL')
   const [productFilter, setProductFilter] =
     useState<OpenListTaskCenterProductFilter>('ALL')
@@ -425,8 +427,44 @@ export function TaskCenterPage() {
   return (
     <PageContainer
       title="任务中心"
-      description="统一查看电影、剧集、动漫整季和有权查看的 Adult OpenList 入库任务，按最近更新时间倒序排列。"
+      description={
+        activeTab === 'quark'
+          ? '查看手动链接和资源搜索产生的 Quark 入库任务，按最近更新时间倒序排列。'
+          : '统一查看电影、剧集、动漫整季和有权查看的 Adult OpenList 入库任务，按最近更新时间倒序排列。'
+      }
     >
+      <div role="tablist" aria-label="入库任务类型" className="flex gap-1 rounded-xl bg-slate-100 p-1">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'magnet'}
+          onClick={() => setActiveTab('magnet')}
+          className={cn(
+            'rounded-lg px-4 py-2 text-sm font-semibold transition-colors',
+            activeTab === 'magnet'
+              ? 'bg-white text-slate-950 shadow-sm'
+              : 'text-slate-500 hover:text-slate-800',
+          )}
+        >
+          磁力入库
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'quark'}
+          onClick={() => setActiveTab('quark')}
+          className={cn(
+            'rounded-lg px-4 py-2 text-sm font-semibold transition-colors',
+            activeTab === 'quark'
+              ? 'bg-white text-slate-950 shadow-sm'
+              : 'text-slate-500 hover:text-slate-800',
+          )}
+        >
+          Quark 入库
+        </button>
+      </div>
+
+      {activeTab === 'quark' ? <QuarkTaskCenterPanel showCreator={user?.role === 'ADMIN'} /> : <>
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <TaskStat
           label="全部任务"
@@ -610,6 +648,7 @@ export function TaskCenterPage() {
           </section>
         </>
       ) : null}
+      </>}
     </PageContainer>
   )
 }

@@ -409,6 +409,7 @@ export function QuarkReleasePanel({
       title: item.title,
       original_title: item.original_title,
       year: item.year,
+      source_type: 'PANSOU_SEARCH' as const,
     }
   }
 
@@ -794,6 +795,7 @@ export function QuarkReleasePanel({
                   tmdbId={item.tmdb_id}
                   selectedSeason={seasonNumber}
                   seasonOptions={seasonOptions}
+                  sourceType="PANSOU_SEARCH"
                   onDirtyChange={setWorkspaceDirty}
                 />
               </div>

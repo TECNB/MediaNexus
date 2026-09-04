@@ -5,6 +5,7 @@ export type CreateMovieQuarkIngestPayload = {
   title: string
   original_title: string | null
   year: number
+  source_type?: 'MANUAL_QUARK' | 'PANSOU_SEARCH'
 }
 
 export type CreateSeasonQuarkIngestPayload = {
@@ -43,6 +44,7 @@ export type QuarkMultiSourcePayload = {
   preview_id?: string | null
   follow_updates_enabled: boolean
   sources: QuarkSourceSelection[]
+  source_type?: 'MANUAL_QUARK' | 'PANSOU_SEARCH'
 }
 
 export type QuarkIngestTaskResult = {
