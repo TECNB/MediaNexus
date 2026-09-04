@@ -425,14 +425,17 @@ export function AutomationPage() {
   }, [])
 
   useEffect(() => {
-    if (!selectedRun || selectedRun.status !== 'RUNNING') {
+    if (!selectedRun) {
       return
     }
-    const timer = window.setInterval(() => {
-      void refreshSelectedRun(selectedRun.id)
-    }, 5000)
-    return () => window.clearInterval(timer)
-  }, [refreshSelectedRun, selectedRun])
+    if (selectedRun.status === 'RUNNING') {
+      const timer = window.setInterval(() => {
+        void refreshSelectedRun(selectedRun.id)
+      }, 5000)
+      return () => window.clearInterval(timer)
+    }
+    void loadHistory(1)
+  }, [loadHistory, refreshSelectedRun, selectedRun?.id, selectedRun?.status])
 
   async function handleSaveConfig() {
     if (!configForm) {
@@ -554,7 +557,7 @@ export function AutomationPage() {
           </div>
         ) : null}
 
-        <div className="grid gap-6 xl:grid-cols-2">
+        <div className="grid items-start gap-6 xl:grid-cols-2">
           <section className="rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -694,12 +697,6 @@ export function AutomationPage() {
           <section>
             <div className="mb-3 flex items-center justify-between gap-3">
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">运行详情</p>
-              {selectedRun.status === 'RUNNING' ? (
-                <Button type="button" size="sm" variant="outline" onClick={() => void refreshSelectedRun(selectedRun.id)}>
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  刷新详情
-                </Button>
-              ) : null}
             </div>
             <RunDetails run={selectedRun} />
           </section>
