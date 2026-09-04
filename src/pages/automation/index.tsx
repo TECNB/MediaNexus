@@ -661,7 +661,7 @@ export function AutomationPage() {
                 {currentRun ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                 试运行
               </Button>
-              <Button type="button" onClick={() => void handleRun('EXECUTE')} disabled={!canRun || !config?.enabled}>
+              <Button type="button" onClick={() => void handleRun('EXECUTE')} disabled={!canRun}>
                 {currentRun ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                 立即运行
               </Button>
