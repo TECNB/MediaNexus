@@ -166,6 +166,10 @@ function ItemStatus({ item }: { item: JavdbAutomationRunItem }) {
 }
 
 function RunSummary({ run }: { run: JavdbAutomationRun }) {
+  const checked = run.unique_movies
+  const skipped = run.already_in_emby + run.history_duplicates + run.active_duplicates
+  const ready = Math.max(0, checked - skipped)
+
   return (
     <div className="rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -189,18 +193,17 @@ function RunSummary({ run }: { run: JavdbAutomationRun }) {
         {run.status === 'RUNNING' ? <Loader2 className="h-5 w-5 animate-spin text-sky-500" /> : null}
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <SummaryStat label="榜单条目" value={run.ranking_entries} />
-        <SummaryStat label="唯一影片" value={run.unique_movies} />
-        <SummaryStat label="跨榜去重" value={run.duplicate_entries_removed} />
-        <SummaryStat label="已在 Emby" value={run.already_in_emby} />
-        <SummaryStat label="历史已提交" value={run.history_duplicates} />
-        <SummaryStat label="Adult 处理中" value={run.active_duplicates} />
-        <SummaryStat label="剩余候选" value={run.remaining_movies} />
-        <SummaryStat label="已提交影片" value={run.submitted_count} />
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <SummaryStat label={`榜单条目 → 唯一影片（跨榜去重 ${run.duplicate_entries_removed}）`} value={checked} />
+        <SummaryStat label={`唯一影片 → 待处理（已跳过 ${skipped}）`} value={ready} />
+        <SummaryStat label="待处理 → 已提交影片" value={run.submitted_count} />
       </div>
 
       <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">
+        <span>榜单条目：{run.ranking_entries}</span>
+        <span>Emby 已有：{run.already_in_emby}</span>
+        <span>历史已提交：{run.history_duplicates}</span>
+        <span>Adult 处理中：{run.active_duplicates}</span>
         <span>Adult 任务：{run.adult_task_count}</span>
         <span>结束：{formatDateTime(run.finished_at)}</span>
       </div>
@@ -299,13 +302,14 @@ function RunDetails({ run }: { run: JavdbAutomationRun }) {
   }, [run.items])
 
   return (
-    <div className="space-y-5">
-      <RunSummary run={run} />
-      <section className="rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200">
+    <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+      <div className="space-y-5">
+        <RunSummary run={run} />
+        <section className="rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">结果明细</p>
-            <p className="mt-1 text-sm text-slate-500">保留榜单出现位置、全部磁力候选和自动选择原因。</p>
+            <p className="mt-1 text-sm text-slate-500">按日榜、周榜、月榜顺序排列；同榜按 JAVDB 返回排名，跨榜重复保留首次出现位置。</p>
           </div>
           <select
             aria-label="结果明细筛选"
@@ -327,18 +331,21 @@ function RunDetails({ run }: { run: JavdbAutomationRun }) {
             <p className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">暂无符合条件的结果。</p>
           )}
         </div>
-      </section>
+        </section>
+      </div>
 
-      <OperationalLogPanel
-        logs={run.logs}
-        status={run.logs.length > 0 ? 'success' : 'empty'}
-        hasSelection
-        title="操作日志"
-        monitorLabel="JAVDB 自动化"
-        emptyLogsMessage="暂无自动化日志"
-        stageLabels={stageCopy}
-        terminalStages={new Set(['SUCCEEDED', 'PARTIAL_SUCCESS', 'FAILED', 'INTERRUPTED', 'SKIPPED'])}
-      />
+      <div className="xl:sticky xl:top-5">
+        <OperationalLogPanel
+          logs={run.logs}
+          status={run.logs.length > 0 ? 'success' : 'empty'}
+          hasSelection
+          title="操作日志"
+          monitorLabel="JAVDB 自动化"
+          emptyLogsMessage="暂无自动化日志"
+          stageLabels={stageCopy}
+          terminalStages={new Set(['SUCCEEDED', 'PARTIAL_SUCCESS', 'FAILED', 'INTERRUPTED', 'SKIPPED'])}
+        />
+      </div>
     </div>
   )
 }
