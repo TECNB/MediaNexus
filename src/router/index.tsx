@@ -7,7 +7,6 @@ import { DashboardPage } from '@/pages/dashboard'
 import { DocsPage } from '@/pages/docs'
 import { EmbyWatchRankingsPage } from '@/pages/emby-watch-rankings'
 import { MagnetIngestPage } from '@/pages/magnet-ingest'
-import { MediaLibraryPage } from '@/pages/media-library'
 import { LegacyResourceIngestRedirect } from '@/pages/resources/legacy-ingest-redirect'
 import { ResourcePublishPage } from '@/pages/resources/publish'
 import { ResourceSearchPage } from '@/pages/resources'
@@ -36,14 +35,6 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredRole="ADMIN">
             <DashboardPage />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: 'media-library',
-        element: (
-          <ProtectedRoute requiredRole="ADMIN">
-            <MediaLibraryPage />
           </ProtectedRoute>
         ),
       },
