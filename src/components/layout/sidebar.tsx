@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import {
   Activity,
+  Bot,
   Captions,
   CircleHelp,
   LayoutGrid,
@@ -43,6 +44,7 @@ const secondaryItems: NavigationItem[] = [
 const adminItems: NavigationItem[] = [
   { icon: Activity, label: '观看统计', to: '/emby-watch-rankings' },
   { icon: Users, label: '用户管理', to: '/users' },
+  { icon: Bot, label: '自动化', to: '/automation' },
   { icon: Settings, label: '设置', to: '/settings' },
 ]
 

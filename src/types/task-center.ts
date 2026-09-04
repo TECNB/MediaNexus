@@ -28,6 +28,7 @@ export type OpenListTaskCenterSourceFilter =
   | 'ALL'
   | 'MANUAL_MAGNET'
   | 'PROWLARR_RELEASE'
+  | 'JAVDB_AUTOMATION'
 
 export type OpenListTaskCenterItem = {
   task_type: OpenListTaskCenterTaskType

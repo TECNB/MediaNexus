@@ -6,6 +6,7 @@ import { LoginPage, RegisterPage } from '@/pages/auth'
 import { DashboardPage } from '@/pages/dashboard'
 import { DocsPage } from '@/pages/docs'
 import { EmbyWatchRankingsPage } from '@/pages/emby-watch-rankings'
+import { AutomationPage } from '@/pages/automation'
 import { MagnetIngestPage } from '@/pages/magnet-ingest'
 import { LegacyResourceIngestRedirect } from '@/pages/resources/legacy-ingest-redirect'
 import { ResourcePublishPage } from '@/pages/resources/publish'
@@ -56,6 +57,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredRole="ADMIN">
             <SettingsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'automation',
+        element: (
+          <ProtectedRoute requiredRole="ADMIN">
+            <AutomationPage />
           </ProtectedRoute>
         ),
       },

@@ -75,6 +75,8 @@ export type AdultMagnetIngestTask = {
   id: string
   created_by_user_id: number | null
   category: AdultMagnetCategory
+  source_type?: 'MANUAL_MAGNET' | 'JAVDB_AUTOMATION' | string
+  automation_run_id?: string | null
   status: MagnetIngestTaskStatus
   stage: string
   date_folder: string

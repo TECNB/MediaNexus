@@ -88,11 +88,13 @@ const sourceFilterOptions: Array<{
   { value: 'ALL', label: '全部来源' },
   { value: 'MANUAL_MAGNET', label: '起点为手动磁力' },
   { value: 'PROWLARR_RELEASE', label: '起点为发布资源' },
+  { value: 'JAVDB_AUTOMATION', label: 'JAVDB 自动化' },
 ]
 
 const sourceTypeCopy: Record<string, string> = {
   MANUAL_MAGNET: '手动磁力',
   PROWLARR_RELEASE: '发布资源',
+  JAVDB_AUTOMATION: 'JAVDB 自动化',
 }
 
 function isNeedsAttention(status: MagnetIngestTaskStatus) {
@@ -192,7 +194,9 @@ function TaskCard({
 }) {
   const needsAttention = isNeedsAttention(item.status)
   const creatorLabel =
-    item.created_by_username ?? `用户 ${item.created_by_user_id ?? '-'}`
+    item.source_type === 'JAVDB_AUTOMATION'
+      ? '系统自动化'
+      : item.created_by_username ?? `用户 ${item.created_by_user_id ?? '-'}`
   const attemptCount = item.attempt_count ?? 1
 
   return (
@@ -302,7 +306,7 @@ export function TaskCenterPage() {
   const isAdultProductFilter = productFilter === 'ADULT'
   const effectiveProductFilter =
     showCreator || !isAdultProductFilter ? productFilter : 'ALL'
-  const effectiveSourceFilter = isAdultProductFilter ? 'ALL' : sourceFilter
+  const effectiveSourceFilter = sourceFilter
 
   const loadTasks = useCallback(
     async (silent = false) => {
@@ -406,7 +410,11 @@ export function TaskCenterPage() {
     ? productFilterOptions
     : productFilterOptions.filter((option) => option.value !== 'ADULT')
   const availableSourceFilterOptions = isAdultProductFilter
-    ? sourceFilterOptions.filter((option) => option.value === 'ALL')
+    ? sourceFilterOptions.filter(
+        (option) =>
+          option.value === 'ALL' ||
+          option.value === 'JAVDB_AUTOMATION',
+      )
     : sourceFilterOptions
   const isLoading = pageState.status === 'loading'
   const controlClassName =
@@ -417,12 +425,6 @@ export function TaskCenterPage() {
       setProductFilter('ALL')
     }
   }, [productFilter, showCreator])
-
-  useEffect(() => {
-    if (isAdultProductFilter && sourceFilter !== 'ALL') {
-      setSourceFilter('ALL')
-    }
-  }, [isAdultProductFilter, sourceFilter])
 
   return (
     <PageContainer

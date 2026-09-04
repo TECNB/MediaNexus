@@ -77,6 +77,12 @@ const productTypeCopy: Record<OpenListTaskCenterProductType, string> = {
   ADULT: 'Adult 批量入库',
 }
 
+const sourceTypeCopy: Record<string, string> = {
+  MANUAL_MAGNET: '手动磁力',
+  PROWLARR_RELEASE: '发布资源',
+  JAVDB_AUTOMATION: 'JAVDB 自动化',
+}
+
 const stageOrder = ['created', 'submitted', 'downloading', 'organizing', 'done']
 
 const stageCopy = [
@@ -113,6 +119,10 @@ function formatTime(value: string | null) {
     minute: '2-digit',
     second: '2-digit',
   })
+}
+
+function sourceLabel(sourceType: string) {
+  return sourceTypeCopy[sourceType] ?? sourceType
 }
 
 function taskIdentity(detail: OpenListTaskCenterDetail) {
@@ -303,7 +313,9 @@ function canSelectProwlarrRelease(detail: OpenListTaskCenterDetail) {
 
 function canRetryAdultBatch(detail: OpenListTaskCenterDetail) {
   return (
-    detail.task_type === 'ADULT' && recoverableStatuses.has(detail.status)
+    detail.task_type === 'ADULT' &&
+    detail.source_type !== 'JAVDB_AUTOMATION' &&
+    recoverableStatuses.has(detail.status)
   )
 }
 
@@ -809,7 +821,8 @@ export function TaskCenterDetailPage() {
                   {detail.title}
                 </h2>
                 <p className="mt-2 text-sm text-slate-500">
-                  {productTypeCopy[detail.product_type]} · {detail.task_type}
+                  {productTypeCopy[detail.product_type]} · {detail.task_type} · 来源：
+                  {sourceLabel(detail.source_type)}
                 </p>
               </div>
               <StatusPill status={detail.status} />
