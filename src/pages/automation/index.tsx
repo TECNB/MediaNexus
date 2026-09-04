@@ -595,7 +595,10 @@ export function AutomationPage() {
                       <input
                         type="checkbox"
                         checked={configForm[key]}
-                        onChange={(event) => setConfigForm((current) => current ? { ...current, [key]: event.currentTarget.checked } : current)}
+                        onChange={(event) => {
+                          const checked = event.currentTarget.checked
+                          setConfigForm((current) => current ? { ...current, [key]: checked } : current)
+                        }}
                         className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
                       />
                       {label}
@@ -628,7 +631,10 @@ export function AutomationPage() {
                   <input
                     type="checkbox"
                     checked={configForm.enabled}
-                    onChange={(event) => setConfigForm((current) => current ? { ...current, enabled: event.currentTarget.checked } : current)}
+                    onChange={(event) => {
+                      const checked = event.currentTarget.checked
+                      setConfigForm((current) => current ? { ...current, enabled: checked } : current)
+                    }}
                     className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
                   />
                   启用每日自动运行
