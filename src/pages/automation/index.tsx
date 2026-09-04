@@ -136,7 +136,7 @@ function getConfigForm(config: JavdbAutomationConfig): UpdateJavdbAutomationConf
 function SummaryStat({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-xl bg-slate-50 px-4 py-3">
-      <p className="text-xs text-slate-500">{label}</p>
+      <p className="whitespace-nowrap text-xs text-slate-500">{label}</p>
       <p className="mt-1 text-2xl font-semibold text-slate-950">{value}</p>
     </div>
   )
@@ -194,10 +194,11 @@ function RunSummary({ run }: { run: JavdbAutomationRun }) {
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
-        <SummaryStat label={`榜单条目 → 唯一影片（跨榜去重 ${run.duplicate_entries_removed}）`} value={checked} />
-        <SummaryStat label={`唯一影片 → 待处理（已跳过 ${skipped}）`} value={ready} />
+        <SummaryStat label="榜单条目 → 唯一影片" value={checked} />
+        <SummaryStat label="唯一影片 → 待处理" value={ready} />
         <SummaryStat label="待处理 → 已提交影片" value={run.submitted_count} />
       </div>
+      <p className="mt-2 text-xs text-slate-400">跨榜去重 {run.duplicate_entries_removed} · 已跳过 {skipped}</p>
 
       <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">
         <span>榜单条目：{run.ranking_entries}</span>
@@ -218,6 +219,7 @@ function RunSummary({ run }: { run: JavdbAutomationRun }) {
 }
 
 function RunItemCard({ item }: { item: JavdbAutomationRunItem }) {
+  const selected = item.candidates.find((candidate) => candidate.infohash === item.selected_infohash)
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -227,6 +229,8 @@ function RunItemCard({ item }: { item: JavdbAutomationRunItem }) {
               {item.code}
             </span>
             <ItemStatus item={item} />
+            {selected?.is_cracked ? <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">破解</span> : null}
+            {selected?.has_subtitle ? <span className="rounded-md bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-200">中文字幕</span> : null}
           </div>
           <p className="mt-2 text-sm font-semibold text-slate-900">{item.title || '未命名影片'}</p>
           <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
@@ -487,7 +491,12 @@ export function AutomationPage() {
     setActionStatus('working')
     setActionMessage(null)
     try {
-      const run = mode === 'DRY_RUN' ? await startJavdbDryRun() : await startJavdbExecution()
+      if (!configForm) {
+        return
+      }
+      const run = mode === 'DRY_RUN'
+        ? await startJavdbDryRun(configForm)
+        : await startJavdbExecution(configForm)
       setSelectedRun(run)
       setActionStatus('success')
       setActionMessage(mode === 'DRY_RUN' ? '试运行已启动，历史记录会保留。' : '立即运行已启动，Adult 任务将在任务中心继续处理。')

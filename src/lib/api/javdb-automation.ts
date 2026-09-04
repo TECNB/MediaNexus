@@ -61,18 +61,18 @@ export function updateJavdbCookie(cookie: string) {
   )
 }
 
-export function startJavdbDryRun() {
+export function startJavdbDryRun(payload: UpdateJavdbAutomationConfigPayload) {
   return request<JavdbAutomationRun>(() =>
     javaApiClient.post<JavaApiResponse<JavdbAutomationRun>>(
-      '/api/v1/admin/javdb-automation/runs/dry-run',
+      '/api/v1/admin/javdb-automation/runs/dry-run', payload,
     ),
   )
 }
 
-export function startJavdbExecution() {
+export function startJavdbExecution(payload: UpdateJavdbAutomationConfigPayload) {
   return request<JavdbAutomationRun>(() =>
     javaApiClient.post<JavaApiResponse<JavdbAutomationRun>>(
-      '/api/v1/admin/javdb-automation/runs',
+      '/api/v1/admin/javdb-automation/runs', payload,
     ),
   )
 }
