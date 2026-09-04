@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -120,6 +121,7 @@ export function QuarkReleasePanel({
   seasonNumber,
   seasonOptions,
 }: QuarkReleasePanelProps) {
+  const navigate = useNavigate()
   const requestIdRef = useRef(0)
   const searchControllerRef = useRef<AbortController | null>(null)
   const previewControllerRef = useRef<AbortController | null>(null)
@@ -503,6 +505,10 @@ export function QuarkReleasePanel({
 
     void request
       .then((result) => {
+        if (result.status !== 'FAILED') {
+          navigate(`/tasks/quark/${encodeURIComponent(result.id)}`)
+          return
+        }
         setPreviewState((current) =>
           current
             ? { ...current, status: 'done', result, message: null }
@@ -796,6 +802,11 @@ export function QuarkReleasePanel({
                   selectedSeason={seasonNumber}
                   seasonOptions={seasonOptions}
                   sourceType="PANSOU_SEARCH"
+                  onTaskCreated={(task) => {
+                    if (task.status !== 'FAILED') {
+                      navigate(`/tasks/quark/${encodeURIComponent(task.id)}`)
+                    }
+                  }}
                   onDirtyChange={setWorkspaceDirty}
                 />
               </div>

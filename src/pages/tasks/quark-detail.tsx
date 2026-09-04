@@ -1,21 +1,23 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type UIEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   AlertTriangle,
   ArrowLeft,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Clipboard,
+  CloudUpload,
   Loader2,
   RefreshCw,
   RotateCcw,
 } from 'lucide-react'
 
 import { PageContainer } from '@/components/layout/page-container'
+import { OperationalLogPanel } from '@/components/operation-log/operational-log-panel'
 import { Button } from '@/components/ui/button'
 import {
   getQuarkTaskCenterDetail,
+  listQuarkTaskCenterLogs,
   retryQuarkTaskCenter,
   updateQuarkTaskSubscription,
 } from '@/lib/api/task-center'
@@ -27,6 +29,8 @@ import type {
 } from '@/types/quark-task-center'
 
 const POLL_INTERVAL_MS = 5000
+const LOG_PAGE_SIZE = 100
+const terminalLogStages = new Set(['succeeded', 'completed', 'failed', 'interrupted'])
 
 const statusCopy: Record<string, string> = {
   IN_PROGRESS: '进行中',
@@ -63,20 +67,27 @@ function statusTone(status: string) {
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-xl bg-slate-100 px-4 py-3">
-      <p className="text-xs font-semibold text-slate-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-slate-950">{value}</p>
+    <div className="rounded-2xl bg-slate-100 px-4 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</p>
+      <p className="mt-1 truncate text-sm font-semibold text-slate-950">{value}</p>
     </div>
   )
 }
 
+function mergeLogs(
+  current: QuarkTaskCenterDetail['logs'],
+  incoming: QuarkTaskCenterDetail['logs'],
+) {
+  const logsById = new Map(current.map((log) => [log.id, log]))
+  for (const log of incoming) logsById.set(log.id, log)
+  return [...logsById.values()].sort((left, right) => left.id - right.id)
+}
+
 function ChildCard({
-  taskId,
   child,
   onRetry,
   onSubscription,
 }: {
-  taskId: string
   child: QuarkTaskCenterChild
   onRetry: (childId: string) => void
   onSubscription: (child: QuarkTaskCenterChild) => void
@@ -123,7 +134,6 @@ function ChildCard({
           <p className="text-xs text-slate-400">最近更新：{formatTime(child.updated_at)}</p>
         </div>
       ) : null}
-      <span className="sr-only">{taskId}</span>
     </article>
   )
 }
@@ -131,10 +141,14 @@ function ChildCard({
 export function QuarkTaskCenterDetailPage() {
   const { taskId } = useParams()
   const [detail, setDetail] = useState<QuarkTaskCenterDetail | null>(null)
+  const detailRef = useRef<QuarkTaskCenterDetail | null>(null)
+  const logScrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const loadingOlderLogsRef = useRef(false)
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
   const [message, setMessage] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [busyChildId, setBusyChildId] = useState<string | null>(null)
+  const [isLoadingOlderLogs, setIsLoadingOlderLogs] = useState(false)
 
   const loadDetail = useCallback(async (silent = false) => {
     if (!taskId) {
@@ -144,7 +158,28 @@ export function QuarkTaskCenterDetailPage() {
     }
     if (!silent) setStatus('loading')
     try {
-      const nextDetail = await getQuarkTaskCenterDetail(taskId, undefined, 100)
+      const currentDetail = detailRef.current
+      const nextDetail = await getQuarkTaskCenterDetail(
+        taskId,
+        undefined,
+        currentDetail ? 0 : LOG_PAGE_SIZE,
+      )
+      if (currentDetail?.id === nextDetail.id) {
+        const latestLogId = currentDetail.logs.at(-1)?.id
+        const logPage = latestLogId
+          ? await listQuarkTaskCenterLogs(
+              taskId,
+              { afterId: latestLogId, limit: LOG_PAGE_SIZE },
+            )
+          : null
+        nextDetail.logs = mergeLogs(
+          currentDetail.logs,
+          logPage?.logs ?? [],
+        )
+        nextDetail.logs_has_older = currentDetail.logs_has_older
+        nextDetail.logs_has_newer = logPage?.has_newer ?? false
+      }
+      detailRef.current = nextDetail
       setDetail(nextDetail)
       setStatus('success')
       setMessage(null)
@@ -154,6 +189,38 @@ export function QuarkTaskCenterDetailPage() {
       setMessage(error instanceof Error && error.message.trim() ? error.message : 'Quark 任务详情加载失败，请稍后重试。')
     }
   }, [taskId])
+
+  const loadOlderLogs = useCallback(async () => {
+    const currentDetail = detailRef.current
+    const firstLogId = currentDetail?.logs[0]?.id
+    if (!taskId || !currentDetail?.logs_has_older || !firstLogId || loadingOlderLogsRef.current) return
+    loadingOlderLogsRef.current = true
+    setIsLoadingOlderLogs(true)
+    try {
+      const logPage = await listQuarkTaskCenterLogs(
+        taskId,
+        { beforeId: firstLogId, limit: LOG_PAGE_SIZE },
+      )
+      const nextDetail = {
+        ...currentDetail,
+        logs: mergeLogs(logPage.logs, currentDetail.logs),
+        logs_has_older: logPage.has_older,
+      }
+      detailRef.current = nextDetail
+      setDetail(nextDetail)
+    } catch (error) {
+      setActionMessage(
+        error instanceof Error ? error.message : '历史日志加载失败，请稍后重试。',
+      )
+    } finally {
+      loadingOlderLogsRef.current = false
+      setIsLoadingOlderLogs(false)
+    }
+  }, [taskId])
+
+  const handleLogsScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    if (event.currentTarget.scrollTop <= 24) void loadOlderLogs()
+  }, [loadOlderLogs])
 
   useEffect(() => {
     void loadDetail()
@@ -211,45 +278,121 @@ export function QuarkTaskCenterDetailPage() {
   const progress = detail.progress
   const canRetryAll = detail.children.some((child) => ['FAILED', 'PARTIAL', 'UNKNOWN', 'INTERRUPTED'].includes(child.status))
   return (
-    <PageContainer title={detail.title} description="查看本次 Quark 入库的季度/版本处理进度、文件明细和运行日志。">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button asChild variant="outline"><Link to="/tasks"><ArrowLeft className="h-4 w-4" />返回任务中心</Link></Button>
-        <div className="flex items-center gap-2">
-          {canRetryAll ? <Button type="button" variant="outline" onClick={() => void retry()}><RotateCcw className="h-4 w-4" />重试未完成项</Button> : null}
-          <Button type="button" variant="outline" onClick={() => void loadDetail()}><RefreshCw className="h-4 w-4" />刷新</Button>
+    <PageContainer title="入库任务日志" description="跟踪 Quark 入库任务状态与实时日志。">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-6">
+          <section className="rounded-[28px] bg-white p-6 shadow-[0_18px_40px_rgba(15,23,42,0.035)]">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <Link to="/tasks" className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 transition hover:text-slate-950">
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  返回任务中心
+                </Link>
+                <h2 className="mt-4 text-2xl font-semibold text-slate-950">{detail.title}</h2>
+                <p className="mt-2 text-sm text-slate-500">
+                  Quark 入库 · 来源：{detail.source_type === 'PANSOU_SEARCH' ? '资源搜索' : '手动链接'}
+                </p>
+              </div>
+              <span className={cn('rounded-full px-3 py-1 text-xs font-semibold', statusTone(detail.status))}>
+                {statusCopy[detail.status] ?? detail.status}
+              </span>
+            </div>
+            <div className="mt-6 grid gap-3 md:grid-cols-3">
+              <Stat label="当前阶段" value={stageCopy[detail.stage] ?? detail.stage} />
+              <Stat label="处理结果" value={detail.progress_summary} />
+              <Stat label="更新时间" value={formatTime(detail.updated_at)} />
+            </div>
+          </section>
+
+          {actionMessage ? <div className="rounded-2xl bg-sky-50 px-4 py-3 text-sm text-sky-700">{actionMessage}</div> : null}
+
+          <section className="rounded-[28px] bg-white p-6 shadow-[0_18px_40px_rgba(15,23,42,0.035)]">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">进度明细</p>
+                <h3 className="mt-2 text-lg font-semibold text-slate-950">季度与版本</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                {canRetryAll ? <Button type="button" variant="outline" onClick={() => void retry()}><RotateCcw className="h-4 w-4" />重试未完成项</Button> : null}
+                <Button type="button" variant="outline" onClick={() => void loadDetail()}><RefreshCw className="h-4 w-4" />刷新</Button>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Stat label="季度/版本" value={`${progress.completed_units}/${progress.planned_units}`} />
+              <Stat label="文件总数" value={progress.total_files} />
+              <Stat label="已处理" value={progress.processed_files} />
+              <Stat label="失败/未知" value={`${progress.failed_files}/${progress.unknown_files}`} />
+            </div>
+            <div className="mt-5 space-y-3">
+              {detail.children.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-sm text-slate-500">历史任务没有可展示的季度/版本明细。</div>
+              ) : detail.children.map((child) => (
+                <div key={child.id} className={busyChildId === child.id ? 'opacity-60' : ''}>
+                  <ChildCard child={child} onRetry={(childId) => void retry([childId])} onSubscription={(currentChild) => void toggleSubscription(currentChild)} />
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <OperationalLogPanel
+            logs={detail.logs}
+            status={detail.logs.length > 0 ? 'success' : 'empty'}
+            title="任务日志"
+            monitorLabel={detail.is_active ? '轮询中' : '已停止'}
+            emptyLogsMessage="暂无日志。"
+            stageLabels={stageCopy}
+            terminalStages={terminalLogStages}
+            scrollContainerRef={logScrollContainerRef}
+            onLogsScroll={handleLogsScroll}
+            scrollKey={detail.id}
+            beforeLogs={detail.logs_has_older ? (
+              <div className="flex justify-center pb-3">
+                <button
+                  type="button"
+                  className="inline-flex h-7 items-center gap-2 rounded-full border border-zinc-700 px-3 text-[11px] font-semibold text-zinc-300 transition hover:border-zinc-500 hover:text-white disabled:opacity-60"
+                  onClick={() => void loadOlderLogs()}
+                  disabled={isLoadingOlderLogs}
+                >
+                  {isLoadingOlderLogs ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  加载更早日志
+                </button>
+              </div>
+            ) : null}
+          />
         </div>
+
+        <aside className="space-y-4">
+          <section className="rounded-[28px] bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.035)]">
+            <div className="flex items-center justify-between">
+              <div className="rounded-2xl bg-slate-100 p-3 text-slate-950"><CloudUpload className="h-5 w-5" /></div>
+              <span className={cn('rounded-full px-3 py-1 text-xs font-semibold', statusTone(detail.status))}>{statusCopy[detail.status] ?? detail.status}</span>
+            </div>
+            <h3 className="mt-5 text-lg font-semibold text-slate-950">Quark 入库</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-500">{detail.subscription_enabled ? '任务包含自动更新目录。' : '任务采用一次性入库。'}</p>
+          </section>
+
+          {detail.share_urls.length > 0 ? (
+            <section className="rounded-[28px] bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.035)]">
+              <h3 className="text-sm font-semibold text-slate-950">分享来源</h3>
+              <div className="mt-3 space-y-2">
+                {detail.share_urls.map((url) => (
+                  <div key={url} className="rounded-2xl bg-slate-50 p-3">
+                    <p className="line-clamp-2 break-all text-xs text-slate-500">{url}</p>
+                    <Button type="button" size="sm" variant="outline" className="mt-2" onClick={() => void copyShareUrl(url)}><Clipboard className="h-3.5 w-3.5" />复制链接</Button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {detail.error_message ? (
+            <section className="rounded-[28px] bg-rose-50 p-5 text-rose-700">
+              <p className="text-sm font-semibold">错误信息</p>
+              <p className="mt-2 break-words text-sm leading-6">{detail.error_message}</p>
+            </section>
+          ) : null}
+        </aside>
       </div>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-shell">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={cn('rounded-full px-3 py-1 text-xs font-semibold', statusTone(detail.status))}>{statusCopy[detail.status] ?? detail.status}</span>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{stageCopy[detail.stage] ?? detail.stage}</span>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{detail.subscription_enabled ? '自动更新' : '一次性入库'}</span>
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="季度/版本" value={`${progress.completed_units}/${progress.planned_units}`} />
-          <Stat label="文件总数" value={progress.total_files} />
-          <Stat label="已处理" value={progress.processed_files} />
-          <Stat label="失败/未知" value={`${progress.failed_files}/${progress.unknown_files}`} />
-        </div>
-        <p className="mt-4 text-sm text-slate-600">{detail.progress_summary}</p>
-        {detail.error_message ? <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{detail.error_message}</p> : null}
-        {detail.share_urls.length > 0 ? <div className="mt-4 space-y-2"><p className="text-xs font-semibold text-slate-500">分享链接</p>{detail.share_urls.map((url) => <div key={url} className="flex items-center gap-2"><input readOnly value={url} className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600" /><Button type="button" size="sm" variant="outline" onClick={() => void copyShareUrl(url)}><Clipboard className="h-3.5 w-3.5" />复制</Button></div>)}</div> : null}
-      </section>
-
-      {actionMessage ? <div className="rounded-xl bg-sky-50 px-4 py-3 text-sm text-sky-700">{actionMessage}</div> : null}
-
-      <section className="space-y-3">
-        <div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><CheckCircle2 className="h-4 w-4" />季度/版本执行单元</div>
-        {detail.children.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">历史任务没有可展示的季度/版本明细。</div> : detail.children.map((child) => <div key={child.id} className={busyChildId === child.id ? 'opacity-60' : ''}><ChildCard taskId={detail.id} child={child} onRetry={(childId) => void retry([childId])} onSubscription={(currentChild) => void toggleSubscription(currentChild)} /></div>)}
-      </section>
-
-      <section className="rounded-2xl bg-slate-950 p-5 text-slate-100">
-        <div className="flex items-center justify-between gap-3"><h2 className="font-semibold">运行日志</h2><span className="text-xs text-slate-400">{detail.logs.length} 条</span></div>
-        <div className="mt-4 max-h-[420px] space-y-2 overflow-auto font-mono text-xs">
-          {detail.logs.length === 0 ? <p className="text-slate-500">暂无日志。</p> : detail.logs.map((log) => <div key={log.id} className="border-b border-slate-800 pb-2"><div className="flex flex-wrap gap-2 text-slate-400"><span>{formatTime(log.created_at)}</span><span>{log.stage}</span><span className={log.level === 'ERROR' ? 'text-rose-300' : log.level === 'WARN' ? 'text-amber-300' : 'text-emerald-300'}>{log.level}</span></div><p className="mt-1 whitespace-pre-wrap break-words text-slate-200">{log.message}{log.detail ? `：${log.detail}` : ''}</p></div>)}
-        </div>
-      </section>
     </PageContainer>
   )
 }
