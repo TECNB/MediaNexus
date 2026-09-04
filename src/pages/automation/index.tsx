@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   CheckCircle2,
   ChevronLeft,
@@ -355,6 +355,7 @@ function RunDetails({ run }: { run: JavdbAutomationRun }) {
 }
 
 export function AutomationPage() {
+  const navigate = useNavigate()
   const [overview, setOverview] = useState<JavdbAutomationOverview | null>(null)
   const [selectedRun, setSelectedRun] = useState<JavdbAutomationRun | null>(null)
   const [history, setHistory] = useState<{ items: JavdbAutomationRun[]; total: number; page: number; page_size: number } | null>(null)
@@ -423,6 +424,26 @@ export function AutomationPage() {
       setActionMessage(getJavaErrorMessage(error) ?? (error instanceof Error ? error.message : '运行详情加载失败'))
     }
   }, [])
+
+  const waitForAdultTaskAndNavigate = useCallback(async (runId: string) => {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      try {
+        const run = await getJavdbAutomationRun(runId)
+        setSelectedRun(run)
+        const taskId = run.items.find((item) => item.adult_task_id)?.adult_task_id
+        if (taskId) {
+          navigate(`/tasks/adult/${encodeURIComponent(taskId)}`)
+          return
+        }
+        if (run.status !== 'RUNNING') {
+          return
+        }
+      } catch {
+        return
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 2000))
+    }
+  }, [navigate])
 
   useEffect(() => {
     if (!selectedRun) {
@@ -505,6 +526,10 @@ export function AutomationPage() {
       setActionMessage(mode === 'DRY_RUN' ? '试运行已启动，历史记录会保留。' : '立即运行已启动，Adult 任务将在任务中心继续处理。')
       setHistoryPage(1)
       await Promise.all([loadOverview(), loadHistory(1), refreshSelectedRun(run.id)])
+      if (mode === 'EXECUTE') {
+        setActionMessage('立即运行已启动，创建 Adult 任务后将自动跳转到任务日志。')
+        void waitForAdultTaskAndNavigate(run.id)
+      }
     } catch (error) {
       setActionStatus('error')
       setActionMessage(getJavaErrorMessage(error) ?? (error instanceof Error ? error.message : '运行请求失败'))
