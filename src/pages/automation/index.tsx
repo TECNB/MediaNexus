@@ -657,7 +657,10 @@ export function AutomationPage() {
                       min={1}
                       max={50}
                       value={configForm.limit_per_ranking}
-                      onChange={(event) => setConfigForm((current) => current ? { ...current, limit_per_ranking: Number(event.currentTarget.value) } : current)}
+                      onChange={(event) => {
+                        const value = Number(event.currentTarget.value)
+                        setConfigForm((current) => current ? { ...current, limit_per_ranking: value } : current)
+                      }}
                       className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200/70"
                     />
                   </label>
@@ -666,7 +669,10 @@ export function AutomationPage() {
                     <input
                       type="time"
                       value={configForm.schedule_time}
-                      onChange={(event) => setConfigForm((current) => current ? { ...current, schedule_time: event.currentTarget.value } : current)}
+                      onChange={(event) => {
+                        const value = event.currentTarget.value
+                        setConfigForm((current) => current ? { ...current, schedule_time: value } : current)
+                      }}
                       className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200/70"
                     />
                   </label>
