@@ -11,6 +11,8 @@ export type JavdbAutomationConfig = {
   daily_enabled: boolean
   weekly_enabled: boolean
   monthly_enabled: boolean
+  cracked_only: boolean
+  subtitle_only: boolean
   limit_per_ranking: number
   schedule_time: string
   timezone: string
@@ -108,6 +110,8 @@ export type UpdateJavdbAutomationConfigPayload = {
   daily_enabled: boolean
   weekly_enabled: boolean
   monthly_enabled: boolean
+  cracked_only: boolean
+  subtitle_only: boolean
   limit_per_ranking: number
   schedule_time: string
 }

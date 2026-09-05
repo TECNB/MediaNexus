@@ -128,6 +128,8 @@ function getConfigForm(config: JavdbAutomationConfig): UpdateJavdbAutomationConf
     daily_enabled: config.daily_enabled,
     weekly_enabled: config.weekly_enabled,
     monthly_enabled: config.monthly_enabled,
+    cracked_only: config.cracked_only,
+    subtitle_only: config.subtitle_only,
     limit_per_ranking: config.limit_per_ranking,
     schedule_time: config.schedule_time,
   }
@@ -636,6 +638,25 @@ export function AutomationPage() {
                     ['monthly_enabled', '有码月榜'],
                   ] as const).map(([key, label]) => (
                     <label key={key} className="flex cursor-pointer items-center gap-2 rounded-xl bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={configForm[key]}
+                        onChange={(event) => {
+                          const checked = event.currentTarget.checked
+                          setConfigForm((current) => current ? { ...current, [key]: checked } : current)
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {([
+                    ['cracked_only', '只保留破解版本'],
+                    ['subtitle_only', '只保留字幕版本'],
+                  ] as const).map(([key, label]) => (
+                    <label key={key} className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 px-3 py-3 text-sm font-medium text-slate-700">
                       <input
                         type="checkbox"
                         checked={configForm[key]}
