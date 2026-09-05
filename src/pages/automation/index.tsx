@@ -69,7 +69,7 @@ const itemStatusCopy: Record<string, string> = {
   ADULT_IN_PROGRESS: 'Adult 处理中',
   READY_TO_SUBMIT: '待提交',
   SUBMITTED: '已提交',
-  NO_MAGNET: '无磁力',
+  NO_MAGNET: '不符合条件',
   DETAIL_FAILED: '详情失败',
   SUBMIT_FAILED: '提交失败',
 }
