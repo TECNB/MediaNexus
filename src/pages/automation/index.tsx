@@ -511,7 +511,7 @@ export function AutomationPage() {
   }
 
   async function handleRun(mode: 'DRY_RUN' | 'EXECUTE') {
-    if (mode === 'EXECUTE' && !window.confirm('立即运行会重新抓取榜单并创建 Adult-JAV 任务，确认继续吗？')) {
+    if (mode === 'EXECUTE' && !window.confirm('立即运行会提交最近一次成功试运行的结果；没有可复用结果时才会重新抓取榜单，确认继续吗？')) {
       return
     }
     setActionStatus('working')
@@ -725,7 +725,7 @@ export function AutomationPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">运行控制</p>
-              <p className="mt-1 text-sm text-slate-500">试运行会写入历史但不会创建 Adult 任务；立即运行会重新抓取并查重。</p>
+              <p className="mt-1 text-sm text-slate-500">试运行会写入历史但不会创建 Adult 任务；立即运行优先提交最近一次成功试运行的结果。</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" onClick={() => void handleRun('DRY_RUN')} disabled={!canRun}>
