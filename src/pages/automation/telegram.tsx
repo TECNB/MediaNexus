@@ -68,6 +68,16 @@ const modeCopy: Record<string, string> = {
   BACKFILL_DRY_RUN: '回溯试运行',
 }
 
+const stageCopy: Record<string, string> = {
+  QUEUED: '等待执行',
+  COUNTING_PIKPAK_INBOX: '统计 PikPak 收件箱',
+  FORWARDING_CHANNELS: '转发频道资源',
+  BACKFILLING_CHANNEL: '转发历史资源',
+  WAITING_PIKPAK_FILES: '等待 PikPak 文件到齐并移动',
+  REFRESHING_ADULT_AUTOSYMLINK: '刷新 Adult AutoSymlink',
+  MEDIA_DELIVERY_FAILED: '媒体入库失败',
+}
+
 function formatDateTime(value: string | null) {
   if (!value) return '-'
   const date = new Date(value)
@@ -153,7 +163,7 @@ function RunDetails({ run }: { run: TelegramAutomationRun }) {
               </span>
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              {run.trigger_type === 'SCHEDULED' ? '定时触发' : '管理员触发'} · {formatDateTime(run.started_at)}
+              {run.trigger_type === 'SCHEDULED' ? '定时触发' : '管理员触发'} · {formatDateTime(run.started_at)} · 阶段 {stageCopy[run.stage] ?? run.stage}
             </p>
           </div>
           {run.status === 'RUNNING' ? <Loader2 className="h-5 w-5 animate-spin text-sky-500" /> : null}
