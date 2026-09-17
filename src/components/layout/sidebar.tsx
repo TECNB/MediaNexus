@@ -4,6 +4,7 @@ import {
   Bot,
   Captions,
   CircleHelp,
+  LibraryBig,
   LayoutGrid,
   Search,
   Settings,
@@ -35,6 +36,7 @@ const primaryItems: NavigationItem[] = [
 
 const adminPrimaryItems: NavigationItem[] = [
   { icon: LayoutGrid, label: '控制台', to: '/dashboard' },
+  { icon: LibraryBig, label: '媒体库', to: '/media-library' },
 ]
 
 const secondaryItems: NavigationItem[] = [
