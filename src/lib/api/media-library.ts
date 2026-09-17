@@ -6,6 +6,10 @@ import {
 import type {
   MediaLibraryListParams,
   MediaLibraryPageData,
+  MediaIdentifyQuery,
+  MediaMetadataCandidate,
+  MediaPosterCandidate,
+  MediaLibraryId,
 } from '@/types/media-library'
 
 type JavaApiResponse<TData> = {
@@ -55,14 +59,95 @@ export async function getMediaLibraryItems(
 export async function getMediaLibraryPoster(
   itemId: string,
   signal?: AbortSignal,
+  imageTag?: string | null,
 ): Promise<Blob> {
   const response = await javaApiClient.get<Blob>(
     `/api/v1/admin/media-library/items/${encodeURIComponent(itemId)}/poster`,
     {
       responseType: 'blob',
       signal,
+      params: { v: imageTag || undefined },
     },
   )
 
   return response.data
+}
+
+const itemPath = (itemId: string) =>
+  `/api/v1/admin/media-library/items/${encodeURIComponent(itemId)}`
+
+export async function searchMediaMetadata(
+  itemId: string,
+  query: MediaIdentifyQuery,
+  signal?: AbortSignal,
+) {
+  const response = await javaApiClient.get<JavaApiResponse<MediaMetadataCandidate[]>>(
+    `${itemPath(itemId)}/metadata-candidates`,
+    { params: query, signal, timeout: 90000 },
+  )
+  if (response.data.code !== 200 || !Array.isArray(response.data.data)) {
+    throw new Error(response.data.message || '识别候选加载失败')
+  }
+  return response.data.data
+}
+
+export async function getMediaPosterCandidates(
+  itemId: string,
+  library: MediaLibraryId,
+  signal?: AbortSignal,
+) {
+  const response = await javaApiClient.get<JavaApiResponse<MediaPosterCandidate[]>>(
+    `${itemPath(itemId)}/poster-candidates`,
+    { params: { library }, signal, timeout: 90000 },
+  )
+  if (response.data.code !== 200 || !Array.isArray(response.data.data)) {
+    throw new Error(response.data.message || '候选封面加载失败')
+  }
+  return response.data.data
+}
+
+export async function getMediaCandidateImage(
+  itemId: string,
+  candidateId: string,
+  mode: 'identify' | 'poster',
+  query: MediaIdentifyQuery,
+  signal?: AbortSignal,
+) {
+  const resource = mode === 'identify' ? 'metadata-candidates' : 'poster-candidates'
+  const response = await javaApiClient.get<Blob>(
+    `${itemPath(itemId)}/${resource}/${encodeURIComponent(candidateId)}/image`,
+    { params: query, responseType: 'blob', signal, timeout: 90000 },
+  )
+  return response.data
+}
+
+export async function applyMediaMetadata(
+  itemId: string,
+  query: MediaIdentifyQuery,
+  candidateId: string,
+  replaceAllImages: boolean,
+) {
+  const response = await javaApiClient.post<JavaApiResponse<null>>(
+    `${itemPath(itemId)}/identify`,
+    { ...query, candidate_id: candidateId, replace_all_images: replaceAllImages },
+    { timeout: 90000 },
+  )
+  if (response.data.code !== 200) {
+    throw new Error(response.data.message || '重新识别失败')
+  }
+}
+
+export async function selectMediaPoster(
+  itemId: string,
+  library: MediaLibraryId,
+  candidateId: string,
+) {
+  const response = await javaApiClient.post<JavaApiResponse<null>>(
+    `${itemPath(itemId)}/poster-selection`,
+    { library, candidate_id: candidateId },
+    { timeout: 90000 },
+  )
+  if (response.data.code !== 200) {
+    throw new Error(response.data.message || '封面替换失败')
+  }
 }

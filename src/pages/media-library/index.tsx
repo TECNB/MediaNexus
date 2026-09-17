@@ -3,7 +3,9 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
+  Clapperboard,
   Clock3,
+  Disc3,
   Film,
   ImageOff,
   LibraryBig,
@@ -32,6 +34,7 @@ import type {
   MediaLibraryItem,
   MediaLibraryPageData,
 } from '@/types/media-library'
+import { MediaManager } from './media-manager'
 
 type LoadStatus = 'idle' | 'loading' | 'success' | 'error'
 
@@ -48,6 +51,13 @@ const libraryTabs: LibraryTab[] = [
   { id: 'movies', label: '电影', description: 'Movies', icon: Film },
   { id: 'tv', label: '电视剧', description: 'TV', icon: Tv },
   { id: 'anime', label: '动漫', description: 'Anime', icon: Sparkles },
+  {
+    id: 'adult-other',
+    label: 'Adult - Other',
+    description: 'Other',
+    icon: Clapperboard,
+  },
+  { id: 'adult-jav', label: 'Adult-JAV', description: 'JAV', icon: Disc3 },
 ]
 
 function formatDateTime(value: string | null) {
@@ -115,7 +125,7 @@ function Poster({ item }: { item: MediaLibraryItem }) {
       return () => controller.abort()
     }
 
-    void getMediaLibraryPoster(item.item_id, controller.signal)
+    void getMediaLibraryPoster(item.item_id, controller.signal, item.primary_image_tag)
       .then((blob) => {
         if (controller.signal.aborted || blob.size === 0) {
           if (!controller.signal.aborted) {
@@ -139,7 +149,7 @@ function Poster({ item }: { item: MediaLibraryItem }) {
         URL.revokeObjectURL(objectUrl)
       }
     }
-  }, [item.has_primary_image, item.item_id])
+  }, [item.has_primary_image, item.item_id, item.primary_image_tag])
 
   if (!posterUrl || failed) {
     return (
@@ -171,7 +181,15 @@ function Poster({ item }: { item: MediaLibraryItem }) {
   )
 }
 
-function MediaCard({ item }: { item: MediaLibraryItem }) {
+function MediaCard({
+  item,
+  library,
+  onChanged,
+}: {
+  item: MediaLibraryItem
+  library: MediaLibraryId
+  onChanged: () => void
+}) {
   return (
     <article className="min-w-0 overflow-hidden rounded-2xl bg-white shadow-shell ring-1 ring-slate-200">
       <div className="aspect-[2/3] overflow-hidden bg-slate-100">
@@ -190,6 +208,7 @@ function MediaCard({ item }: { item: MediaLibraryItem }) {
           <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>入库于 {formatDateTime(item.date_created)}</span>
         </div>
+        <MediaManager item={item} library={library} onChanged={onChanged} />
       </div>
     </article>
   )
@@ -296,14 +315,14 @@ function MediaLibraryPageContent() {
   return (
     <PageContainer
       title="媒体库"
-      description="查看 Emby 中已有的电影、电视剧与动漫。内容按最近入库时间排序，仅提供只读浏览。"
+      description="查看和管理 Emby 中已有的电影、电视剧、动漫与 Adult 媒体。内容按最近入库时间排序。"
     >
       <div className="space-y-5">
         <div className="rounded-2xl bg-white p-3 shadow-shell ring-1 ring-slate-200">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div
               aria-label="媒体库分类"
-              className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1"
+              className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 sm:grid-cols-5"
               role="tablist"
             >
               {libraryTabs.map((tab) => {
@@ -327,8 +346,8 @@ function MediaLibraryPageContent() {
                     type="button"
                   >
                     <Icon className="h-4 w-4 shrink-0" />
-                    <span>{tab.label}</span>
-                    <span className="hidden text-[0.6875rem] text-slate-400 sm:inline">
+                    <span className="whitespace-nowrap">{tab.label}</span>
+                    <span className="hidden text-[0.6875rem] text-slate-400 2xl:inline">
                       {tab.description}
                     </span>
                   </button>
@@ -337,7 +356,7 @@ function MediaLibraryPageContent() {
             </div>
 
             <form
-              className="flex w-full gap-2 lg:max-w-md"
+              className="flex w-full gap-2 xl:max-w-md"
               onSubmit={handleSearch}
             >
               <label className="relative min-w-0 flex-1">
@@ -450,7 +469,12 @@ function MediaLibraryPageContent() {
 
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {data.items.map((item) => (
-                <MediaCard item={item} key={item.item_id} />
+                <MediaCard
+                  item={item}
+                  key={item.item_id}
+                  library={libraryId}
+                  onChanged={() => void loadItems()}
+                />
               ))}
             </div>
 
