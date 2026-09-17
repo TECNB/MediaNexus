@@ -28,6 +28,7 @@ import {
   updateTelegramAutomationConfig,
 } from '@/lib/api/telegram-automation'
 import { getJavaErrorMessage, isJavaRequestCanceledError } from '@/lib/java-api'
+import { telegramResourceModeDefaults } from '@/lib/telegram-channel-defaults'
 import { cn } from '@/lib/utils'
 import type {
   TelegramAutomationOverview,
@@ -312,10 +313,8 @@ export function TelegramAutomationPage() {
           source_username: source.username,
           enabled: true,
           percentile: 0.9,
-          resource_mode: 'group',
+          ...telegramResourceModeDefaults('group'),
           min_video_duration: 300,
-          min_views: 5000,
-          min_forwards: 10,
           min_age_hours: 24,
         }],
       } : current)
@@ -513,7 +512,7 @@ export function TelegramAutomationPage() {
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
                   <label className="space-y-1 text-xs text-slate-500"><span>分位数</span><select value={channel.percentile} onChange={(event) => patchChannel(index, { percentile: Number(event.currentTarget.value) })} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value={0.8}>P80</option><option value={0.85}>P85</option><option value={0.9}>P90</option></select></label>
-                  <label className="space-y-1 text-xs text-slate-500"><span>资源结构</span><select value={channel.resource_mode} onChange={(event) => patchChannel(index, { resource_mode: event.currentTarget.value as EditableChannel['resource_mode'] })} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="group">普通 Group</option><option value="hashtag_resource">Hashtag 分段</option></select></label>
+                  <label className="space-y-1 text-xs text-slate-500"><span>资源结构</span><select value={channel.resource_mode} onChange={(event) => patchChannel(index, telegramResourceModeDefaults(event.currentTarget.value as EditableChannel['resource_mode']))} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="group">普通 Group</option><option value="hashtag_resource">Hashtag 分段</option></select></label>
                   {([
                     ['min_video_duration', '视频时长（秒）'],
                     ['min_views', '最低浏览'],
