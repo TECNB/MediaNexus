@@ -56,3 +56,35 @@ export type MediaLibraryListParams = {
   search?: string
   missing_poster?: boolean
 }
+
+export type MediaSeason = {
+  season_id: string
+  name: string
+  season_number: number | null
+  episode_count: number
+  date_created: string | null
+}
+
+export type MediaDeletionStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
+export type MediaDeletionStage =
+  | 'DELETING_CLOUD'
+  | 'CLEANING_STRM'
+  | 'NOTIFYING_EMBY'
+  | 'VERIFYING'
+  | 'COMPLETED'
+
+export type MediaDeletionTask = {
+  id: string
+  library: MediaLibraryId
+  item_id: string
+  season_id: string | null
+  season_number: number | null
+  title: string
+  target_label: string
+  status: MediaDeletionStatus
+  stage: MediaDeletionStage
+  error_message: string | null
+  created_at: string
+  updated_at: string
+  finished_at: string | null
+}

@@ -1,6 +1,7 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
+  Activity,
   ChevronLeft,
   ChevronRight,
   Clapperboard,
@@ -23,6 +24,7 @@ import { useNavigate } from 'react-router-dom'
 import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
 import {
+  getMediaDeletions,
   getMediaLibraryItems,
   getMediaLibraryPoster,
 } from '@/lib/api/media-library'
@@ -33,7 +35,13 @@ import type {
   MediaLibraryId,
   MediaLibraryItem,
   MediaLibraryPageData,
+  MediaDeletionTask,
 } from '@/types/media-library'
+import {
+  DeletionProgress,
+  DeletionTaskList,
+  MediaDeletionManager,
+} from './media-deletion'
 import { MediaManager } from './media-manager'
 
 type LoadStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -185,15 +193,27 @@ function MediaCard({
   item,
   library,
   onChanged,
+  deletionTask,
+  onDeletionCreated,
 }: {
   item: MediaLibraryItem
   library: MediaLibraryId
   onChanged: (item: MediaLibraryItem) => void
+  deletionTask?: MediaDeletionTask
+  onDeletionCreated: (task: MediaDeletionTask) => void
 }) {
+  const deleting = deletionTask && deletionTask.status !== 'SUCCEEDED'
   return (
-    <article className="min-w-0 overflow-hidden rounded-2xl bg-white shadow-shell ring-1 ring-slate-200">
-      <div className="aspect-[2/3] overflow-hidden bg-slate-100">
+    <article className={cn(
+      'min-w-0 overflow-hidden rounded-2xl bg-white shadow-shell ring-1',
+      deletionTask?.status === 'FAILED' ? 'ring-rose-200' : 'ring-slate-200',
+    )}>
+      <div className={cn('relative aspect-[2/3] overflow-hidden bg-slate-100', deleting && 'opacity-60')}>
         <Poster item={item} />
+        {deleting ? <span className={cn(
+          'absolute right-2 top-2 rounded-full px-2.5 py-1 text-xs font-semibold shadow-sm',
+          deletionTask.status === 'FAILED' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-800',
+        )}>{deletionTask.status === 'FAILED' ? '删除需处理' : '正在删除'}</span> : null}
       </div>
       <div className="space-y-3 p-4">
         <div className="min-w-0">
@@ -208,7 +228,12 @@ function MediaCard({
           <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>入库于 {formatDateTime(item.date_created)}</span>
         </div>
-        <MediaManager item={item} library={library} onChanged={onChanged} />
+        {deleting ? <DeletionProgress task={deletionTask} /> : (
+          <>
+            <MediaManager item={item} library={library} onChanged={onChanged} />
+            <MediaDeletionManager item={item} library={library} onCreated={onDeletionCreated} />
+          </>
+        )}
       </div>
     </article>
   )
@@ -248,6 +273,9 @@ function MediaLibraryPageContent() {
   const [data, setData] = useState<MediaLibraryPageData | null>(null)
   const [status, setStatus] = useState<LoadStatus>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [deletionTasks, setDeletionTasks] = useState<MediaDeletionTask[]>([])
+  const deletionDialogRef = useRef<HTMLDialogElement>(null)
+  const completedTaskIds = useRef(new Set<string>())
 
   const activeLibrary = useMemo(
     () => libraryTabs.find((tab) => tab.id === libraryId) ?? libraryTabs[0],
@@ -294,6 +322,35 @@ function MediaLibraryPageContent() {
 
     return () => controller.abort()
   }, [loadItems])
+
+  const loadDeletions = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const tasks = await getMediaDeletions(signal)
+      const newlyCompleted = tasks.some((task) => {
+        if (task.status !== 'SUCCEEDED' || completedTaskIds.current.has(task.id)) return false
+        completedTaskIds.current.add(task.id)
+        return true
+      })
+      setDeletionTasks(tasks)
+      if (newlyCompleted) void loadItems()
+    } catch (error) {
+      if (!isJavaRequestCanceledError(error)) console.warn('删除任务加载失败', error)
+    }
+  }, [loadItems])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void loadDeletions(controller.signal)
+    const interval = window.setInterval(() => void loadDeletions(), 3000)
+    return () => {
+      controller.abort()
+      window.clearInterval(interval)
+    }
+  }, [loadDeletions])
+
+  const updateDeletionTask = useCallback((task: MediaDeletionTask) => {
+    setDeletionTasks((current) => [task, ...current.filter((value) => value.id !== task.id)])
+  }, [])
 
   const total = data?.total ?? 0
   const responsePageSize = data?.page_size || PAGE_SIZE
@@ -384,7 +441,19 @@ function MediaLibraryPageContent() {
               })}
             </div>
 
-            <div className="flex w-full flex-col gap-2 sm:flex-row xl:max-w-xl">
+            <div className="flex w-full flex-col gap-2 sm:flex-row xl:max-w-2xl">
+              <button
+                className="relative flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-300"
+                onClick={() => deletionDialogRef.current?.showModal()}
+                type="button"
+              >
+                <Activity aria-hidden="true" className="h-4 w-4" />删除任务
+                {deletionTasks.some((task) => task.status === 'PENDING' || task.status === 'RUNNING') ? (
+                  <span className="rounded-full bg-amber-100 px-1.5 text-[0.6875rem] font-semibold text-amber-800" role="status" aria-atomic="true">
+                    {deletionTasks.filter((task) => task.status === 'PENDING' || task.status === 'RUNNING').length}
+                  </span>
+                ) : null}
+              </button>
               <button
                 aria-pressed={missingPoster}
                 className={cn(
@@ -528,10 +597,12 @@ function MediaLibraryPageContent() {
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {data.items.map((item) => (
                 <MediaCard
+                  deletionTask={deletionTasks.find((task) => task.item_id === item.item_id && task.status !== 'SUCCEEDED')}
                   item={item}
                   key={item.item_id}
                   library={libraryId}
                   onChanged={handleItemChanged}
+                  onDeletionCreated={updateDeletionTask}
                 />
               ))}
             </div>
@@ -569,6 +640,19 @@ function MediaLibraryPageContent() {
           </>
         ) : null}
       </div>
+      <dialog
+        aria-labelledby="deletion-tasks-title"
+        className="m-auto max-h-[92vh] w-[min(36rem,calc(100%-1.5rem))] overflow-hidden rounded-2xl bg-white p-0 text-slate-900 shadow-2xl backdrop:bg-slate-950/55"
+        ref={deletionDialogRef}
+      >
+        <div className="flex max-h-[92vh] flex-col">
+          <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+            <div><h2 className="text-lg font-semibold" id="deletion-tasks-title">删除任务</h2><p className="mt-1 text-sm text-slate-500">真实文件、本地索引与 Emby 同步状态</p></div>
+            <button aria-label="关闭删除任务" className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-slate-400" onClick={() => deletionDialogRef.current?.close()} type="button"><X aria-hidden="true" className="h-5 w-5" /></button>
+          </header>
+          <div className="overflow-y-auto p-5"><DeletionTaskList onChanged={updateDeletionTask} tasks={deletionTasks} /></div>
+        </div>
+      </dialog>
     </PageContainer>
   )
 }

@@ -11,6 +11,8 @@ import type {
   MediaMetadataCandidate,
   MediaPosterCandidate,
   MediaLibraryId,
+  MediaDeletionTask,
+  MediaSeason,
 } from '@/types/media-library'
 
 type JavaApiResponse<TData> = {
@@ -152,6 +154,57 @@ export async function selectMediaPoster(
   )
   if (response.data.code !== 200 || !response.data.data) {
     throw new Error(response.data.message || '封面替换失败')
+  }
+  return response.data.data
+}
+
+export async function getMediaSeasons(
+  itemId: string,
+  library: MediaLibraryId,
+  signal?: AbortSignal,
+) {
+  const response = await javaApiClient.get<JavaApiResponse<MediaSeason[]>>(
+    `${itemPath(itemId)}/seasons`,
+    { params: { library }, signal },
+  )
+  if (response.data.code !== 200 || !Array.isArray(response.data.data)) {
+    throw new Error(response.data.message || '季度加载失败')
+  }
+  return response.data.data
+}
+
+export async function createMediaDeletion(
+  itemId: string,
+  library: MediaLibraryId,
+  seasonId?: string,
+) {
+  const response = await javaApiClient.post<JavaApiResponse<MediaDeletionTask>>(
+    `${itemPath(itemId)}/deletions`,
+    { library, season_id: seasonId || null },
+  )
+  if (response.data.code !== 200 || !response.data.data) {
+    throw new Error(response.data.message || '删除任务创建失败')
+  }
+  return response.data.data
+}
+
+export async function getMediaDeletions(signal?: AbortSignal) {
+  const response = await javaApiClient.get<JavaApiResponse<MediaDeletionTask[]>>(
+    '/api/v1/admin/media-library/deletions',
+    { signal },
+  )
+  if (response.data.code !== 200 || !Array.isArray(response.data.data)) {
+    throw new Error(response.data.message || '删除任务加载失败')
+  }
+  return response.data.data
+}
+
+export async function retryMediaDeletion(taskId: string) {
+  const response = await javaApiClient.post<JavaApiResponse<MediaDeletionTask>>(
+    `/api/v1/admin/media-library/deletions/${encodeURIComponent(taskId)}/retry`,
+  )
+  if (response.data.code !== 200 || !response.data.data) {
+    throw new Error(response.data.message || '删除任务重试失败')
   }
   return response.data.data
 }
