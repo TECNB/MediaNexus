@@ -54,4 +54,5 @@ export type MediaLibraryListParams = {
   page: number
   page_size: 24
   search?: string
+  missing_poster?: boolean
 }

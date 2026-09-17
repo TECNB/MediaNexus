@@ -188,7 +188,7 @@ function MediaCard({
 }: {
   item: MediaLibraryItem
   library: MediaLibraryId
-  onChanged: () => void
+  onChanged: (item: MediaLibraryItem) => void
 }) {
   return (
     <article className="min-w-0 overflow-hidden rounded-2xl bg-white shadow-shell ring-1 ring-slate-200">
@@ -243,6 +243,7 @@ function MediaLibraryPageContent() {
   const [libraryId, setLibraryId] = useState<MediaLibraryId>('movies')
   const [searchInput, setSearchInput] = useState('')
   const [keyword, setKeyword] = useState('')
+  const [missingPoster, setMissingPoster] = useState(false)
   const [page, setPage] = useState(1)
   const [data, setData] = useState<MediaLibraryPageData | null>(null)
   const [status, setStatus] = useState<LoadStatus>('idle')
@@ -266,6 +267,7 @@ function MediaLibraryPageContent() {
             page,
             page_size: PAGE_SIZE,
             search: keyword,
+            missing_poster: missingPoster,
           },
           signal,
         )
@@ -283,7 +285,7 @@ function MediaLibraryPageContent() {
         )
       }
     },
-    [keyword, libraryId, page],
+    [keyword, libraryId, missingPoster, page],
   )
 
   useEffect(() => {
@@ -311,6 +313,33 @@ function MediaLibraryPageContent() {
     setKeyword('')
     setPage(1)
   }
+
+  const handleItemChanged = useCallback(
+    (updatedItem: MediaLibraryItem) => {
+      setData((current) => {
+        if (!current?.items.some((item) => item.item_id === updatedItem.item_id)) {
+          return current
+        }
+
+        const matchesSearch = !keyword || updatedItem.title
+          .toLocaleLowerCase()
+          .includes(keyword.toLocaleLowerCase())
+        const remainsVisible = matchesSearch
+          && (!missingPoster || !updatedItem.has_primary_image)
+
+        return {
+          ...current,
+          items: remainsVisible
+            ? current.items.map((item) =>
+                item.item_id === updatedItem.item_id ? updatedItem : item,
+              )
+            : current.items.filter((item) => item.item_id !== updatedItem.item_id),
+          total: remainsVisible ? current.total : Math.max(0, current.total - 1),
+        }
+      })
+    },
+    [keyword, missingPoster],
+  )
 
   return (
     <PageContainer
@@ -355,33 +384,49 @@ function MediaLibraryPageContent() {
               })}
             </div>
 
-            <form
-              className="flex w-full gap-2 xl:max-w-md"
-              onSubmit={handleSearch}
-            >
-              <label className="relative min-w-0 flex-1">
-                <span className="sr-only">按标题搜索</span>
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/70"
-                  onChange={(event) => setSearchInput(event.target.value)}
-                  placeholder={`搜索${activeLibrary.label}标题`}
-                  type="search"
-                  value={searchInput}
-                />
-                {searchInput ? (
-                  <button
-                    aria-label="清除搜索"
-                    className="absolute right-2 top-1/2 rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                    onClick={clearSearch}
-                    type="button"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                ) : null}
-              </label>
-              <Button type="submit">搜索</Button>
-            </form>
+            <div className="flex w-full flex-col gap-2 sm:flex-row xl:max-w-xl">
+              <button
+                aria-pressed={missingPoster}
+                className={cn(
+                  'flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-slate-300',
+                  missingPoster
+                    ? 'border-slate-900 bg-slate-900 text-white'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900',
+                )}
+                onClick={() => {
+                  setMissingPoster((value) => !value)
+                  setPage(1)
+                }}
+                type="button"
+              >
+                <ImageOff aria-hidden="true" className="h-4 w-4" />
+                只看无封面
+              </button>
+              <form className="flex min-w-0 flex-1 gap-2" onSubmit={handleSearch}>
+                <label className="relative min-w-0 flex-1">
+                  <span className="sr-only">按标题搜索</span>
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/70"
+                    onChange={(event) => setSearchInput(event.target.value)}
+                    placeholder={`搜索${activeLibrary.label}标题`}
+                    type="search"
+                    value={searchInput}
+                  />
+                  {searchInput ? (
+                    <button
+                      aria-label="清除搜索"
+                      className="absolute right-2 top-1/2 rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                      onClick={clearSearch}
+                      type="button"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                </label>
+                <Button type="submit">搜索</Button>
+              </form>
+            </div>
           </div>
         </div>
 
@@ -435,21 +480,34 @@ function MediaLibraryPageContent() {
               <LibraryBig className="h-6 w-6" />
             </div>
             <h2 className="mt-4 text-base font-semibold text-slate-950">
-              {keyword ? '没有匹配的媒体' : `${activeLibrary.label}库暂无内容`}
+              {keyword
+                ? '没有匹配的媒体'
+                : missingPoster
+                  ? '没有无封面的媒体'
+                  : `${activeLibrary.label}库暂无内容`}
             </h2>
             <p className="mt-2 text-sm text-slate-500">
               {keyword
                 ? '可以尝试更短的标题关键词，或清除搜索查看全部内容。'
+                : missingPoster
+                  ? '当前分类中的作品都已经有主封面。'
                 : 'Emby 中出现对应媒体后，这里会自动展示。'}
             </p>
-            {keyword ? (
+            {keyword || missingPoster ? (
               <Button
                 className="mt-5"
-                onClick={clearSearch}
+                onClick={() => {
+                  if (keyword) {
+                    clearSearch()
+                  } else {
+                    setMissingPoster(false)
+                    setPage(1)
+                  }
+                }}
                 type="button"
                 variant="outline"
               >
-                清除搜索
+                {keyword ? '清除搜索' : '查看全部媒体'}
               </Button>
             ) : null}
           </div>
@@ -473,7 +531,7 @@ function MediaLibraryPageContent() {
                   item={item}
                   key={item.item_id}
                   library={libraryId}
-                  onChanged={() => void loadItems()}
+                  onChanged={handleItemChanged}
                 />
               ))}
             </div>

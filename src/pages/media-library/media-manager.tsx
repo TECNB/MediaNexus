@@ -84,7 +84,7 @@ export function MediaManager({
 }: {
   item: MediaLibraryItem
   library: MediaLibraryId
-  onChanged: () => void
+  onChanged: (item: MediaLibraryItem) => void
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const [mode, setMode] = useState<ManagerMode>('identify')
@@ -142,9 +142,20 @@ export function MediaManager({
     setSaving(true)
     setError(null)
     try {
-      await applyMediaMetadata(item.item_id, identifyQuery, candidate.candidate_id, replaceImages)
+      const updatedItem = await applyMediaMetadata(
+        item.item_id,
+        identifyQuery,
+        candidate.candidate_id,
+        replaceImages,
+      )
+      setQueryText(candidate.name)
+      setYearText('')
+      setIdentifyQuery(null)
+      setMetadata([])
+      setPosters([])
+      setReplaceImages(false)
       dialogRef.current?.close()
-      onChanged()
+      onChanged(updatedItem)
     } catch (nextError) {
       setError(getJavaErrorMessage(nextError) || '重新识别失败。')
     } finally {
@@ -157,9 +168,13 @@ export function MediaManager({
     setSaving(true)
     setError(null)
     try {
-      await selectMediaPoster(item.item_id, library, candidate.candidate_id)
+      const updatedItem = await selectMediaPoster(
+        item.item_id,
+        library,
+        candidate.candidate_id,
+      )
       dialogRef.current?.close()
-      onChanged()
+      onChanged(updatedItem)
     } catch (nextError) {
       setError(getJavaErrorMessage(nextError) || '封面替换失败。')
     } finally {
@@ -233,9 +248,9 @@ export function MediaManager({
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}搜索
                   </Button>
                 </form>
-                <label className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800">
                   <input checked={replaceImages} className="mt-1 h-4 w-4" onChange={(event) => setReplaceImages(event.target.checked)} type="checkbox" />
-                  <span><strong>同时替换所有图片</strong><br /><span className="text-amber-800">默认关闭；开启后会删除现有自定义图片并由 Emby 重新下载。</span></span>
+                  <span><strong>覆盖该作品的全部现有图片</strong><br /><span className="text-slate-500">只影响当前作品，但会重新下载主封面、背景图等所有图片。没有图片时无需勾选；只想换主封面请使用“更换封面”。</span></span>
                 </label>
                 {identifyQuery && metadata.length === 0 && !loading ? <p className="py-8 text-center text-sm text-slate-500">没有找到候选，请尝试去掉年份或使用原名。</p> : null}
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

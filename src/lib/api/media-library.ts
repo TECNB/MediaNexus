@@ -5,6 +5,7 @@ import {
 } from '@/lib/java-api'
 import type {
   MediaLibraryListParams,
+  MediaLibraryItem,
   MediaLibraryPageData,
   MediaIdentifyQuery,
   MediaMetadataCandidate,
@@ -33,6 +34,7 @@ export async function getMediaLibraryItems(
         page: params.page,
         page_size: params.page_size,
         search: params.search || undefined,
+        missing_poster: params.missing_poster || undefined,
       },
       signal,
     })
@@ -127,14 +129,15 @@ export async function applyMediaMetadata(
   candidateId: string,
   replaceAllImages: boolean,
 ) {
-  const response = await javaApiClient.post<JavaApiResponse<null>>(
+  const response = await javaApiClient.post<JavaApiResponse<MediaLibraryItem>>(
     `${itemPath(itemId)}/identify`,
     { ...query, candidate_id: candidateId, replace_all_images: replaceAllImages },
     { timeout: 90000 },
   )
-  if (response.data.code !== 200) {
+  if (response.data.code !== 200 || !response.data.data) {
     throw new Error(response.data.message || '重新识别失败')
   }
+  return response.data.data
 }
 
 export async function selectMediaPoster(
@@ -142,12 +145,13 @@ export async function selectMediaPoster(
   library: MediaLibraryId,
   candidateId: string,
 ) {
-  const response = await javaApiClient.post<JavaApiResponse<null>>(
+  const response = await javaApiClient.post<JavaApiResponse<MediaLibraryItem>>(
     `${itemPath(itemId)}/poster-selection`,
     { library, candidate_id: candidateId },
     { timeout: 90000 },
   )
-  if (response.data.code !== 200) {
+  if (response.data.code !== 200 || !response.data.data) {
     throw new Error(response.data.message || '封面替换失败')
   }
+  return response.data.data
 }
