@@ -96,6 +96,19 @@ export type TelegramChannelRun = {
   error_message: string | null
 }
 
+export type TelegramRunProgress = {
+  phase: string
+  channel_title: string | null
+  scanned_messages: number
+  baseline_scanned_messages: number
+  discovered_resource_count: number
+  eligible_resource_count: number
+  selected_resource_count: number
+  processed_resource_count: number
+  forwarded_resource_count: number
+  forwarded_message_count: number
+}
+
 export type TelegramAutomationRun = {
   id: string
   trigger_type: 'SCHEDULED' | 'MANUAL' | string
@@ -114,6 +127,7 @@ export type TelegramAutomationRun = {
   started_at: string | null
   finished_at: string | null
   channels: TelegramChannelRun[]
+  progress: TelegramRunProgress | null
 }
 
 export type TelegramAutomationOverview = {

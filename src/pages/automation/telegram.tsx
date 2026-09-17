@@ -77,6 +77,13 @@ const stageCopy: Record<string, string> = {
   WAITING_PIKPAK_FILES: '等待 PikPak 文件到齐并移动',
   REFRESHING_ADULT_AUTOSYMLINK: '刷新 Adult AutoSymlink',
   MEDIA_DELIVERY_FAILED: '媒体入库失败',
+  RESOLVING_CHANNEL: '读取频道信息',
+  SCANNING_MESSAGES: '扫描频道消息',
+  BUILDING_BASELINE: '建立频道热度基准',
+  RANKING_RESOURCES: '筛选并排序资源',
+  REUSING_DRY_RUN: '复用试运行结果',
+  FORWARDING_RESOURCES: '发送入选资源',
+  COMPLETED: 'Worker 处理完成',
 }
 
 function formatDateTime(value: string | null) {
@@ -152,6 +159,7 @@ function ResourceCard({ resource }: { resource: TelegramResourceResult }) {
 }
 
 function RunDetails({ run }: { run: TelegramAutomationRun }) {
+  const progress = run.progress
   return (
     <section className="space-y-4">
       <div className="rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200">
@@ -169,6 +177,34 @@ function RunDetails({ run }: { run: TelegramAutomationRun }) {
           </div>
           {run.status === 'RUNNING' ? <Loader2 className="h-5 w-5 animate-spin text-sky-500" /> : null}
         </div>
+        {run.status === 'RUNNING' && progress ? (
+          <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50/70 p-4" role="status" aria-live="polite">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="flex items-center gap-2 text-sm font-semibold text-sky-900">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                {stageCopy[progress.phase] ?? progress.phase}
+              </p>
+              {progress.channel_title ? <p className="text-xs text-sky-700">当前频道：{progress.channel_title}</p> : null}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 xl:grid-cols-8">
+              {[
+                ['已扫描消息', progress.scanned_messages],
+                ['基准扫描', progress.baseline_scanned_messages],
+                ['发现资源', progress.discovered_resource_count],
+                ['有效资源', progress.eligible_resource_count],
+                ['入选资源', progress.selected_resource_count],
+                ['已处理', progress.processed_resource_count],
+                ['已发送资源', progress.forwarded_resource_count],
+                ['已发送消息', progress.forwarded_message_count],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-lg bg-white/80 px-3 py-2">
+                  <p className="text-sky-600">{label}</p>
+                  <p className="mt-1 text-base font-semibold text-sky-950">{value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="mt-4 grid gap-3 sm:grid-cols-4">
           {[
             ['入选资源', run.selected_resource_count],
@@ -282,7 +318,7 @@ export function TelegramAutomationPage() {
 
   useEffect(() => {
     if (!selectedRun || selectedRun.status !== 'RUNNING') return
-    const timer = window.setInterval(() => void refreshRun(selectedRun.id), 5000)
+    const timer = window.setInterval(() => void refreshRun(selectedRun.id), 2000)
     return () => window.clearInterval(timer)
   }, [refreshRun, selectedRun])
 
@@ -546,6 +582,7 @@ export function TelegramAutomationPage() {
             <Button type="button" variant="outline" onClick={() => void runFollowDryRun()} disabled={!canRun || enabledChannels === 0}><Play className="h-4 w-4" />追更试运行</Button>
             <Button type="button" onClick={() => void runFollow()} disabled={!canRun || enabledChannels === 0}><Play className="h-4 w-4" />立即追更</Button>
           </div>
+          <p className="mt-2 text-xs text-slate-400">立即追更会优先复用刚完成且配置一致的追更试运行结果；定时追更始终重新扫描。</p>
         </section>
 
         <section className="rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200">
@@ -570,6 +607,7 @@ export function TelegramAutomationPage() {
             setBackfill((current) => ({ ...current, start_mode: startMode }))
           }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm"><option value="latest">从最新重新排名</option><option value="continue">从上次位置继续向前</option></select></label>
           <div className="mt-4 flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={() => void runBackfillDryRun()} disabled={!canRun || !backfillChannelId}>回溯试运行</Button><Button type="button" onClick={() => void runBackfill()} disabled={!canRun || !backfillChannelId}>正式回溯</Button><Button type="button" variant="outline" onClick={() => void runBackfill(true)} disabled={!canRun || !backfillChannelId}><RefreshCw aria-hidden="true" className="h-4 w-4" />强制重发</Button></div>
+          <p className="mt-2 text-xs text-slate-400">正式回溯与强制重发会优先复用刚完成且参数一致的回溯试运行结果；缓存不可用时自动重新扫描。</p>
         </section>
 
         {selectedRun ? <RunDetails run={selectedRun} /> : null}
