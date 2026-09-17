@@ -471,7 +471,14 @@ export function TelegramAutomationPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">频道配置</p><p className="mt-1 text-sm text-slate-500">新增时可输入公开链接、@username 或频道 ID。</p></div>
             <label className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <input type="checkbox" checked={form?.enabled ?? false} onChange={(event) => setForm((current) => current ? { ...current, enabled: event.currentTarget.checked } : current)} />
+              <input
+                type="checkbox"
+                checked={form?.enabled ?? false}
+                onChange={(event) => {
+                  const enabled = event.currentTarget.checked
+                  setForm((current) => current ? { ...current, enabled } : current)
+                }}
+              />
               启用每日追更
             </label>
           </div>
@@ -484,7 +491,14 @@ export function TelegramAutomationPage() {
           </div>
           <label className="mt-4 block space-y-2 text-sm font-medium text-slate-700">
             <span>保存目标 Bot</span>
-            <input value={form?.target ?? ''} onChange={(event) => setForm((current) => current ? { ...current, target: event.currentTarget.value } : current)} className="h-10 w-full rounded-xl border border-slate-200 px-3 font-mono text-sm outline-none focus:ring-2 focus:ring-slate-200" />
+            <input
+              value={form?.target ?? ''}
+              onChange={(event) => {
+                const target = event.currentTarget.value
+                setForm((current) => current ? { ...current, target } : current)
+              }}
+              className="h-10 w-full rounded-xl border border-slate-200 px-3 font-mono text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            />
           </label>
 
           <div className="mt-5 space-y-4">
@@ -522,11 +536,23 @@ export function TelegramAutomationPage() {
           <div><p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">新频道历史回溯</p><p className="mt-1 text-sm text-slate-500">按 Forward Rate 全局排名取 Top N；Worker 账本会跳过追更或此前回溯已经发送的 Group。</p></div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="space-y-1 text-xs text-slate-500"><span>频道</span><select value={backfillChannelId} onChange={(event) => setBackfillChannelId(event.currentTarget.value)} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm"><option value="">请选择</option>{overview?.config.channels.map((channel) => <option key={channel.id} value={channel.id}>{channel.source_title || channel.source_id}</option>)}</select></label>
-            <label className="space-y-1 text-xs text-slate-500"><span>Top N</span><input type="number" min={1} max={100} value={backfill.top_resources} onChange={(event) => setBackfill((current) => ({ ...current, top_resources: Number(event.currentTarget.value) }))} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm" /></label>
-            <label className="space-y-1 text-xs text-slate-500"><span>回溯天数</span><input type="number" min={1} max={3650} value={backfill.lookback_days} onChange={(event) => setBackfill((current) => ({ ...current, lookback_days: Number(event.currentTarget.value) }))} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm" /></label>
-            <label className="space-y-1 text-xs text-slate-500"><span>最多扫描消息</span><input type="number" min={200} max={10000} value={backfill.max_messages} onChange={(event) => setBackfill((current) => ({ ...current, max_messages: Number(event.currentTarget.value) }))} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm" /></label>
+            <label className="space-y-1 text-xs text-slate-500"><span>Top N</span><input type="number" min={1} max={100} value={backfill.top_resources} onChange={(event) => {
+              const topResources = Number(event.currentTarget.value)
+              setBackfill((current) => ({ ...current, top_resources: topResources }))
+            }} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm" /></label>
+            <label className="space-y-1 text-xs text-slate-500"><span>回溯天数</span><input type="number" min={1} max={3650} value={backfill.lookback_days} onChange={(event) => {
+              const lookbackDays = Number(event.currentTarget.value)
+              setBackfill((current) => ({ ...current, lookback_days: lookbackDays }))
+            }} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm" /></label>
+            <label className="space-y-1 text-xs text-slate-500"><span>最多扫描消息</span><input type="number" min={200} max={10000} value={backfill.max_messages} onChange={(event) => {
+              const maxMessages = Number(event.currentTarget.value)
+              setBackfill((current) => ({ ...current, max_messages: maxMessages }))
+            }} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm" /></label>
           </div>
-          <label className="mt-3 block max-w-xs space-y-1 text-xs text-slate-500"><span>回溯起点</span><select value={backfill.start_mode} onChange={(event) => setBackfill((current) => ({ ...current, start_mode: event.currentTarget.value as TelegramBackfillPayload['start_mode'] }))} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm"><option value="latest">从最新重新排名</option><option value="continue">从上次位置继续向前</option></select></label>
+          <label className="mt-3 block max-w-xs space-y-1 text-xs text-slate-500"><span>回溯起点</span><select value={backfill.start_mode} onChange={(event) => {
+            const startMode = event.currentTarget.value as TelegramBackfillPayload['start_mode']
+            setBackfill((current) => ({ ...current, start_mode: startMode }))
+          }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm"><option value="latest">从最新重新排名</option><option value="continue">从上次位置继续向前</option></select></label>
           <div className="mt-4 flex gap-2"><Button type="button" variant="outline" onClick={() => void runBackfillDryRun()} disabled={!canRun || !backfillChannelId}>回溯试运行</Button><Button type="button" onClick={() => void runBackfill()} disabled={!canRun || !backfillChannelId}>正式回溯</Button></div>
         </section>
 
