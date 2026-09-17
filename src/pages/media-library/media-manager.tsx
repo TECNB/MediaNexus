@@ -95,12 +95,13 @@ export function MediaManager({
   const [posters, setPosters] = useState<MediaPosterCandidate[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [replaceImages, setReplaceImages] = useState(false)
+  const [replaceImages, setReplaceImages] = useState(item.has_primary_image)
   const [error, setError] = useState<string | null>(null)
 
   function open(nextMode: ManagerMode) {
     setMode(nextMode)
     setError(null)
+    setReplaceImages(item.has_primary_image)
     dialogRef.current?.showModal()
     if (nextMode === 'poster' && posters.length === 0) void loadPosters()
   }
@@ -250,7 +251,7 @@ export function MediaManager({
                 </form>
                 <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800">
                   <input checked={replaceImages} className="mt-1 h-4 w-4" onChange={(event) => setReplaceImages(event.target.checked)} type="checkbox" />
-                  <span><strong>覆盖该作品的全部现有图片</strong><br /><span className="text-slate-500">只影响当前作品，但会重新下载主封面、背景图等所有图片。没有图片时无需勾选；只想换主封面请使用“更换封面”。</span></span>
+                  <span><strong>覆盖该作品的全部现有图片</strong><br /><span className="text-slate-500">已有主封面时默认勾选，无主封面时默认不勾选，可手动调整。只影响当前作品，会重新下载主封面、背景图等图片；只想换主封面请使用“更换封面”。</span></span>
                 </label>
                 {identifyQuery && metadata.length === 0 && !loading ? <p className="py-8 text-center text-sm text-slate-500">没有找到候选，请尝试去掉年份或使用原名。</p> : null}
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
