@@ -549,6 +549,12 @@ export function AutomationPage() {
       description="管理员控制 JAVDB 有码日榜、周榜和月榜同步；抓取结果会进入审计历史，Adult 下载、整理和入库仍在任务中心完成。"
     >
       <div className="space-y-6">
+        <div className="flex gap-2">
+          <Button type="button" size="sm">JAVDB 自动化</Button>
+          <Button asChild type="button" size="sm" variant="outline">
+            <Link to="/automation/telegram">Telegram 自动化</Link>
+          </Button>
+        </div>
         <section className="rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-3">
