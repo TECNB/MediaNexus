@@ -85,6 +85,7 @@ export function MediaDeletionManager({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const episodic = library === 'tv' || library === 'anime'
+  const collection = item.type === 'BoxSet'
 
   async function open() {
     setError(null)
@@ -121,7 +122,7 @@ export function MediaDeletionManager({
   }
 
   const target = selected === 'all'
-    ? episodic ? '整部剧集' : '整部作品'
+    ? episodic ? '整部剧集' : collection ? '整套合集' : '整部作品'
     : selected?.name
 
   return (
@@ -134,7 +135,7 @@ export function MediaDeletionManager({
         variant="outline"
       >
         {episodic ? <FolderTree aria-hidden="true" className="h-4 w-4" /> : <Trash2 aria-hidden="true" className="h-4 w-4" />}
-        {episodic ? '查看季度' : '删除媒体'}
+        {episodic ? '查看季度' : collection ? '删除合集' : '删除媒体'}
       </Button>
 
       <dialog
@@ -147,7 +148,7 @@ export function MediaDeletionManager({
           <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
             <div>
               <h2 className="text-lg font-semibold" id={`delete-media-${item.item_id}`}>
-                {episodic ? `管理《${item.title}》季度` : `删除《${item.title}》`}
+                {episodic ? `管理《${item.title}》季度` : collection ? `删除合集《${item.title}》` : `删除《${item.title}》`}
               </h2>
               <p className="mt-1 text-sm text-slate-500">
                 删除网盘内容和本地 STRM 后，直接通知 Emby；不会触发 AS。

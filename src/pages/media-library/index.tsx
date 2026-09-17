@@ -49,23 +49,21 @@ type LoadStatus = 'idle' | 'loading' | 'success' | 'error'
 type LibraryTab = {
   id: MediaLibraryId
   label: string
-  description: string
   icon: LucideIcon
 }
 
 const PAGE_SIZE = 24
 
 const libraryTabs: LibraryTab[] = [
-  { id: 'movies', label: '电影', description: 'Movies', icon: Film },
-  { id: 'tv', label: '电视剧', description: 'TV', icon: Tv },
-  { id: 'anime', label: '动漫', description: 'Anime', icon: Sparkles },
+  { id: 'movies', label: '电影', icon: Film },
+  { id: 'tv', label: '电视剧', icon: Tv },
+  { id: 'anime', label: '动漫', icon: Sparkles },
   {
     id: 'adult-other',
     label: 'Adult - Other',
-    description: 'Other',
     icon: Clapperboard,
   },
-  { id: 'adult-jav', label: 'Adult-JAV', description: 'JAV', icon: Disc3 },
+  { id: 'adult-jav', label: 'Adult-JAV', icon: Disc3 },
 ]
 
 function formatDateTime(value: string | null) {
@@ -203,6 +201,7 @@ function MediaCard({
   onDeletionCreated: (task: MediaDeletionTask) => void
 }) {
   const deleting = deletionTask && deletionTask.status !== 'SUCCEEDED'
+  const collection = item.type === 'BoxSet'
   return (
     <article className={cn(
       'min-w-0 overflow-hidden rounded-2xl bg-white shadow-shell ring-1',
@@ -221,7 +220,7 @@ function MediaCard({
             {item.title}
           </h2>
           <p className="mt-1 text-xs font-medium text-slate-400">
-            {item.year ?? '年份未知'}
+            {collection ? '合集' : item.year ?? '年份未知'}
           </p>
         </div>
         <div className="flex items-start gap-2 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
@@ -230,7 +229,7 @@ function MediaCard({
         </div>
         {deleting ? <DeletionProgress task={deletionTask} /> : (
           <>
-            <MediaManager item={item} library={library} onChanged={onChanged} />
+            {!collection ? <MediaManager item={item} library={library} onChanged={onChanged} /> : null}
             <MediaDeletionManager item={item} library={library} onCreated={onDeletionCreated} />
           </>
         )}
@@ -405,10 +404,10 @@ function MediaLibraryPageContent() {
     >
       <div className="space-y-5">
         <div className="rounded-2xl bg-white p-3 shadow-shell ring-1 ring-slate-200">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-col gap-3">
             <div
               aria-label="媒体库分类"
-              className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 sm:grid-cols-5"
+              className="grid w-full grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 md:grid-cols-5"
               role="tablist"
             >
               {libraryTabs.map((tab) => {
@@ -433,15 +432,12 @@ function MediaLibraryPageContent() {
                   >
                     <Icon className="h-4 w-4 shrink-0" />
                     <span className="whitespace-nowrap">{tab.label}</span>
-                    <span className="hidden text-[0.6875rem] text-slate-400 2xl:inline">
-                      {tab.description}
-                    </span>
                   </button>
                 )
               })}
             </div>
 
-            <div className="flex w-full flex-col gap-2 sm:flex-row xl:max-w-2xl">
+            <div className="flex w-full flex-col gap-2 sm:flex-row">
               <button
                 className="relative flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-300"
                 onClick={() => deletionDialogRef.current?.showModal()}
