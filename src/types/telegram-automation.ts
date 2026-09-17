@@ -137,4 +137,5 @@ export type TelegramBackfillPayload = {
   lookback_days: number
   max_messages: number
   start_mode: 'continue' | 'latest'
+  force_resend?: boolean
 }

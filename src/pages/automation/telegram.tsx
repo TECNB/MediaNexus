@@ -65,6 +65,7 @@ const modeCopy: Record<string, string> = {
   FOLLOW: '正式追更',
   FOLLOW_DRY_RUN: '追更试运行',
   BACKFILL: '历史回溯',
+  BACKFILL_FORCE: '强制回溯',
   BACKFILL_DRY_RUN: '回溯试运行',
 }
 
@@ -425,19 +426,25 @@ export function TelegramAutomationPage() {
     }
   }
 
-  async function runBackfill() {
+  async function runBackfill(forceResend = false) {
     if (!backfillChannelId) {
       setError('请选择回溯频道。')
       return
     }
-    if (!window.confirm(`将真实转发该频道排名前 ${backfill.top_resources} 的历史资源，确认继续吗？`)) return
+    const confirmation = forceResend
+      ? `将忽略查重记录，强制重新发送该频道排名前 ${backfill.top_resources} 的历史资源，可能产生重复文件，确认继续吗？`
+      : `将真实转发该频道排名前 ${backfill.top_resources} 的历史资源，确认继续吗？`
+    if (!window.confirm(confirmation)) return
     setWorking(true)
     setError(null)
     try {
-      const run = await startTelegramBackfill(backfillChannelId, backfill)
+      const run = await startTelegramBackfill(backfillChannelId, {
+        ...backfill,
+        force_resend: forceResend,
+      })
       setSelectedRun(run)
       setHistoryPage(1)
-      setMessage('历史回溯已开始。')
+      setMessage(forceResend ? '强制回溯已开始。' : '历史回溯已开始。')
       await Promise.all([loadOverview(), loadHistory(1), refreshRun(run.id)])
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '历史回溯启动失败')
@@ -562,7 +569,7 @@ export function TelegramAutomationPage() {
             const startMode = event.currentTarget.value as TelegramBackfillPayload['start_mode']
             setBackfill((current) => ({ ...current, start_mode: startMode }))
           }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm"><option value="latest">从最新重新排名</option><option value="continue">从上次位置继续向前</option></select></label>
-          <div className="mt-4 flex gap-2"><Button type="button" variant="outline" onClick={() => void runBackfillDryRun()} disabled={!canRun || !backfillChannelId}>回溯试运行</Button><Button type="button" onClick={() => void runBackfill()} disabled={!canRun || !backfillChannelId}>正式回溯</Button></div>
+          <div className="mt-4 flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={() => void runBackfillDryRun()} disabled={!canRun || !backfillChannelId}>回溯试运行</Button><Button type="button" onClick={() => void runBackfill()} disabled={!canRun || !backfillChannelId}>正式回溯</Button><Button type="button" variant="outline" onClick={() => void runBackfill(true)} disabled={!canRun || !backfillChannelId}><RefreshCw aria-hidden="true" className="h-4 w-4" />强制重发</Button></div>
         </section>
 
         {selectedRun ? <RunDetails run={selectedRun} /> : null}
