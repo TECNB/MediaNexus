@@ -61,11 +61,11 @@ export async function getMediaLibraryItems(
   }
 }
 
-export async function syncMediaLibrary(library: MediaLibraryId) {
+export async function syncMediaLibrary(library: MediaLibraryId, deep: boolean) {
   const response = await javaApiClient.post<JavaApiResponse<MediaLibrarySyncResult>>(
     '/api/v1/admin/media-library/sync',
     null,
-    { params: { library }, timeout: 120000 },
+    { params: { library, deep }, timeout: 120000 },
   )
   if (response.data.code !== 200 || !response.data.data) {
     throw new Error(response.data.message || '媒体库同步失败')

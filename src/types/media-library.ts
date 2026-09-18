@@ -52,11 +52,13 @@ export type MediaLibraryPageData = {
 
 export type MediaLibrarySyncResult = {
   checked_directories: number
+  checked_files: number
   removed_directories: number
   removed_items: number
   skipped_items: number
   error_count: number
   elapsed_ms: number
+  deep: boolean
 }
 
 export type MediaLibraryListParams = {

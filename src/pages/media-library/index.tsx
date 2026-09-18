@@ -276,6 +276,7 @@ function MediaLibraryPageContent() {
   const [status, setStatus] = useState<LoadStatus>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
+  const [deepSync, setDeepSync] = useState(false)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
   const [deletionTasks, setDeletionTasks] = useState<MediaDeletionTask[]>([])
   const deletionDialogRef = useRef<HTMLDialogElement>(null)
@@ -385,12 +386,18 @@ function MediaLibraryPageContent() {
       return
     }
     setSyncing(true)
-    setSyncMessage(null)
+    setSyncMessage(deepSync ? '正在检查媒体库中的文件，请稍候…' : '正在检查媒体库目录，请稍候…')
     try {
-      const result = await syncMediaLibrary(libraryId)
+      const result = await syncMediaLibrary(libraryId, deepSync)
+      const checked = deepSync ? `${result.checked_files} 个文件` : `${result.checked_directories} 个目录`
+      const detail = result.error_count > 0
+        ? `，${result.error_count} 项检查失败`
+        : result.skipped_items > 0
+          ? `，跳过 ${result.skipped_items} 项`
+          : ''
       setSyncMessage(result.removed_items > 0
-        ? `媒体库已同步，清理了 ${result.removed_directories} 个失效目录`
-        : '媒体库已同步，未发现已删除媒体')
+        ? `媒体库同步完成：检查 ${checked}，清理 ${result.removed_items} 个失效媒体${detail}`
+        : `媒体库同步完成：检查 ${checked}，未发现已删除媒体${detail}`)
       await loadItems()
     } catch (error) {
       setSyncMessage(error instanceof Error ? error.message : '媒体库同步失败，请稍后重试。')
@@ -466,6 +473,42 @@ function MediaLibraryPageContent() {
               })}
             </div>
 
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <RefreshCw className="h-4 w-4 text-slate-500" />
+                    同步媒体库
+                  </div>
+                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                    检查网盘中已删除的媒体，并清理本地失效记录；不会删除网盘内容。
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
+                  <label className="flex min-h-11 items-center gap-2 text-sm text-slate-700">
+                    <input
+                      checked={deepSync}
+                      className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
+                      disabled={syncing}
+                      onChange={(event) => setDeepSync(event.target.checked)}
+                      type="checkbox"
+                    />
+                    检查目录中的每个文件
+                    <span className="text-xs text-slate-400">更完整，但耗时更久</span>
+                  </label>
+                  <Button disabled={syncing} onClick={() => void handleSync()} type="button">
+                    <RefreshCw className={cn('h-4 w-4', syncing && 'animate-spin')} />
+                    {syncing ? '正在同步' : '开始同步'}
+                  </Button>
+                </div>
+              </div>
+              {syncMessage ? (
+                <p className="mt-3 border-t border-slate-200 pt-3 text-sm text-slate-600" role="status">
+                  {syncMessage}
+                </p>
+              ) : null}
+            </div>
+
             <div className="flex w-full flex-col gap-2 sm:flex-row">
               <button
                 className="relative flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-300"
@@ -478,15 +521,6 @@ function MediaLibraryPageContent() {
                     {deletionTasks.filter((task) => task.status === 'PENDING' || task.status === 'RUNNING').length}
                   </span>
                 ) : null}
-              </button>
-              <button
-                className="flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-300 disabled:cursor-wait disabled:opacity-60"
-                disabled={syncing}
-                onClick={() => void handleSync()}
-                type="button"
-              >
-                <RefreshCw aria-hidden="true" className={cn('h-4 w-4', syncing && 'animate-spin')} />
-                {syncing ? '正在同步' : '同步媒体库'}
               </button>
               <button
                 aria-pressed={missingPoster}
@@ -533,11 +567,6 @@ function MediaLibraryPageContent() {
           </div>
         </div>
 
-        {syncMessage ? (
-          <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600" role="status">
-            {syncMessage}
-          </p>
-        ) : null}
 
         {keyword && status !== 'loading' ? (
           <div className="flex items-center justify-between gap-3 text-sm text-slate-500">
