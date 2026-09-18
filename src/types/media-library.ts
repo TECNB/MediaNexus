@@ -61,6 +61,13 @@ export type MediaLibrarySyncResult = {
   deep: boolean
 }
 
+export type MediaLibrarySyncTarget = {
+  label: string
+  path: string
+  target_type: 'file' | 'folder'
+  detail: string
+}
+
 export type MediaLibraryListParams = {
   library: MediaLibraryId
   page: number

@@ -28,6 +28,7 @@ import {
   getMediaDeletions,
   getMediaLibraryItems,
   getMediaLibraryPoster,
+  searchMediaLibrarySyncTargets,
   syncMediaLibrary,
 } from '@/lib/api/media-library'
 import { isJavaRequestCanceledError } from '@/lib/java-api'
@@ -38,6 +39,7 @@ import type {
   MediaLibraryItem,
   MediaLibraryPageData,
   MediaDeletionTask,
+  MediaLibrarySyncTarget,
 } from '@/types/media-library'
 import {
   DeletionProgress,
@@ -276,7 +278,9 @@ function MediaLibraryPageContent() {
   const [status, setStatus] = useState<LoadStatus>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
-  const [deepSync, setDeepSync] = useState(false)
+  const [targetQuery, setTargetQuery] = useState('')
+  const [targetSuggestions, setTargetSuggestions] = useState<MediaLibrarySyncTarget[]>([])
+  const [selectedTargets, setSelectedTargets] = useState<MediaLibrarySyncTarget[]>([])
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
   const [deletionTasks, setDeletionTasks] = useState<MediaDeletionTask[]>([])
   const deletionDialogRef = useRef<HTMLDialogElement>(null)
@@ -328,6 +332,28 @@ function MediaLibraryPageContent() {
 
     return () => controller.abort()
   }, [loadItems])
+
+  useEffect(() => {
+    const query = targetQuery.trim()
+    if (query.length < 2) {
+      setTargetSuggestions([])
+      return
+    }
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      void searchMediaLibrarySyncTargets(libraryId, query, controller.signal)
+        .then((targets) => setTargetSuggestions(targets.filter(
+          (target) => !selectedTargets.some((selected) => selected.path === target.path),
+        )))
+        .catch((error) => {
+          if (!isJavaRequestCanceledError(error)) setTargetSuggestions([])
+        })
+    }, 250)
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
+  }, [libraryId, selectedTargets, targetQuery])
 
   const loadDeletions = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -386,9 +412,10 @@ function MediaLibraryPageContent() {
       return
     }
     setSyncing(true)
-    setSyncMessage(deepSync ? '正在检查媒体库中的文件，请稍候…' : '正在检查媒体库目录，请稍候…')
+    const deepSync = selectedTargets.length > 0
+    setSyncMessage(deepSync ? `正在深度检查 ${selectedTargets.length} 个指定目标，请稍候…` : '正在检查媒体库根目录，请稍候…')
     try {
-      const result = await syncMediaLibrary(libraryId, deepSync)
+      const result = await syncMediaLibrary(libraryId, deepSync, selectedTargets.map((target) => target.path))
       const checked = deepSync ? `${result.checked_files} 个文件` : `${result.checked_directories} 个目录`
       const detail = result.error_count > 0
         ? `，${result.error_count} 项检查失败`
@@ -462,6 +489,9 @@ function MediaLibraryPageContent() {
                     onClick={() => {
                       setLibraryId(tab.id)
                       setPage(1)
+                      setTargetQuery('')
+                      setTargetSuggestions([])
+                      setSelectedTargets([])
                     }}
                     role="tab"
                     type="button"
@@ -485,22 +515,72 @@ function MediaLibraryPageContent() {
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
-                  <label className="flex min-h-11 items-center gap-2 text-sm text-slate-700">
-                    <input
-                      checked={deepSync}
-                      className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
-                      disabled={syncing}
-                      onChange={(event) => setDeepSync(event.target.checked)}
-                      type="checkbox"
-                    />
-                    检查目录中的每个文件
-                    <span className="text-xs text-slate-400">更完整，但耗时更久</span>
-                  </label>
                   <Button disabled={syncing} onClick={() => void handleSync()} type="button">
                     <RefreshCw className={cn('h-4 w-4', syncing && 'animate-spin')} />
                     {syncing ? '正在同步' : '开始同步'}
                   </Button>
                 </div>
+              </div>
+              <div className="mt-4 border-t border-slate-200 pt-4">
+                <label className="text-sm font-medium text-slate-800" htmlFor="deep-sync-target">
+                  指定深度检查目标
+                </label>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  默认只检查媒体库根目录；搜索并选择文件或文件夹后，才会深入检查所选目标。
+                </p>
+                <div className="relative mt-3">
+                  <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <input
+                    aria-label="搜索深度检查目标"
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    disabled={syncing}
+                    id="deep-sync-target"
+                    onChange={(event) => setTargetQuery(event.target.value)}
+                    placeholder="输入动漫名、文件夹名或文件名，例如：擅长捉弄"
+                    value={targetQuery}
+                  />
+                  {targetSuggestions.length > 0 ? (
+                    <div className="absolute z-20 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                      {targetSuggestions.map((target) => (
+                        <button
+                          className="flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left hover:bg-slate-50"
+                          key={target.path}
+                          onClick={() => {
+                            setSelectedTargets((current) => [...current, target])
+                            setTargetQuery('')
+                            setTargetSuggestions([])
+                          }}
+                          type="button"
+                        >
+                          <span className="mt-0.5 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500">
+                            {target.target_type === 'folder' ? '文件夹' : '文件'}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium text-slate-800">{target.label}</span>
+                            <span className="block truncate text-xs text-slate-400">{target.path}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                {selectedTargets.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {selectedTargets.map((target) => (
+                      <span className="inline-flex max-w-full items-center gap-2 rounded-full bg-slate-900 px-3 py-1.5 text-xs text-white" key={target.path}>
+                        <span className="max-w-[min(70vw,28rem)] truncate">{target.label}</span>
+                        <button
+                          aria-label={`移除深度检查目标 ${target.label}`}
+                          className="rounded-full text-slate-300 hover:text-white"
+                          onClick={() => setSelectedTargets((current) => current.filter((item) => item.path !== target.path))}
+                          type="button"
+                        >
+                          <X aria-hidden="true" className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
               {syncMessage ? (
                 <p className="mt-3 border-t border-slate-200 pt-3 text-sm text-slate-600" role="status">

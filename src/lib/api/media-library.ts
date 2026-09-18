@@ -12,6 +12,7 @@ import type {
   MediaPosterCandidate,
   MediaLibraryId,
   MediaLibrarySyncResult,
+  MediaLibrarySyncTarget,
   MediaDeletionTask,
   MediaSeason,
 } from '@/types/media-library'
@@ -61,14 +62,37 @@ export async function getMediaLibraryItems(
   }
 }
 
-export async function syncMediaLibrary(library: MediaLibraryId, deep: boolean) {
+export async function syncMediaLibrary(
+  library: MediaLibraryId,
+  deep: boolean,
+  targets: string[] = [],
+) {
+  const params = new URLSearchParams()
+  params.set('library', library)
+  params.set('deep', String(deep))
+  targets.forEach((target) => params.append('target', target))
   const response = await javaApiClient.post<JavaApiResponse<MediaLibrarySyncResult>>(
     '/api/v1/admin/media-library/sync',
     null,
-    { params: { library, deep }, timeout: 120000 },
+    { params, timeout: 120000 },
   )
   if (response.data.code !== 200 || !response.data.data) {
     throw new Error(response.data.message || '媒体库同步失败')
+  }
+  return response.data.data
+}
+
+export async function searchMediaLibrarySyncTargets(
+  library: MediaLibraryId,
+  query: string,
+  signal?: AbortSignal,
+) {
+  const response = await javaApiClient.get<JavaApiResponse<MediaLibrarySyncTarget[]>>(
+    '/api/v1/admin/media-library/sync-targets',
+    { params: { library, query }, signal, timeout: 30000 },
+  )
+  if (response.data.code !== 200 || !Array.isArray(response.data.data)) {
+    throw new Error(response.data.message || '深度检查目标搜索失败')
   }
   return response.data.data
 }
