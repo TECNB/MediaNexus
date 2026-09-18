@@ -417,15 +417,19 @@ function MediaLibraryPageContent() {
     try {
       const result = await syncMediaLibrary(libraryId, deepSync, selectedTargets.map((target) => target.path))
       const checked = deepSync ? `${result.checked_files} 个文件` : `${result.checked_directories} 个目录`
-      const detail = result.error_count > 0
-        ? `，${result.error_count} 项检查失败`
-        : result.skipped_items > 0
-          ? `，跳过 ${result.skipped_items} 项`
-          : ''
-      setSyncMessage(result.removed_items > 0
-        ? `媒体库同步完成：检查 ${checked}，清理 ${result.removed_items} 个失效媒体${detail}`
-        : `媒体库同步完成：检查 ${checked}，未发现已删除媒体${detail}`)
       await loadItems()
+      const removedMedia = result.removed_media ?? []
+      const skippedMedia = result.skipped_media ?? []
+      const failedMedia = result.failed_media ?? []
+      const detailLines = [
+        removedMedia.length > 0 ? `已清理：${removedMedia.join('、')}${result.removed_directories > removedMedia.length ? ` 等 ${result.removed_directories} 个媒体目录` : ''}` : '',
+        skippedMedia.length > 0 ? `已跳过：${skippedMedia.join('、')}${result.skipped_items > skippedMedia.length ? ` 等 ${result.skipped_items} 项` : ''}` : '',
+        failedMedia.length > 0 ? `检查失败：${failedMedia.join('、')}${result.error_count > failedMedia.length ? ` 等 ${result.error_count} 项` : ''}` : '',
+      ].filter(Boolean)
+      const summary = result.removed_items > 0
+        ? `媒体库同步完成：检查 ${checked}，清理 ${result.removed_media?.length ?? result.removed_items} 个失效媒体`
+        : `媒体库同步完成：检查 ${checked}，未发现已删除媒体`
+      setSyncMessage([summary, ...detailLines].join('\n'))
     } catch (error) {
       setSyncMessage(error instanceof Error ? error.message : '媒体库同步失败，请稍后重试。')
     } finally {
@@ -584,7 +588,7 @@ function MediaLibraryPageContent() {
               </div>
               {syncMessage ? (
                 <p className="mt-3 border-t border-slate-200 pt-3 text-sm text-slate-600" role="status">
-                  {syncMessage}
+                  <span className="whitespace-pre-line">{syncMessage}</span>
                 </p>
               ) : null}
             </div>

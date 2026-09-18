@@ -59,6 +59,9 @@ export type MediaLibrarySyncResult = {
   error_count: number
   elapsed_ms: number
   deep: boolean
+  removed_media: string[]
+  skipped_media: string[]
+  failed_media: string[]
 }
 
 export type MediaLibrarySyncTarget = {
