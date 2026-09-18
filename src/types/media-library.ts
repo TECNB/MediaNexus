@@ -1,6 +1,7 @@
 export type MediaLibraryId =
   | 'movies'
   | 'tv'
+  | 'variety'
   | 'anime'
   | 'adult-other'
   | 'adult-jav'

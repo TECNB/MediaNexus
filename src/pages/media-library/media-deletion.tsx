@@ -41,27 +41,38 @@ const stageOrder: Record<MediaDeletionStage, number> = {
 
 export function DeletionProgress({ task }: { task: MediaDeletionTask }) {
   const current = stageOrder[task.stage]
+  const currentStage = stages[Math.min(current, stages.length - 1)]
+  const progressLabel = task.status === 'SUCCEEDED'
+    ? '删除完成'
+    : task.status === 'FAILED'
+      ? `失败于：${currentStage.label}`
+      : `${Math.min(current + 1, stages.length)}/${stages.length} · ${currentStage.label}`
   return (
     <div className="space-y-2" role="status" aria-atomic="true">
-      <div className="grid grid-cols-3 gap-1">
+      <div aria-hidden="true" className="grid grid-cols-3 gap-1">
         {stages.map((stage, index) => {
           const complete = task.status === 'SUCCEEDED' || current > index
           const active = task.status !== 'FAILED' && current === index
           const failed = task.status === 'FAILED' && current === index
           return (
-            <div className="min-w-0" key={stage.id}>
-              <div className={cn(
-                'mb-1.5 h-1 rounded-full',
+            <div
+              className={cn(
+                'h-1 rounded-full',
                 complete ? 'bg-emerald-500' : failed ? 'bg-rose-500' : active ? 'bg-amber-500' : 'bg-slate-200',
-              )} />
-              <p className={cn(
-                'truncate text-[0.6875rem] font-medium',
-                complete ? 'text-emerald-700' : failed ? 'text-rose-700' : active ? 'text-amber-700' : 'text-slate-400',
-              )}>{stage.label}</p>
-            </div>
+              )}
+              key={stage.id}
+            />
           )
         })}
       </div>
+      <p className={cn(
+        'text-sm font-medium leading-5',
+        task.status === 'SUCCEEDED'
+          ? 'text-emerald-700'
+          : task.status === 'FAILED'
+            ? 'text-rose-700'
+            : 'text-slate-600',
+      )}>{progressLabel}</p>
       {task.error_message ? (
         <p className="text-xs leading-5 text-rose-700">{task.error_message}</p>
       ) : null}
@@ -84,7 +95,7 @@ export function MediaDeletionManager({
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const episodic = library === 'tv' || library === 'anime'
+  const episodic = library === 'tv' || library === 'variety' || library === 'anime'
   const collection = item.type === 'BoxSet'
 
   async function open() {

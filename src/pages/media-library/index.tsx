@@ -11,6 +11,7 @@ import {
   ImageOff,
   LibraryBig,
   Loader2,
+  Mic2,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -57,6 +58,7 @@ const PAGE_SIZE = 24
 const libraryTabs: LibraryTab[] = [
   { id: 'movies', label: '电影', icon: Film },
   { id: 'tv', label: '电视剧', icon: Tv },
+  { id: 'variety', label: '综艺', icon: Mic2 },
   { id: 'anime', label: '动漫', icon: Sparkles },
   {
     id: 'adult-other',
@@ -400,14 +402,14 @@ function MediaLibraryPageContent() {
   return (
     <PageContainer
       title="媒体库"
-      description="查看和管理 Emby 中已有的电影、电视剧、动漫与 Adult 媒体。内容按最近入库时间排序。"
+      description="查看和管理 Emby 中已有的电影、电视剧、综艺、动漫与 Adult 媒体。内容按最近入库时间排序。"
     >
       <div className="space-y-5">
         <div className="rounded-2xl bg-white p-3 shadow-shell ring-1 ring-slate-200">
           <div className="flex flex-col gap-3">
             <div
               aria-label="媒体库分类"
-              className="grid w-full grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 md:grid-cols-5"
+              className="grid w-full grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 md:grid-cols-3 xl:grid-cols-6"
               role="tablist"
             >
               {libraryTabs.map((tab) => {
