@@ -427,7 +427,7 @@ function MediaLibraryPageContent() {
         failedMedia.length > 0 ? `检查失败：${failedMedia.join('、')}${result.error_count > failedMedia.length ? ` 等 ${result.error_count} 项` : ''}` : '',
       ].filter(Boolean)
       const summary = result.removed_items > 0
-        ? `媒体库同步完成：检查 ${checked}，清理 ${result.removed_media?.length ?? result.removed_items} 个失效媒体`
+        ? `媒体库同步完成：检查 ${checked}，清理 ${result.removed_directories} 个失效媒体`
         : `媒体库同步完成：检查 ${checked}，未发现已删除媒体`
       setSyncMessage([summary, ...detailLines].join('\n'))
     } catch (error) {
