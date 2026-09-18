@@ -28,6 +28,7 @@ import {
   getMediaDeletions,
   getMediaLibraryItems,
   getMediaLibraryPoster,
+  syncMediaLibrary,
 } from '@/lib/api/media-library'
 import { isJavaRequestCanceledError } from '@/lib/java-api'
 import { useAuth } from '@/lib/use-auth'
@@ -274,6 +275,8 @@ function MediaLibraryPageContent() {
   const [data, setData] = useState<MediaLibraryPageData | null>(null)
   const [status, setStatus] = useState<LoadStatus>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState<string | null>(null)
   const [deletionTasks, setDeletionTasks] = useState<MediaDeletionTask[]>([])
   const deletionDialogRef = useRef<HTMLDialogElement>(null)
   const completedTaskIds = useRef(new Set<string>())
@@ -377,6 +380,25 @@ function MediaLibraryPageContent() {
     setPage(1)
   }
 
+  async function handleSync() {
+    if (!window.confirm('将检查网盘中已删除的媒体，并清理本地失效记录。不会删除网盘内容。确定继续吗？')) {
+      return
+    }
+    setSyncing(true)
+    setSyncMessage(null)
+    try {
+      const result = await syncMediaLibrary(libraryId)
+      setSyncMessage(result.removed_items > 0
+        ? `媒体库已同步，清理了 ${result.removed_directories} 个失效目录`
+        : '媒体库已同步，未发现已删除媒体')
+      await loadItems()
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : '媒体库同步失败，请稍后重试。')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   const handleItemChanged = useCallback(
     (updatedItem: MediaLibraryItem) => {
       setData((current) => {
@@ -458,6 +480,15 @@ function MediaLibraryPageContent() {
                 ) : null}
               </button>
               <button
+                className="flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-300 disabled:cursor-wait disabled:opacity-60"
+                disabled={syncing}
+                onClick={() => void handleSync()}
+                type="button"
+              >
+                <RefreshCw aria-hidden="true" className={cn('h-4 w-4', syncing && 'animate-spin')} />
+                {syncing ? '正在同步' : '同步媒体库'}
+              </button>
+              <button
                 aria-pressed={missingPoster}
                 className={cn(
                   'flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-slate-300',
@@ -501,6 +532,12 @@ function MediaLibraryPageContent() {
             </div>
           </div>
         </div>
+
+        {syncMessage ? (
+          <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600" role="status">
+            {syncMessage}
+          </p>
+        ) : null}
 
         {keyword && status !== 'loading' ? (
           <div className="flex items-center justify-between gap-3 text-sm text-slate-500">

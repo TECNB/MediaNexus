@@ -50,6 +50,15 @@ export type MediaLibraryPageData = {
   page_size: number
 }
 
+export type MediaLibrarySyncResult = {
+  checked_directories: number
+  removed_directories: number
+  removed_items: number
+  skipped_items: number
+  error_count: number
+  elapsed_ms: number
+}
+
 export type MediaLibraryListParams = {
   library: MediaLibraryId
   page: number

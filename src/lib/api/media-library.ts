@@ -11,6 +11,7 @@ import type {
   MediaMetadataCandidate,
   MediaPosterCandidate,
   MediaLibraryId,
+  MediaLibrarySyncResult,
   MediaDeletionTask,
   MediaSeason,
 } from '@/types/media-library'
@@ -58,6 +59,18 @@ export async function getMediaLibraryItems(
       getJavaErrorMessage(error) ?? MEDIA_LIBRARY_ERROR_MESSAGE,
     )
   }
+}
+
+export async function syncMediaLibrary(library: MediaLibraryId) {
+  const response = await javaApiClient.post<JavaApiResponse<MediaLibrarySyncResult>>(
+    '/api/v1/admin/media-library/sync',
+    null,
+    { params: { library }, timeout: 120000 },
+  )
+  if (response.data.code !== 200 || !response.data.data) {
+    throw new Error(response.data.message || '媒体库同步失败')
+  }
+  return response.data.data
 }
 
 export async function getMediaLibraryPoster(
