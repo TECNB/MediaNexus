@@ -277,6 +277,7 @@ function MediaLibraryPageContent() {
   const [deletionTasks, setDeletionTasks] = useState<MediaDeletionTask[]>([])
   const deletionDialogRef = useRef<HTMLDialogElement>(null)
   const completedTaskIds = useRef(new Set<string>())
+  const deletionTasksBaselineReady = useRef(false)
 
   const activeLibrary = useMemo(
     () => libraryTabs.find((tab) => tab.id === libraryId) ?? libraryTabs[0],
@@ -327,11 +328,15 @@ function MediaLibraryPageContent() {
   const loadDeletions = useCallback(async (signal?: AbortSignal) => {
     try {
       const tasks = await getMediaDeletions(signal)
-      const newlyCompleted = tasks.some((task) => {
+      const newlyCompleted = deletionTasksBaselineReady.current && tasks.some((task) => {
         if (task.status !== 'SUCCEEDED' || completedTaskIds.current.has(task.id)) return false
         completedTaskIds.current.add(task.id)
         return true
       })
+      tasks.forEach((task) => {
+        if (task.status === 'SUCCEEDED') completedTaskIds.current.add(task.id)
+      })
+      deletionTasksBaselineReady.current = true
       setDeletionTasks(tasks)
       if (newlyCompleted) void loadItems()
     } catch (error) {
