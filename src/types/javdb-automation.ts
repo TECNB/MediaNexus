@@ -135,6 +135,11 @@ export type JavdbPlaylistSyncRun = {
   existing_count: number
   waiting_count: number
   failed_count: number
+  rating_desired_count: number
+  rating_updated_count: number
+  rating_existing_count: number
+  rating_waiting_count: number
+  rating_failed_count: number
   scheduled_time: string
   started_at: string | null
   finished_at: string | null

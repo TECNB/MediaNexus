@@ -511,10 +511,10 @@ export function AutomationPage() {
       const result = await syncJavdbPlaylists()
       setOverview((current) => current ? { ...current, playlist_sync: result } : current)
       setActionStatus('success')
-      setActionMessage(`播放列表同步完成：新增 ${result.added_count}，等待入库 ${result.waiting_count}。`)
+      setActionMessage(`Emby 同步完成：播放列表新增 ${result.added_count}，评分更新 ${result.rating_updated_count}。`)
     } catch (error) {
       setActionStatus('error')
-      setActionMessage(getJavaErrorMessage(error) ?? (error instanceof Error ? error.message : '播放列表同步失败'))
+      setActionMessage(getJavaErrorMessage(error) ?? (error instanceof Error ? error.message : 'Emby 同步失败'))
     } finally {
       setPlaylistSyncing(false)
     }
@@ -1018,15 +1018,15 @@ export function AutomationPage() {
                 <ListVideo className="h-5 w-5" />
               </span>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-950">播放列表同步</p>
+                <p className="text-sm font-semibold text-slate-950">Emby 元数据同步</p>
                 <p className="mt-1 text-sm text-slate-500">
-                  每天 04:00 自动将已入库影片归入 Top 250 年份榜、破解和字幕播放列表。
+                  每天 04:00 自动同步 JAVDB 评分，并将已入库影片归入对应播放列表。
                 </p>
               </div>
             </div>
             <Button type="button" variant="outline" onClick={() => void handlePlaylistSync()} disabled={playlistSyncing}>
               {playlistSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              同步播放列表
+              同步 Emby
             </Button>
           </div>
           {overview?.playlist_sync ? (
@@ -1036,6 +1036,20 @@ export function AutomationPage() {
                 <span>{overview.playlist_sync.trigger_type === 'SCHEDULED' ? '定时同步' : '手动同步'}</span>
                 <span>·</span>
                 <span>{formatDateTime(overview.playlist_sync.started_at)}</span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 overflow-hidden rounded-xl border border-slate-200 sm:grid-cols-5">
+                {[
+                  ['评分目标', overview.playlist_sync.rating_desired_count],
+                  ['本次更新', overview.playlist_sync.rating_updated_count],
+                  ['已一致', overview.playlist_sync.rating_existing_count],
+                  ['等待入库', overview.playlist_sync.rating_waiting_count],
+                  ['失败', overview.playlist_sync.rating_failed_count],
+                ].map(([label, value]) => (
+                  <div key={label} className="border-b border-r border-slate-100 px-3 py-3 last:border-r-0 sm:border-b-0">
+                    <p className="text-xs text-slate-500">{label}</p>
+                    <p className="mt-1 text-lg font-semibold tabular-nums text-slate-950">{value}</p>
+                  </div>
+                ))}
               </div>
               {overview.playlist_sync.groups.length > 0 ? (
                 <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
@@ -1069,7 +1083,7 @@ export function AutomationPage() {
               )}
             </div>
           ) : (
-            <p className="mt-4 border-t border-slate-100 pt-4 text-sm text-slate-500">尚未执行播放列表同步。</p>
+            <p className="mt-4 border-t border-slate-100 pt-4 text-sm text-slate-500">尚未执行 Emby 元数据同步。</p>
           )}
         </section>
 
