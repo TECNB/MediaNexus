@@ -130,10 +130,10 @@ function getConfigForm(config: JavdbAutomationConfig): UpdateJavdbAutomationConf
     monthly_enabled: config.monthly_enabled,
     cracked_only: config.cracked_only,
     subtitle_only: config.subtitle_only,
-    excluded_tags: config.excluded_tags,
-    minimum_rating: config.minimum_rating,
-    minimum_review_count: config.minimum_review_count,
-    limit_per_ranking: config.limit_per_ranking,
+    excluded_tags: config.excluded_tags ?? '熟女',
+    minimum_rating: config.minimum_rating ?? 4.5,
+    minimum_review_count: config.minimum_review_count ?? 100,
+    limit_per_ranking: config.limit_per_ranking ?? 60,
     schedule_time: config.schedule_time,
   }
 }
