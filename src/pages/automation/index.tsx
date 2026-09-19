@@ -74,6 +74,9 @@ const itemStatusCopy: Record<string, string> = {
   SUBMIT_FAILED: '提交失败',
 }
 
+const primaryItemFilters = ['ALL', 'NO_MAGNET', 'READY_TO_SUBMIT', 'ALREADY_IN_EMBY'] as const
+const secondaryItemFilterOrder = ['HISTORY_SUBMITTED', 'ADULT_IN_PROGRESS', 'SUBMITTED', 'DETAIL_FAILED', 'SUBMIT_FAILED']
+
 const periodCopy: Record<string, string> = {
   daily: '日榜',
   weekly: '周榜',
@@ -331,40 +334,71 @@ function RunDetails({ run }: { run: JavdbAutomationRun }) {
   )
 
   const filterOptions = useMemo(() => {
-    const statuses = Array.from(new Set(run.items.map((item) => item.status)))
-    return ['ALL', ...statuses]
+    const counts = run.items.reduce<Record<string, number>>((result, item) => {
+      result[item.status] = (result[item.status] ?? 0) + 1
+      return result
+    }, { ALL: run.items.length })
+    const primaryStatuses = new Set<string>(primaryItemFilters)
+    const secondaryStatuses = secondaryItemFilterOrder.filter((status) => counts[status])
+    const remainingStatuses = Object.keys(counts).filter(
+      (status) => status !== 'ALL' && !primaryStatuses.has(status) && !secondaryItemFilterOrder.includes(status),
+    )
+
+    return [...primaryItemFilters, ...secondaryStatuses, ...remainingStatuses].map((status) => ({
+      status,
+      label: status === 'ALL' ? '全部结果' : itemStatusCopy[status] ?? status,
+      count: counts[status] ?? 0,
+    }))
   }, [run.items])
 
   return (
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
       <div className="space-y-5">
         <RunSummary run={run} />
-        <section className="rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">结果明细</p>
-            <p className="mt-1 text-sm text-slate-500">按日榜、周榜、月榜顺序排列；同榜按 JAVDB 返回排名，跨榜重复保留首次出现位置。</p>
+        <section className="overflow-hidden rounded-2xl bg-white shadow-shell ring-1 ring-slate-200">
+          <div className="border-b border-slate-100 px-5 py-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">结果明细</p>
+              <p className="mt-1 text-sm text-slate-500">按日榜、周榜、月榜顺序排列；同榜按 JAVDB 返回排名，跨榜重复保留首次出现位置。</p>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="结果明细筛选">
+              {filterOptions.map((option) => {
+                const isActive = itemFilter === option.status
+
+                return (
+                  <button
+                    key={option.status}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => setItemFilter(option.status)}
+                    className={cn(
+                      'flex min-h-10 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2',
+                      isActive
+                        ? 'border-slate-950 bg-slate-950 text-white'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950',
+                    )}
+                  >
+                    <span>{option.label}</span>
+                    <span
+                      className={cn(
+                        'min-w-6 rounded-md px-1.5 py-0.5 text-center text-xs tabular-nums',
+                        isActive ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-500',
+                      )}
+                    >
+                      {option.count}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
-          <select
-            aria-label="结果明细筛选"
-            value={itemFilter}
-            onChange={(event) => setItemFilter(event.currentTarget.value)}
-            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200/70"
-          >
-            {filterOptions.map((status) => (
-              <option key={status} value={status}>
-                {status === 'ALL' ? '全部结果' : itemStatusCopy[status] ?? status}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="mt-4 space-y-3">
-          {filteredItems.length > 0 ? (
-            filteredItems.map((item) => <RunItemCard key={item.code} item={item} />)
-          ) : (
-            <p className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">暂无符合条件的结果。</p>
-          )}
-        </div>
+          <div className="space-y-3 p-5">
+            {filteredItems.length > 0 ? (
+              filteredItems.map((item) => <RunItemCard key={item.code} item={item} />)
+            ) : (
+              <p className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">暂无符合条件的结果。</p>
+            )}
+          </div>
         </section>
       </div>
 
@@ -830,7 +864,7 @@ export function AutomationPage() {
             <div className="mb-3 flex items-center justify-between gap-3">
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">运行详情</p>
             </div>
-            <RunDetails run={selectedRun} />
+            <RunDetails key={selectedRun.id} run={selectedRun} />
           </section>
         ) : null}
 
