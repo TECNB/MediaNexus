@@ -132,6 +132,7 @@ function getConfigForm(config: JavdbAutomationConfig): UpdateJavdbAutomationConf
     subtitle_only: config.subtitle_only,
     excluded_tags: config.excluded_tags,
     minimum_rating: config.minimum_rating,
+    minimum_review_count: config.minimum_review_count,
     limit_per_ranking: config.limit_per_ranking,
     schedule_time: config.schedule_time,
   }
@@ -680,11 +681,11 @@ export function AutomationPage() {
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="space-y-2 text-sm font-medium text-slate-700">
-                    <span>每榜数量（1-50）</span>
+                    <span>每榜数量（1-60）</span>
                     <input
                       type="number"
                       min={1}
-                      max={50}
+                      max={60}
                       value={configForm.limit_per_ranking}
                       onChange={(event) => {
                         const value = Number(event.currentTarget.value)
@@ -704,6 +705,20 @@ export function AutomationPage() {
                       }}
                       className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200/70"
                     />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>最低评价人数</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={configForm.minimum_review_count}
+                      onChange={(event) => {
+                        const value = Number(event.currentTarget.value)
+                        setConfigForm((current) => current ? { ...current, minimum_review_count: value } : current)
+                      }}
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200/70"
+                    />
+                    <span className="text-xs font-normal text-slate-400">评价人数不足的高分影片会被排除。</span>
                   </label>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">

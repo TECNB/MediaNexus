@@ -15,6 +15,7 @@ export type JavdbAutomationConfig = {
   subtitle_only: boolean
   excluded_tags: string
   minimum_rating: number
+  minimum_review_count: number
   limit_per_ranking: number
   schedule_time: string
   timezone: string
@@ -116,6 +117,7 @@ export type UpdateJavdbAutomationConfigPayload = {
   subtitle_only: boolean
   excluded_tags: string
   minimum_rating: number
+  minimum_review_count: number
   limit_per_ranking: number
   schedule_time: string
 }
