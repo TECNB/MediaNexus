@@ -103,6 +103,16 @@ function formatDateTime(value: string | null) {
   })
 }
 
+function formatFileSize(bytes: number) {
+  if (bytes >= 1024 ** 3) {
+    return `${(bytes / 1024 ** 3).toFixed(2)} GB`
+  }
+  if (bytes >= 1024 ** 2) {
+    return `${Math.round(bytes / 1024 ** 2)} MB`
+  }
+  return `${Math.round(bytes / 1024)} KB`
+}
+
 function statusTone(status: string) {
   if (status === 'SUCCEEDED' || status === 'SUBMITTED') {
     return 'bg-emerald-50 text-emerald-700 ring-emerald-200'
@@ -301,7 +311,9 @@ function RunItemCard({ item }: { item: JavdbAutomationRunItem }) {
                 <a href={candidate.magnet} className="mt-1 block break-all font-mono text-[11px] text-slate-400 hover:text-slate-700">
                   {candidate.magnet}
                 </a>
-                {candidate.infohash ? <p className="mt-1 break-all text-slate-400">Infohash：{candidate.infohash}</p> : null}
+                {candidate.size_bytes !== null && candidate.size_bytes !== undefined ? (
+                  <p className="mt-1 text-slate-500">容量：{formatFileSize(candidate.size_bytes)}</p>
+                ) : null}
               </div>
             ))}
           </div>

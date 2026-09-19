@@ -42,6 +42,7 @@ export type JavdbMagnetCandidate = {
   magnet: string
   original_name: string | null
   infohash: string | null
+  size_bytes: number | null
   has_subtitle: boolean
   is_cracked: boolean
   labels: string[]
