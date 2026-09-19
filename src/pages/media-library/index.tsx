@@ -279,6 +279,7 @@ function MediaLibraryPageContent() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [targetQuery, setTargetQuery] = useState('')
+  const [targetSearching, setTargetSearching] = useState(false)
   const [targetSuggestions, setTargetSuggestions] = useState<MediaLibrarySyncTarget[]>([])
   const [selectedTargets, setSelectedTargets] = useState<MediaLibrarySyncTarget[]>([])
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
@@ -333,27 +334,21 @@ function MediaLibraryPageContent() {
     return () => controller.abort()
   }, [loadItems])
 
-  useEffect(() => {
+  async function handleTargetSearch() {
     const query = targetQuery.trim()
-    if (query.length < 2) {
-      setTargetSuggestions([])
-      return
+    if (query.length < 2 || targetSearching) return
+    setTargetSearching(true)
+    try {
+      const targets = await searchMediaLibrarySyncTargets(libraryId, query)
+      setTargetSuggestions(targets.filter(
+        (target) => !selectedTargets.some((selected) => selected.path === target.path),
+      ))
+    } catch (error) {
+      if (!isJavaRequestCanceledError(error)) setTargetSuggestions([])
+    } finally {
+      setTargetSearching(false)
     }
-    const controller = new AbortController()
-    const timer = window.setTimeout(() => {
-      void searchMediaLibrarySyncTargets(libraryId, query, controller.signal)
-        .then((targets) => setTargetSuggestions(targets.filter(
-          (target) => !selectedTargets.some((selected) => selected.path === target.path),
-        )))
-        .catch((error) => {
-          if (!isJavaRequestCanceledError(error)) setTargetSuggestions([])
-        })
-    }, 250)
-    return () => {
-      window.clearTimeout(timer)
-      controller.abort()
-    }
-  }, [libraryId, selectedTargets, targetQuery])
+  }
 
   const loadDeletions = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -412,11 +407,19 @@ function MediaLibraryPageContent() {
       return
     }
     setSyncing(true)
-    const deepSync = selectedTargets.length > 0
-    setSyncMessage(deepSync ? `正在深度检查 ${selectedTargets.length} 个指定目标，请稍候…` : '正在检查媒体库根目录，请稍候…')
+    const selectedSync = selectedTargets.length > 0
+    const deepTargetCount = selectedTargets.filter((target) => target.deep).length
+    setSyncMessage(selectedSync
+      ? `正在检查 ${selectedTargets.length} 个指定目标${deepTargetCount > 0 ? `，其中 ${deepTargetCount} 个进行深度检查` : '（仅检查当前层）'}，请稍候…`
+      : '正在检查媒体库根目录，请稍候…')
     try {
-      const result = await syncMediaLibrary(libraryId, deepSync, selectedTargets.map((target) => target.path))
-      const checked = deepSync ? `${result.checked_files} 个文件` : `${result.checked_directories} 个目录`
+      const result = await syncMediaLibrary(
+        libraryId,
+        selectedSync,
+        selectedTargets.map((target) => target.path),
+        selectedTargets.filter((target) => target.deep).map((target) => target.path),
+      )
+      const checked = selectedSync ? `${selectedTargets.length} 个指定目标` : `${result.checked_directories} 个目录`
       await loadItems()
       const removedMedia = result.removed_media ?? []
       const skippedMedia = result.skipped_media ?? []
@@ -530,7 +533,7 @@ function MediaLibraryPageContent() {
                   指定深度检查目标
                 </label>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  默认只检查媒体库根目录；搜索并选择文件或文件夹后，才会深入检查所选目标。
+                  默认只检查媒体库根目录；点击搜索后选择最外层文件夹，可按需开启深度递归。
                 </p>
                 <div className="relative mt-3">
                   <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
@@ -539,10 +542,27 @@ function MediaLibraryPageContent() {
                     className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                     disabled={syncing}
                     id="deep-sync-target"
-                    onChange={(event) => setTargetQuery(event.target.value)}
-                    placeholder="输入动漫名、文件夹名或文件名，例如：擅长捉弄"
+                    onChange={(event) => {
+                      setTargetQuery(event.target.value)
+                      setTargetSuggestions([])
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        void handleTargetSearch()
+                      }
+                    }}
+                    placeholder="输入媒体或文件夹名称，例如：擅长捉弄"
                     value={targetQuery}
                   />
+                  <button
+                    className="absolute right-1.5 top-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={targetSearching || targetQuery.trim().length < 2 || syncing}
+                    onClick={() => void handleTargetSearch()}
+                    type="button"
+                  >
+                    {targetSearching ? '搜索中…' : '搜索'}
+                  </button>
                   {targetSuggestions.length > 0 ? (
                     <div className="absolute z-20 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
                       {targetSuggestions.map((target) => (
@@ -550,7 +570,7 @@ function MediaLibraryPageContent() {
                           className="flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left hover:bg-slate-50"
                           key={target.path}
                           onClick={() => {
-                            setSelectedTargets((current) => [...current, target])
+                            setSelectedTargets((current) => [...current, { ...target, deep: false }])
                             setTargetQuery('')
                             setTargetSuggestions([])
                           }}
@@ -571,8 +591,16 @@ function MediaLibraryPageContent() {
                 {selectedTargets.length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {selectedTargets.map((target) => (
-                      <span className="inline-flex max-w-full items-center gap-2 rounded-full bg-slate-900 px-3 py-1.5 text-xs text-white" key={target.path}>
+                      <span className="inline-flex max-w-full items-center gap-2 rounded-xl bg-slate-900 px-3 py-1.5 text-xs text-white" key={target.path}>
                         <span className="max-w-[min(70vw,28rem)] truncate">{target.label}</span>
+                        <label className="inline-flex shrink-0 items-center gap-1 text-slate-200">
+                          <input
+                            checked={target.deep}
+                            onChange={(event) => setSelectedTargets((current) => current.map((item) => item.path === target.path ? { ...item, deep: event.target.checked } : item))}
+                            type="checkbox"
+                          />
+                          深度
+                        </label>
                         <button
                           aria-label={`移除深度检查目标 ${target.label}`}
                           className="rounded-full text-slate-300 hover:text-white"

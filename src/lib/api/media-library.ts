@@ -66,11 +66,13 @@ export async function syncMediaLibrary(
   library: MediaLibraryId,
   deep: boolean,
   targets: string[] = [],
+  deepTargets: string[] = [],
 ) {
   const params = new URLSearchParams()
   params.set('library', library)
   params.set('deep', String(deep))
   targets.forEach((target) => params.append('target', target))
+  deepTargets.forEach((target) => params.append('deep_target', target))
   const response = await javaApiClient.post<JavaApiResponse<MediaLibrarySyncResult>>(
     '/api/v1/admin/media-library/sync',
     null,
