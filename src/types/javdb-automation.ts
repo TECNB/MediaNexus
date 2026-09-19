@@ -34,6 +34,8 @@ export type JavdbRankingAppearance = {
   period: 'daily' | 'weekly' | 'monthly' | string
   rank: number
   has_magnet_badge: boolean
+  rating: number | null
+  review_count: number | null
 }
 
 export type JavdbMagnetCandidate = {

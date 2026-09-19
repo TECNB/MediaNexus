@@ -225,6 +225,9 @@ function RunSummary({ run }: { run: JavdbAutomationRun }) {
 
 function RunItemCard({ item }: { item: JavdbAutomationRunItem }) {
   const selected = item.candidates.find((candidate) => candidate.infohash === item.selected_infohash)
+  const scoredAppearance = item.appearances.find(
+    (appearance) => appearance.rating !== null && appearance.rating !== undefined,
+  )
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -236,6 +239,16 @@ function RunItemCard({ item }: { item: JavdbAutomationRunItem }) {
             <ItemStatus item={item} />
             {selected?.is_cracked ? <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">破解</span> : null}
             {selected?.has_subtitle ? <span className="rounded-md bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-200">中文字幕</span> : null}
+            {scoredAppearance?.rating !== null && scoredAppearance?.rating !== undefined ? (
+              <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                评分 {scoredAppearance.rating.toFixed(2)}
+              </span>
+            ) : null}
+            {scoredAppearance?.review_count !== null && scoredAppearance?.review_count !== undefined ? (
+              <span className="rounded-md bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700 ring-1 ring-sky-200">
+                {scoredAppearance.review_count} 人评价
+              </span>
+            ) : null}
           </div>
           <p className="mt-2 text-sm font-semibold text-slate-900">{item.title || '未命名影片'}</p>
           <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
