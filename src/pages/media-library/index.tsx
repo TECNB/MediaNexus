@@ -419,7 +419,9 @@ function MediaLibraryPageContent() {
         selectedTargets.map((target) => target.path),
         selectedTargets.filter((target) => target.deep).map((target) => target.path),
       )
-      const checked = selectedSync ? `${selectedTargets.length} 个指定目标` : `${result.checked_directories} 个目录`
+      const checked = selectedSync
+        ? `${result.checked_files} 个媒体项`
+        : `${result.checked_directories} 个目录`
       await loadItems()
       const removedMedia = result.removed_media ?? []
       const skippedMedia = result.skipped_media ?? []
