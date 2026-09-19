@@ -5,6 +5,7 @@ import {
 } from '@/lib/java-api'
 import type {
   AdultOtherAutomationRun,
+  AdultOtherAutomationRunPage,
   AdultOtherCollectionInventory,
   AdultOtherCollectionSyncRun,
 } from '@/types/adult-other-collections'
@@ -16,21 +17,22 @@ type JavaApiResponse<T> = {
 }
 
 export async function getAdultOtherAutomationRuns(
+  page: number,
   signal?: AbortSignal,
-): Promise<AdultOtherAutomationRun[]> {
+): Promise<AdultOtherAutomationRunPage> {
   try {
     const response = await javaApiClient.get<
-      JavaApiResponse<AdultOtherAutomationRun[]>
+      JavaApiResponse<AdultOtherAutomationRunPage>
     >('/api/v1/admin/emby/adult-other-collections/automation/runs', {
-      params: { limit: 10 },
+      params: { page, page_size: 10 },
       signal,
     })
-    if (response.data.code !== 200) {
+    if (response.data.code !== 200 || !response.data.data) {
       throw new Error(
         response.data.message || ADULT_OTHER_COLLECTIONS_ERROR_MESSAGE,
       )
     }
-    return response.data.data ?? []
+    return response.data.data
   } catch (error) {
     if (isJavaRequestCanceledError(error)) {
       throw error

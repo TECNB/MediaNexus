@@ -5,6 +5,7 @@ import {
   Activity,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Copy,
   Database,
@@ -224,12 +225,20 @@ function AutomationRunsPanel({
   error,
   loading,
   onRefresh,
+  onPageChange,
+  page,
+  pageSize,
   runs,
+  total,
 }: {
   error: string | null
   loading: boolean
   onRefresh: () => void
+  onPageChange: (page: number) => void
+  page: number
+  pageSize: number
   runs: AdultOtherAutomationRun[]
+  total: number
 }) {
   const [expandedRunIds, setExpandedRunIds] = useState<Set<string>>(new Set())
   const [runDetails, setRunDetails] = useState<Record<string, AdultOtherAutomationRun>>({})
@@ -237,6 +246,7 @@ function AutomationRunsPanel({
   const [detailErrors, setDetailErrors] = useState<Record<string, string>>({})
   const [retryingRunIds, setRetryingRunIds] = useState<Set<string>>(new Set())
   const [retryErrors, setRetryErrors] = useState<Record<string, string>>({})
+  const maxPage = Math.max(1, Math.ceil(total / pageSize))
 
   const loadRunDetails = useCallback((runId: string) => {
     setDetailLoadingRunIds((current) => new Set(current).add(runId))
@@ -358,9 +368,10 @@ function AutomationRunsPanel({
 
       {error ? (
         <div className="px-5 py-4 text-sm text-rose-700">{error}</div>
-      ) : runs.length === 0 ? (
+      ) : total === 0 ? (
         <div className="px-5 py-8 text-sm text-slate-500">暂无自动化记录。</div>
       ) : (
+        <>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1040px] text-left">
             <thead className="bg-slate-50 text-xs font-medium text-slate-500">
@@ -541,6 +552,32 @@ function AutomationRunsPanel({
             </tbody>
           </table>
         </div>
+        <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-sm text-slate-500">
+          <span>第 {page} / {maxPage} 页 · 共 {total} 条</span>
+          <div className="flex gap-2">
+            <Button
+              disabled={page <= 1 || loading}
+              onClick={() => onPageChange(Math.max(1, page - 1))}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              上一页
+            </Button>
+            <Button
+              disabled={page >= maxPage || loading}
+              onClick={() => onPageChange(Math.min(maxPage, page + 1))}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              下一页
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        </>
       )}
     </section>
   )
@@ -911,6 +948,9 @@ export function DashboardPage() {
   >([])
   const [automationLoading, setAutomationLoading] = useState(false)
   const [automationError, setAutomationError] = useState<string | null>(null)
+  const [automationPage, setAutomationPage] = useState(1)
+  const [automationPageSize, setAutomationPageSize] = useState(10)
+  const [automationTotal, setAutomationTotal] = useState(0)
   const [latestRun, setLatestRun] =
     useState<AdultOtherCollectionSyncRun | null>(null)
   const [currentRun, setCurrentRun] =
@@ -1026,7 +1066,10 @@ export function DashboardPage() {
   const loadAutomationRuns = useCallback(async (signal?: AbortSignal) => {
     setAutomationLoading(true)
     try {
-      setAutomationRuns(await getAdultOtherAutomationRuns(signal))
+      const result = await getAdultOtherAutomationRuns(automationPage, signal)
+      setAutomationRuns(result.items)
+      setAutomationPageSize(result.page_size)
+      setAutomationTotal(result.total)
       setAutomationError(null)
     } catch (error) {
       if (!isJavaRequestCanceledError(error)) {
@@ -1037,7 +1080,7 @@ export function DashboardPage() {
     } finally {
       setAutomationLoading(false)
     }
-  }, [])
+  }, [automationPage])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -1223,7 +1266,11 @@ export function DashboardPage() {
           error={automationError}
           loading={automationLoading}
           onRefresh={() => void loadAutomationRuns()}
+          onPageChange={setAutomationPage}
+          page={automationPage}
+          pageSize={automationPageSize}
           runs={automationRuns}
+          total={automationTotal}
         />
 
         <details className="rounded-lg bg-white shadow-shell ring-1 ring-slate-200">

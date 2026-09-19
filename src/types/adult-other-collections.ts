@@ -71,6 +71,13 @@ export type AdultOtherAutomationRun = {
   collections: AdultOtherAutomationCollection[]
 }
 
+export type AdultOtherAutomationRunPage = {
+  items: AdultOtherAutomationRun[]
+  total: number
+  page: number
+  page_size: number
+}
+
 export type AdultOtherCollectionSourceFolderChangeStatus =
   | 'HEALTHY'
   | 'PENDING_CREATE'
