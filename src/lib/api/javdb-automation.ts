@@ -10,6 +10,7 @@ import type {
   JavdbAutomationRun,
   JavdbAutomationRunList,
   JavdbCredentialStatus,
+  JavdbPlaylistSyncRun,
   UpdateJavdbAutomationConfigPayload,
 } from '@/types/javdb-automation'
 
@@ -82,6 +83,14 @@ export function startJavdbExecution(payload: UpdateJavdbAutomationConfigPayload)
   return request<JavdbAutomationRun>(() =>
     javaApiClient.post<JavaApiResponse<JavdbAutomationRun>>(
       '/api/v1/admin/javdb-automation/runs', payload,
+    ),
+  )
+}
+
+export function syncJavdbPlaylists() {
+  return request<JavdbPlaylistSyncRun>(() =>
+    javaApiClient.post<JavaApiResponse<JavdbPlaylistSyncRun>>(
+      '/api/v1/admin/javdb-automation/playlists/sync',
     ),
   )
 }

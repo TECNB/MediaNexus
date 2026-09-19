@@ -105,6 +105,42 @@ export type JavdbAutomationOverview = {
   config: JavdbAutomationConfig
   latest_run: JavdbAutomationRun | null
   current_run: JavdbAutomationRun | null
+  playlist_sync: JavdbPlaylistSyncRun | null
+}
+
+export type JavdbPlaylistSyncGroup = {
+  key: string
+  name: string
+  total: number
+  added: number
+  existing: number
+  waiting: number
+  failed: number
+  playlist_id: string | null
+}
+
+export type JavdbPlaylistSyncItem = {
+  code: string
+  playlist_key: string
+  playlist_name: string
+  result: 'ADDED' | 'EXISTING' | 'WAITING_EMBY' | 'FAILED' | string
+}
+
+export type JavdbPlaylistSyncRun = {
+  id: string
+  trigger_type: 'SCHEDULED' | 'MANUAL' | string
+  status: string
+  desired_count: number
+  added_count: number
+  existing_count: number
+  waiting_count: number
+  failed_count: number
+  scheduled_time: string
+  started_at: string | null
+  finished_at: string | null
+  error_message: string | null
+  groups: JavdbPlaylistSyncGroup[]
+  items: JavdbPlaylistSyncItem[]
 }
 
 export type JavdbAutomationRunList = {

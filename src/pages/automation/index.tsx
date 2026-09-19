@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Save,
   ShieldCheck,
+  ListVideo,
 } from 'lucide-react'
 
 import { OperationalLogPanel } from '@/components/operation-log/operational-log-panel'
@@ -24,6 +25,7 @@ import {
   listJavdbAutomationRuns,
   startJavdbDryRun,
   startJavdbExecution,
+  syncJavdbPlaylists,
   updateJavdbAutomationConfig,
   updateJavdbCookie,
   updateJavdbTopCookie,
@@ -442,6 +444,7 @@ export function AutomationPage() {
   const [topYear, setTopYear] = useState(new Date().getFullYear())
   const [topLimit, setTopLimit] = useState(10)
   const [configForm, setConfigForm] = useState<UpdateJavdbAutomationConfigPayload | null>(null)
+  const [playlistSyncing, setPlaylistSyncing] = useState(false)
 
   const loadOverview = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -498,6 +501,22 @@ export function AutomationPage() {
       setSelectedRun(await getJavdbAutomationRun(runId))
     } catch (error) {
       setActionMessage(getJavaErrorMessage(error) ?? (error instanceof Error ? error.message : '运行详情加载失败'))
+    }
+  }, [])
+
+  const handlePlaylistSync = useCallback(async () => {
+    setPlaylistSyncing(true)
+    setActionMessage(null)
+    try {
+      const result = await syncJavdbPlaylists()
+      setOverview((current) => current ? { ...current, playlist_sync: result } : current)
+      setActionStatus('success')
+      setActionMessage(`播放列表同步完成：新增 ${result.added_count}，等待入库 ${result.waiting_count}。`)
+    } catch (error) {
+      setActionStatus('error')
+      setActionMessage(getJavaErrorMessage(error) ?? (error instanceof Error ? error.message : '播放列表同步失败'))
+    } finally {
+      setPlaylistSyncing(false)
     }
   }, [])
 
@@ -990,6 +1009,68 @@ export function AutomationPage() {
               {actionMessage}
             </p>
           ) : null}
+        </section>
+
+        <section className="rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                <ListVideo className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-950">播放列表同步</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  每天 04:00 自动将已入库影片归入 Top 250 年份榜、破解和字幕播放列表。
+                </p>
+              </div>
+            </div>
+            <Button type="button" variant="outline" onClick={() => void handlePlaylistSync()} disabled={playlistSyncing}>
+              {playlistSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              同步播放列表
+            </Button>
+          </div>
+          {overview?.playlist_sync ? (
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                <RunBadge status={overview.playlist_sync.status} />
+                <span>{overview.playlist_sync.trigger_type === 'SCHEDULED' ? '定时同步' : '手动同步'}</span>
+                <span>·</span>
+                <span>{formatDateTime(overview.playlist_sync.started_at)}</span>
+              </div>
+              {overview.playlist_sync.groups.length > 0 ? (
+                <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full min-w-[620px] text-left text-sm">
+                    <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">播放列表</th>
+                        <th className="px-4 py-3 text-right">目标</th>
+                        <th className="px-4 py-3 text-right">本次新增</th>
+                        <th className="px-4 py-3 text-right">已存在</th>
+                        <th className="px-4 py-3 text-right">等待入库</th>
+                        <th className="px-4 py-3 text-right">失败</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {overview.playlist_sync.groups.map((group) => (
+                        <tr key={group.key}>
+                          <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-950">{group.name}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{group.total}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-emerald-700">{group.added}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{group.existing}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-amber-700">{group.waiting}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-rose-700">{group.failed}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-slate-500">上次同步没有待归类内容。</p>
+              )}
+            </div>
+          ) : (
+            <p className="mt-4 border-t border-slate-100 pt-4 text-sm text-slate-500">尚未执行播放列表同步。</p>
+          )}
         </section>
 
         {selectedRun ? (
