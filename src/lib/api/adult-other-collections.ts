@@ -63,6 +63,25 @@ export async function getAdultOtherAutomationRunDetails(
   }
 }
 
+export async function retryAdultOtherAutomationRun(runId: string): Promise<void> {
+  try {
+    const response = await javaApiClient.post<JavaApiResponse<null>>(
+      `/api/v1/admin/emby/adult-other-collections/automation/runs/${encodeURIComponent(runId)}/retry`,
+      undefined,
+      { timeout: ADULT_OTHER_COLLECTIONS_TIMEOUT_MS },
+    )
+    if (response.data.code !== 200) {
+      throw new Error(
+        response.data.message || ADULT_OTHER_COLLECTIONS_ERROR_MESSAGE,
+      )
+    }
+  } catch (error) {
+    throw new Error(
+      getJavaErrorMessage(error) ?? ADULT_OTHER_COLLECTIONS_ERROR_MESSAGE,
+    )
+  }
+}
+
 type SyncRequest = {
   minItemCount: number
   sourceFolderPath?: string | null

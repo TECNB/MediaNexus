@@ -14,7 +14,11 @@ export type AdultOtherCollectionSyncMode =
   | 'CLEANUP_DRY_RUN'
   | 'CLEANUP_APPLY'
 
-export type AdultOtherCollectionSyncStatus = 'RUNNING' | 'SUCCEEDED' | 'FAILED'
+export type AdultOtherCollectionSyncStatus =
+  | 'RUNNING'
+  | 'SUCCEEDED'
+  | 'PARTIAL'
+  | 'FAILED'
 
 export type AdultOtherAutomationItem = {
   embyItemId: string

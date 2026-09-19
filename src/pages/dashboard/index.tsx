@@ -30,6 +30,7 @@ import { SelectControl } from '@/components/ui/form-control'
 import {
   cleanupAdultOtherCollections,
   getAdultOtherAutomationRunDetails,
+  retryAdultOtherAutomationRun,
   getAdultOtherCollectionSourceFolders,
   getAdultOtherAutomationRuns,
   getLatestAdultOtherCollectionSyncRun,
@@ -186,6 +187,7 @@ const automationStageLabels: Record<string, string> = {
   FINAL_RECONCILING: '最终合集对账与封面',
   CLEANING_COLLECTIONS: '清理空合集',
   COMPLETED: '已完成',
+  PARTIAL: '部分成功',
   IGNORED: '已忽略',
   FAILED: '失败',
 }
@@ -233,6 +235,8 @@ function AutomationRunsPanel({
   const [runDetails, setRunDetails] = useState<Record<string, AdultOtherAutomationRun>>({})
   const [detailLoadingRunIds, setDetailLoadingRunIds] = useState<Set<string>>(new Set())
   const [detailErrors, setDetailErrors] = useState<Record<string, string>>({})
+  const [retryingRunIds, setRetryingRunIds] = useState<Set<string>>(new Set())
+  const [retryErrors, setRetryErrors] = useState<Record<string, string>>({})
 
   const loadRunDetails = useCallback((runId: string) => {
     setDetailLoadingRunIds((current) => new Set(current).add(runId))
@@ -259,6 +263,35 @@ function AutomationRunsPanel({
         })
       })
   }, [])
+
+  const retryRun = useCallback((runId: string) => {
+    setRetryingRunIds((current) => new Set(current).add(runId))
+    setRetryErrors((current) => {
+      const next = { ...current }
+      delete next[runId]
+      return next
+    })
+    void retryAdultOtherAutomationRun(runId)
+      .then(() => {
+        onRefresh()
+        if (expandedRunIds.has(runId)) {
+          loadRunDetails(runId)
+        }
+      })
+      .catch((error: unknown) => {
+        setRetryErrors((current) => ({
+          ...current,
+          [runId]: error instanceof Error ? error.message : '重试失败',
+        }))
+      })
+      .finally(() => {
+        setRetryingRunIds((current) => {
+          const next = new Set(current)
+          next.delete(runId)
+          return next
+        })
+      })
+  }, [expandedRunIds, loadRunDetails, onRefresh])
 
   useEffect(() => {
     for (const run of runs) {
@@ -348,6 +381,7 @@ function AutomationRunsPanel({
                 const collections = details?.collections ?? []
                 const detailLoading = detailLoadingRunIds.has(run.id)
                 const detailError = detailErrors[run.id]
+                const retryingRun = retryingRunIds.has(run.id)
                 return (
                 <Fragment key={run.id}>
                 <tr className="border-t border-slate-100">
@@ -363,12 +397,20 @@ function AutomationRunsPanel({
                         'inline-flex rounded-md px-2 py-1 text-xs font-medium ring-1',
                         run.status === 'FAILED'
                           ? 'bg-rose-50 text-rose-700 ring-rose-200'
+                          : run.status === 'PARTIAL'
+                            ? 'bg-amber-50 text-amber-700 ring-amber-200'
                           : run.status === 'RUNNING'
                             ? 'bg-blue-50 text-blue-700 ring-blue-200'
                             : 'bg-emerald-50 text-emerald-700 ring-emerald-200',
                       )}
                     >
-                      {run.status === 'RUNNING' ? '进行中' : run.status === 'FAILED' ? '失败' : '已完成'}
+                      {run.status === 'RUNNING'
+                        ? '进行中'
+                        : run.status === 'PARTIAL'
+                          ? '部分成功'
+                          : run.status === 'FAILED'
+                            ? '失败'
+                            : '已完成'}
                     </span>
                     <p className="mt-1 text-xs text-slate-500">
                       {automationStageLabels[run.stage] ?? run.stage}
@@ -394,6 +436,19 @@ function AutomationRunsPanel({
                     ) : `删除空合集 ${run.deletedCollectionCount}`}
                   </td>
                   <td className="px-4 py-3 text-right">
+                    {run.triggerType === 'NEW_ITEMS' && run.finalPrimaryMissingCount > 0 ? (
+                      <Button
+                        className="mr-2"
+                        disabled={retryingRun}
+                        onClick={() => retryRun(run.id)}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        {retryingRun ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                        重试全部
+                      </Button>
+                    ) : null}
                     <Button
                       aria-expanded={expanded}
                       aria-label={`${expanded ? '收起' : '展开'}${formatDateTime(run.startedAt)}自动化明细`}
@@ -411,6 +466,7 @@ function AutomationRunsPanel({
                       )}
                       {details ? items.length + collections.length : '查看'}
                     </Button>
+                    {retryErrors[run.id] ? <p className="mt-1 text-xs text-rose-600">{retryErrors[run.id]}</p> : null}
                   </td>
                 </tr>
                 {expanded ? (
