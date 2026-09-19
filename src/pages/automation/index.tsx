@@ -26,6 +26,7 @@ import {
   startJavdbExecution,
   updateJavdbAutomationConfig,
   updateJavdbCookie,
+  updateJavdbTopCookie,
 } from '@/lib/api/javdb-automation'
 import { cn } from '@/lib/utils'
 import type {
@@ -81,6 +82,13 @@ const periodCopy: Record<string, string> = {
   daily: '日榜',
   weekly: '周榜',
   monthly: '月榜',
+}
+
+function formatPeriod(period: string) {
+  if (period.startsWith('top_')) {
+    return `${period.slice(4)} Top 250`
+  }
+  return periodCopy[period] ?? period
 }
 
 const reasonCopy: Record<string, string> = {
@@ -267,7 +275,7 @@ function RunItemCard({ item }: { item: JavdbAutomationRunItem }) {
           <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
             {item.appearances.map((appearance) => (
               <span key={`${appearance.period}-${appearance.rank}`} className="rounded-md bg-slate-50 px-2 py-1">
-                {periodCopy[appearance.period] ?? appearance.period} #{appearance.rank}
+                {formatPeriod(appearance.period)} #{appearance.rank}
               </span>
             ))}
           </div>
@@ -429,6 +437,10 @@ export function AutomationPage() {
   const [actionStatus, setActionStatus] = useState<ActionStatus>('idle')
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [cookieValue, setCookieValue] = useState('')
+  const [topCookieValue, setTopCookieValue] = useState('')
+  const [rankingSource, setRankingSource] = useState<'STANDARD' | 'TOP_250'>('STANDARD')
+  const [topYear, setTopYear] = useState(new Date().getFullYear())
+  const [topLimit, setTopLimit] = useState(10)
   const [configForm, setConfigForm] = useState<UpdateJavdbAutomationConfigPayload | null>(null)
 
   const loadOverview = useCallback(async (signal?: AbortSignal) => {
@@ -572,6 +584,34 @@ export function AutomationPage() {
     }
   }
 
+  async function handleTopCookieUpdate() {
+    if (!topCookieValue.trim()) {
+      setActionStatus('error')
+      setActionMessage('请输入 Top 250 会员 Cookie。')
+      return
+    }
+    setActionStatus('working')
+    setActionMessage(null)
+    try {
+      const credential = await updateJavdbTopCookie(topCookieValue.trim())
+      setTopCookieValue('')
+      setOverview((current) => current ? {
+        ...current,
+        config: {
+          ...current.config,
+          top_credential_configured: credential.credential_configured,
+          top_credential_valid: credential.credential_valid,
+          top_last_validated_at: credential.last_validated_at,
+        },
+      } : current)
+      setActionStatus(credential.credential_valid ? 'success' : 'error')
+      setActionMessage(credential.credential_valid ? 'Top 250 会员 Cookie 验证成功。' : 'Top 250 会员 Cookie 验证失败，请更新后重试。')
+    } catch (error) {
+      setActionStatus('error')
+      setActionMessage(getJavaErrorMessage(error) ?? (error instanceof Error ? error.message : 'Top 250 Cookie 更新失败'))
+    }
+  }
+
   async function handleRun(mode: 'DRY_RUN' | 'EXECUTE') {
     if (mode === 'EXECUTE' && !window.confirm('立即运行会提交最近一次成功试运行的结果；没有可复用结果时才会重新抓取榜单，确认继续吗？')) {
       return
@@ -582,9 +622,15 @@ export function AutomationPage() {
       if (!configForm) {
         return
       }
+      const payload = {
+        ...configForm,
+        ranking_source: rankingSource,
+        top_year: topYear,
+        top_limit: topLimit,
+      }
       const run = mode === 'DRY_RUN'
-        ? await startJavdbDryRun(configForm)
-        : await startJavdbExecution(configForm)
+        ? await startJavdbDryRun(payload)
+        : await startJavdbExecution(payload)
       setSelectedRun(run)
       setActionStatus('success')
       setActionMessage(mode === 'DRY_RUN' ? '试运行已启动，历史记录会保留。' : '立即运行已启动，Adult 任务将在任务中心继续处理。')
@@ -603,12 +649,14 @@ export function AutomationPage() {
   const config = overview?.config
   const currentRun = overview?.current_run
   const historyMaxPage = history ? Math.max(1, Math.ceil(history.total / history.page_size)) : 1
-  const canRun = actionStatus !== 'working' && !currentRun
+  const credentialsReady = Boolean(config?.credential_valid)
+    && (rankingSource === 'STANDARD' || Boolean(config?.top_credential_valid))
+  const canRun = actionStatus !== 'working' && !currentRun && credentialsReady
 
   return (
     <PageContainer
       title="自动化"
-      description="管理员控制 JAVDB 有码日榜、周榜和月榜同步；抓取结果会进入审计历史，Adult 下载、整理和入库仍在任务中心完成。"
+      description="管理员控制 JAVDB 榜单同步；抓取结果会进入审计历史，Adult 下载、整理和入库仍在任务中心完成。"
     >
       <div className="space-y-6">
         <div className="flex gap-2">
@@ -657,7 +705,7 @@ export function AutomationPage() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">JAVDB</p>
-                <p className="mt-1 text-sm text-slate-500">仅支持有码日榜、周榜和月榜。</p>
+                <p className="mt-1 text-sm text-slate-500">常规榜单与 Top 250 使用独立凭证。</p>
               </div>
               <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', config?.credential_valid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>
                 {config?.credential_valid ? 'Cookie 已验证' : config?.credential_configured ? 'Cookie 待验证' : '未配置 Cookie'}
@@ -665,7 +713,7 @@ export function AutomationPage() {
             </div>
             <div className="mt-5 space-y-3 text-sm">
               <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-                <span className="text-slate-500">Cookie</span>
+                <span className="text-slate-500">常规访问 Cookie</span>
                 <span className="font-medium text-slate-800">{config?.credential_configured ? '已配置（原值不可读取）' : '未配置'}</span>
               </div>
               <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
@@ -674,7 +722,7 @@ export function AutomationPage() {
               </div>
               <p className="text-xs text-slate-400">更新 Cookie 后会立即验证日榜访问。</p>
               <label className="block text-sm font-medium text-slate-700" htmlFor="javdb-cookie">
-                覆盖 Cookie
+                覆盖常规访问 Cookie
               </label>
               <textarea
                 id="javdb-cookie"
@@ -682,13 +730,42 @@ export function AutomationPage() {
                 onChange={(event) => setCookieValue(event.currentTarget.value)}
                 autoComplete="off"
                 rows={3}
-                placeholder="粘贴新的 JAVDB Cookie"
+                placeholder="粘贴新的常规访问 Cookie"
                 className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700 outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200/70"
               />
               <Button type="button" variant="outline" onClick={() => void handleCookieUpdate()} disabled={actionStatus === 'working'}>
                 {actionStatus === 'working' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                更新并验证
+                更新并验证常规 Cookie
               </Button>
+              <div className="border-t border-slate-200 pt-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium text-slate-800">Top 250 会员 Cookie</span>
+                  <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', config?.top_credential_valid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>
+                    {config?.top_credential_valid ? 'Cookie 已验证' : config?.top_credential_configured ? 'Cookie 待验证' : '未配置 Cookie'}
+                  </span>
+                </div>
+                <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+                  <span className="text-slate-500">最近验证</span>
+                  <span className="text-right font-medium text-slate-800">{formatDateTime(config?.top_last_validated_at ?? null)}</span>
+                </div>
+                <p className="mt-3 text-xs text-slate-400">仅用于读取 Top 250 列表，更新时会发送一次验证请求。</p>
+                <label className="mt-3 block text-sm font-medium text-slate-700" htmlFor="javdb-top-cookie">
+                  覆盖会员 Cookie
+                </label>
+                <textarea
+                  id="javdb-top-cookie"
+                  value={topCookieValue}
+                  onChange={(event) => setTopCookieValue(event.currentTarget.value)}
+                  autoComplete="off"
+                  rows={3}
+                  placeholder="粘贴 Top 250 会员 Cookie"
+                  className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700 outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200/70"
+                />
+                <Button type="button" variant="outline" className="mt-3" onClick={() => void handleTopCookieUpdate()} disabled={actionStatus === 'working'}>
+                  {actionStatus === 'working' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                  更新并验证会员 Cookie
+                </Button>
+              </div>
             </div>
           </section>
 
@@ -852,6 +929,62 @@ export function AutomationPage() {
               </Button>
             </div>
           </div>
+          <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.7fr)]">
+            <div>
+              <p className="mb-2 text-sm font-medium text-slate-700">榜单来源</p>
+              <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1">
+                {([
+                  ['STANDARD', '日 / 周 / 月榜'],
+                  ['TOP_250', 'Top 250'],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setRankingSource(value)}
+                    className={cn(
+                      'h-9 rounded-lg px-3 text-sm font-medium transition-colors',
+                      rankingSource === value ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {rankingSource === 'TOP_250' ? (
+              <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-2 text-sm font-medium text-slate-700">
+                  <span>年份</span>
+                  <input
+                    type="number"
+                    min={2008}
+                    max={new Date().getFullYear()}
+                    value={topYear}
+                    onChange={(event) => setTopYear(Number(event.currentTarget.value))}
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200/70"
+                  />
+                </label>
+                <label className="space-y-2 text-sm font-medium text-slate-700">
+                  <span>取前 N 条</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={250}
+                    value={topLimit}
+                    onChange={(event) => setTopLimit(Number(event.currentTarget.value))}
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200/70"
+                  />
+                </label>
+              </div>
+            ) : (
+              <p className="self-end pb-2 text-sm text-slate-500">使用当前勾选的日榜、周榜和月榜配置。</p>
+            )}
+          </div>
+          {!credentialsReady ? (
+            <p className="mt-3 text-xs text-amber-700">
+              {rankingSource === 'TOP_250' ? '请先验证常规访问 Cookie 和 Top 250 会员 Cookie。' : '请先验证常规访问 Cookie。'}
+            </p>
+          ) : null}
           {actionMessage ? (
             <p className={cn('mt-4 rounded-xl px-3 py-2 text-sm', actionStatus === 'error' ? 'bg-rose-50 text-rose-700' : actionStatus === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-600')}>
               {actionMessage}

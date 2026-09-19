@@ -61,6 +61,15 @@ export function updateJavdbCookie(cookie: string) {
   )
 }
 
+export function updateJavdbTopCookie(cookie: string) {
+  return request<JavdbCredentialStatus>(() =>
+    javaApiClient.put<JavaApiResponse<JavdbCredentialStatus>>(
+      '/api/v1/admin/javdb-automation/credential/top',
+      { cookie },
+    ),
+  )
+}
+
 export function startJavdbDryRun(payload: UpdateJavdbAutomationConfigPayload) {
   return request<JavdbAutomationRun>(() =>
     javaApiClient.post<JavaApiResponse<JavdbAutomationRun>>(

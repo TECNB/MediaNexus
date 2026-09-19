@@ -22,6 +22,9 @@ export type JavdbAutomationConfig = {
   credential_configured: boolean
   credential_valid: boolean
   last_validated_at: string | null
+  top_credential_configured: boolean
+  top_credential_valid: boolean
+  top_last_validated_at: string | null
 }
 
 export type JavdbCredentialStatus = {
@@ -123,4 +126,7 @@ export type UpdateJavdbAutomationConfigPayload = {
   minimum_review_count: number
   limit_per_ranking: number
   schedule_time: string
+  ranking_source?: 'STANDARD' | 'TOP_250'
+  top_year?: number
+  top_limit?: number
 }
