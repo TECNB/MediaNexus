@@ -13,6 +13,8 @@ export type JavdbAutomationConfig = {
   monthly_enabled: boolean
   cracked_only: boolean
   subtitle_only: boolean
+  excluded_tags: string
+  minimum_rating: number
   limit_per_ranking: number
   schedule_time: string
   timezone: string
@@ -112,6 +114,8 @@ export type UpdateJavdbAutomationConfigPayload = {
   monthly_enabled: boolean
   cracked_only: boolean
   subtitle_only: boolean
+  excluded_tags: string
+  minimum_rating: number
   limit_per_ranking: number
   schedule_time: string
 }

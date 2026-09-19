@@ -130,6 +130,8 @@ function getConfigForm(config: JavdbAutomationConfig): UpdateJavdbAutomationConf
     monthly_enabled: config.monthly_enabled,
     cracked_only: config.cracked_only,
     subtitle_only: config.subtitle_only,
+    excluded_tags: config.excluded_tags,
+    minimum_rating: config.minimum_rating,
     limit_per_ranking: config.limit_per_ranking,
     schedule_time: config.schedule_time,
   }
@@ -702,6 +704,38 @@ export function AutomationPage() {
                       }}
                       className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200/70"
                     />
+                  </label>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>排除标签（逗号分隔）</span>
+                    <input
+                      type="text"
+                      value={configForm.excluded_tags}
+                      onChange={(event) => {
+                        const value = event.currentTarget.value
+                        setConfigForm((current) => current ? { ...current, excluded_tags: value } : current)
+                      }}
+                      placeholder="熟女"
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200/70"
+                    />
+                    <span className="text-xs font-normal text-slate-400">命中任一标签的影片不会进入候选。</span>
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>最低评分（0-5）</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={5}
+                      step={0.1}
+                      value={configForm.minimum_rating}
+                      onChange={(event) => {
+                        const value = Number(event.currentTarget.value)
+                        setConfigForm((current) => current ? { ...current, minimum_rating: value } : current)
+                      }}
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200/70"
+                    />
+                    <span className="text-xs font-normal text-slate-400">低于此评分或没有评分的影片会被排除。</span>
                   </label>
                 </div>
                 <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 px-3 py-3 text-sm font-semibold text-slate-800">
