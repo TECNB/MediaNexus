@@ -9,6 +9,7 @@ export type MediaLibraryId =
 export type MediaLibraryItem = {
   item_id: string
   title: string
+  file_name: string | null
   year: number | null
   date_created: string | null
   has_primary_image: boolean

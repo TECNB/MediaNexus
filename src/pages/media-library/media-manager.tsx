@@ -20,6 +20,17 @@ import type {
 } from '@/types/media-library'
 
 type ManagerMode = 'identify' | 'poster'
+type QuerySource = 'file' | 'metadata' | 'custom'
+
+function metadataQuery(item: MediaLibraryItem) {
+  return item.title.replace(/\s*\(\d{4}\)\s*$/, '')
+}
+
+function fileQuery(item: MediaLibraryItem) {
+  return item.file_name
+    ?.replace(/\.(strm|mkv|mp4|avi|mov|wmv|m4v|ts|m2ts|webm)$/i, '')
+    .trim() ?? ''
+}
 
 function CandidateImage({
   candidateId,
@@ -87,21 +98,31 @@ export function MediaManager({
   onChanged: (item: MediaLibraryItem) => void
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
+  const originalFileQuery = fileQuery(item)
+  const currentMetadataQuery = metadataQuery(item)
   const [mode, setMode] = useState<ManagerMode>('identify')
-  const [queryText, setQueryText] = useState(item.title.replace(/\s*\(\d{4}\)\s*$/, ''))
+  const [querySource, setQuerySource] = useState<QuerySource>(originalFileQuery ? 'file' : 'metadata')
+  const [queryText, setQueryText] = useState(originalFileQuery || currentMetadataQuery)
   const [yearText, setYearText] = useState('')
   const [identifyQuery, setIdentifyQuery] = useState<MediaIdentifyQuery | null>(null)
   const [metadata, setMetadata] = useState<MediaMetadataCandidate[]>([])
   const [posters, setPosters] = useState<MediaPosterCandidate[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [replaceImages, setReplaceImages] = useState(item.has_primary_image)
+  const [replaceImages, setReplaceImages] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   function open(nextMode: ManagerMode) {
     setMode(nextMode)
     setError(null)
-    setReplaceImages(item.has_primary_image)
+    setReplaceImages(true)
+    if (nextMode === 'identify') {
+      const nextSource = originalFileQuery ? 'file' : 'metadata'
+      setQuerySource(nextSource)
+      setQueryText(nextSource === 'file' ? originalFileQuery : currentMetadataQuery)
+      setIdentifyQuery(null)
+      setMetadata([])
+    }
     dialogRef.current?.showModal()
     if (nextMode === 'poster' && posters.length === 0) void loadPosters()
   }
@@ -154,7 +175,7 @@ export function MediaManager({
       setIdentifyQuery(null)
       setMetadata([])
       setPosters([])
-      setReplaceImages(false)
+      setReplaceImages(true)
       dialogRef.current?.close()
       onChanged(updatedItem)
     } catch (nextError) {
@@ -238,9 +259,40 @@ export function MediaManager({
           <div className="overflow-y-auto p-5 sm:p-6">
             {mode === 'identify' ? (
               <div className="space-y-5">
+                <div aria-label="作品名称来源" className="grid gap-2 sm:grid-cols-2" role="group">
+                  {([
+                    ['file', '文件名称', originalFileQuery],
+                    ['metadata', '当前元数据名称', currentMetadataQuery],
+                  ] as const).map(([source, label, value]) => (
+                    <button
+                      aria-pressed={querySource === source}
+                      className={cn(
+                        'min-w-0 rounded-lg border px-3 py-2 text-left focus-visible:ring-2 focus-visible:ring-slate-400',
+                        querySource === source
+                          ? 'border-slate-900 bg-slate-900 text-white'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400',
+                      )}
+                      disabled={!value}
+                      key={source}
+                      onClick={() => {
+                        setQuerySource(source)
+                        setQueryText(value)
+                        setIdentifyQuery(null)
+                        setMetadata([])
+                      }}
+                      type="button"
+                    >
+                      <span className="block text-sm font-medium">{label}</span>
+                      <span className={cn(
+                        'mt-0.5 block truncate text-xs',
+                        querySource === source ? 'text-slate-300' : 'text-slate-500',
+                      )} title={value || undefined}>{value || '不可用'}</span>
+                    </button>
+                  ))}
+                </div>
                 <form className="grid gap-3 sm:grid-cols-[1fr_8rem_auto]" onSubmit={search}>
                   <label className="space-y-1 text-sm font-medium">作品名称
-                    <input className="h-11 w-full rounded-xl border border-slate-300 px-3 font-normal focus:border-slate-500 focus:ring-2 focus:ring-slate-200" onChange={(event) => setQueryText(event.target.value)} value={queryText} />
+                    <input className="h-11 w-full rounded-xl border border-slate-300 px-3 font-normal focus:border-slate-500 focus:ring-2 focus:ring-slate-200" onChange={(event) => { setQuerySource('custom'); setQueryText(event.target.value) }} value={queryText} />
                   </label>
                   <label className="space-y-1 text-sm font-medium">年份（可选）
                     <input className="h-11 w-full rounded-xl border border-slate-300 px-3 font-normal focus:border-slate-500 focus:ring-2 focus:ring-slate-200" min="1800" max="3000" onChange={(event) => setYearText(event.target.value)} placeholder={item.year?.toString() ?? '例如 2018'} type="number" value={yearText} />
@@ -251,7 +303,7 @@ export function MediaManager({
                 </form>
                 <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800">
                   <input checked={replaceImages} className="mt-1 h-4 w-4" onChange={(event) => setReplaceImages(event.target.checked)} type="checkbox" />
-                  <span><strong>覆盖该作品的全部现有图片</strong><br /><span className="text-slate-500">已有主封面时默认勾选，无主封面时默认不勾选，可手动调整。只影响当前作品，会重新下载主封面、背景图等图片；只想换主封面请使用“更换封面”。</span></span>
+                  <span><strong>覆盖该作品的全部现有图片</strong><br /><span className="text-slate-500">纠正识别时默认勾选，会根据新作品身份重新下载主封面、背景图等图片；只想换主封面请使用“更换封面”。</span></span>
                 </label>
                 {identifyQuery && metadata.length === 0 && !loading ? <p className="py-8 text-center text-sm text-slate-500">没有找到候选，请尝试去掉年份或使用原名。</p> : null}
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
