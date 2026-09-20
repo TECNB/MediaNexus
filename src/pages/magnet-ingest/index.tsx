@@ -92,35 +92,6 @@ function SectionHeading({
   )
 }
 
-function FailedAdultMagnetsCard({
-  task,
-}: {
-  task: AdultMagnetIngestTask | null
-}) {
-  if (!task || task.failed_magnets.length === 0) {
-    return null
-  }
-
-  return (
-    <section className="space-y-3 rounded-[24px] border border-rose-200 bg-rose-50/70 p-4">
-      <div>
-        <p className="text-sm font-semibold text-rose-900">失败磁力</p>
-        <p className="mt-1 text-xs text-rose-700">可根据番号重新寻找其他磁力。</p>
-      </div>
-      <div className="space-y-3">
-        {task.failed_magnets.map((item, index) => (
-          <div key={`${item.magnet}-${index}`} className="rounded-2xl bg-white/80 p-3">
-            <p className="text-sm font-semibold text-slate-900">{item.number}</p>
-            <p className="mt-1 break-all font-mono text-xs leading-5 text-slate-600">
-              {item.magnet}
-            </p>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
 function MediaTypeToggle({
   mode,
   isAdmin,
@@ -2327,9 +2298,6 @@ function MagnetIngestContent() {
         </div>
 
         <aside className="min-w-0 space-y-5">
-          {mode === 'adult' ? (
-            <FailedAdultMagnetsCard task={selectedAdultTask} />
-          ) : null}
           <TaskLogsCard
             logs={currentTaskLogs}
             status={currentTaskLogsStatus}

@@ -293,6 +293,35 @@ function AttemptChain({ detail }: { detail: OpenListTaskCenterDetail }) {
   )
 }
 
+function FailedAdultMagnetsCard({
+  detail,
+}: {
+  detail: OpenListTaskCenterDetail
+}) {
+  if (detail.task_type !== 'ADULT' || detail.failed_magnets.length === 0) {
+    return null
+  }
+
+  return (
+    <section className="rounded-[28px] border border-rose-200 bg-rose-50/70 p-5">
+      <div>
+        <p className="text-sm font-semibold text-rose-900">失败磁力</p>
+        <p className="mt-1 text-xs text-rose-700">可根据番号重新寻找其他磁力。</p>
+      </div>
+      <div className="mt-4 space-y-3">
+        {detail.failed_magnets.map((item, index) => (
+          <div key={`${item.magnet}-${index}`} className="rounded-2xl bg-white/80 p-3">
+            <p className="text-base font-semibold text-slate-950">{item.number}</p>
+            <p className="mt-1 break-all font-mono text-xs leading-5 text-slate-600">
+              {item.magnet}
+            </p>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function canRetryManualMagnet(detail: OpenListTaskCenterDetail) {
   return (
     (detail.source_type === 'MANUAL_MAGNET' ||
@@ -1059,6 +1088,8 @@ export function TaskCenterDetailPage() {
               </div>
             </section>
           ) : null}
+
+          <FailedAdultMagnetsCard detail={detail} />
 
           <OperationalLogPanel
             logs={detail.logs}

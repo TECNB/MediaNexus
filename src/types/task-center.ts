@@ -140,6 +140,7 @@ export type OpenListTaskCenterDetail = {
   is_active: boolean
   pending_explanation: string | null
   batch_download_links: string[] | null
+  failed_magnets: Array<{ number: string; magnet: string }>
   attempt_chain: OpenListTaskCenterAttemptChain
   created_at: string | null
   updated_at: string | null
