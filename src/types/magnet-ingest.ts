@@ -89,6 +89,10 @@ export type AdultMagnetIngestTask = {
   kept_count: number
   deleted_count: number
   error_message: string | null
+  failed_magnets: Array<{
+    number: string
+    magnet: string
+  }>
   created_at: string | null
   updated_at: string | null
   finished_at: string | null
