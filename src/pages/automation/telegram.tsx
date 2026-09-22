@@ -52,6 +52,7 @@ type ConfigForm = {
 }
 
 const HISTORY_PAGE_SIZE = 20
+const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
 
 const runStatusCopy: Record<string, string> = {
   RUNNING: '运行中',
@@ -116,6 +117,7 @@ function editableChannel(channel: TelegramChannelConfig): EditableChannel {
     source_ref: String(channel.source_id),
     source_title: channel.source_title,
     source_username: channel.source_username,
+    forwards_restricted: channel.forwards_restricted,
     enabled: channel.enabled,
     percentile: channel.percentile,
     resource_mode: channel.resource_mode,
@@ -123,6 +125,8 @@ function editableChannel(channel: TelegramChannelConfig): EditableChannel {
     min_views: channel.min_views,
     min_forwards: channel.min_forwards,
     min_age_hours: channel.min_age_hours,
+    run_weekdays: channel.run_weekdays ?? [],
+    run_month_days: channel.run_month_days ?? [],
   }
 }
 
@@ -351,7 +355,6 @@ export function TelegramAutomationPage() {
     setError(null)
     try {
       const source = await resolveTelegramSource(newSource.trim())
-      if (source.forwards_restricted) throw new Error('该频道禁止转发，不能加入自动化。')
       setForm((current) => current ? {
         ...current,
         channels: [...current.channels, {
@@ -363,6 +366,9 @@ export function TelegramAutomationPage() {
           ...telegramResourceModeDefaults('group'),
           min_video_duration: 300,
           min_age_hours: 24,
+          run_weekdays: [],
+          run_month_days: [],
+          forwards_restricted: source.forwards_restricted,
         }],
       } : current)
       setNewSource('')
@@ -395,6 +401,8 @@ export function TelegramAutomationPage() {
           min_views: channel.min_views,
           min_forwards: channel.min_forwards,
           min_age_hours: channel.min_age_hours,
+          run_weekdays: channel.run_weekdays,
+          run_month_days: channel.run_month_days,
         })),
       }
       const config = await updateTelegramAutomationConfig(payload)
@@ -563,6 +571,7 @@ export function TelegramAutomationPage() {
                     <Button type="button" size="sm" variant="outline" onClick={() => setForm((current) => current ? { ...current, channels: current.channels.filter((_, itemIndex) => itemIndex !== index) } : current)}><Trash2 className="h-4 w-4" />移除</Button>
                   </div>
                 </div>
+                  {channel.forwards_restricted ? <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">该频道禁止转发，运行时会直接跳过并按成功计，不读取频道消息。</p> : null}
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
                   <label className="space-y-1 text-xs text-slate-500"><span>分位数</span><select value={channel.percentile} onChange={(event) => patchChannel(index, { percentile: Number(event.currentTarget.value) })} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value={0.8}>P80</option><option value={0.85}>P85</option><option value={0.9}>P90</option></select></label>
                   <label className="space-y-1 text-xs text-slate-500"><span>资源结构</span><select value={channel.resource_mode} onChange={(event) => patchChannel(index, telegramResourceModeDefaults(event.currentTarget.value as EditableChannel['resource_mode']))} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"><option value="group">普通 Group</option><option value="hashtag_resource">Hashtag 分段</option></select></label>
@@ -572,6 +581,10 @@ export function TelegramAutomationPage() {
                     ['min_forwards', '最低转发'],
                     ['min_age_hours', '观察时间（小时）'],
                   ] as const).map(([key, label]) => <label key={key} className="space-y-1 text-xs text-slate-500"><span>{label}</span><input type="number" min={0} value={channel[key]} onChange={(event) => patchChannel(index, { [key]: Number(event.currentTarget.value) })} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700" /></label>)}
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <fieldset className="space-y-1 text-xs text-slate-500"><legend>运行星期（空白=每天）</legend><div className="flex flex-wrap gap-2">{weekdayLabels.map((label, dayIndex) => { const day = dayIndex + 1; return <label key={day} className="flex items-center gap-1"><input type="checkbox" checked={channel.run_weekdays.includes(day)} onChange={(event) => patchChannel(index, { run_weekdays: event.currentTarget.checked ? [...channel.run_weekdays, day].sort((a, b) => a - b) : channel.run_weekdays.filter((value) => value !== day) })} />周{label}</label> })}</div></fieldset>
+                  <label className="space-y-1 text-xs text-slate-500"><span>每月运行日（1-31，逗号分隔；空白=每天）</span><input value={channel.run_month_days.join(',')} onChange={(event) => patchChannel(index, { run_month_days: event.currentTarget.value.split(',').map((value) => Number(value.trim())).filter((value) => value >= 1 && value <= 31) })} placeholder="例如 15" className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700" /></label>
                 </div>
               </article>
             ))}

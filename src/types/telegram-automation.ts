@@ -3,6 +3,7 @@ export type TelegramChannelConfig = {
   source_id: number
   source_title: string | null
   source_username: string | null
+  forwards_restricted: boolean
   enabled: boolean
   percentile: number
   resource_mode: 'group' | 'hashtag_resource'
@@ -10,6 +11,8 @@ export type TelegramChannelConfig = {
   min_views: number
   min_forwards: number
   min_age_hours: number
+  run_weekdays: number[]
+  run_month_days: number[]
 }
 
 export type TelegramAutomationConfig = {
@@ -30,6 +33,8 @@ export type TelegramChannelInput = {
   min_views: number
   min_forwards: number
   min_age_hours: number
+  run_weekdays: number[]
+  run_month_days: number[]
 }
 
 export type TelegramConfigUpdatePayload = {
