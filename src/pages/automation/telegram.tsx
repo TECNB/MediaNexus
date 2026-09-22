@@ -43,6 +43,7 @@ import type {
 type EditableChannel = TelegramChannelInput & {
   source_title: string | null
   source_username: string | null
+  forwards_restricted: boolean
 }
 
 type ConfigForm = {
