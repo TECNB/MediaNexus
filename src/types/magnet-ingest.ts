@@ -23,6 +23,14 @@ export type CreateAdultMagnetIngestTaskPayload = {
 
 export type IngestMode = 'movie' | 'series' | 'anime' | 'adult'
 
+export type MagnetIngestNodeStatus = {
+  provider: string
+  online: boolean
+  used_bytes: number | null
+  total_bytes: number | null
+  free_bytes: number | null
+}
+
 export type CreateAnimeMagnetIngestTaskPayload = {
   magnet: string
   tmdb_id: number

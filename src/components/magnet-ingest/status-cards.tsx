@@ -1,4 +1,4 @@
-import { Lightbulb, Server, TerminalSquare } from 'lucide-react'
+import { Lightbulb, Loader2, Server, TerminalSquare } from 'lucide-react'
 
 import type { SystemLogEntry } from '@/data/mock-magnet-ingest'
 import {
@@ -6,7 +6,10 @@ import {
   type OperationalLogStatus,
 } from '@/components/operation-log/operational-log-panel'
 import { cn } from '@/lib/utils'
-import type { MagnetIngestTaskLog } from '@/types/magnet-ingest'
+import type {
+  MagnetIngestNodeStatus,
+  MagnetIngestTaskLog,
+} from '@/types/magnet-ingest'
 
 type SystemLogsCardProps = {
   logs: SystemLogEntry[]
@@ -98,14 +101,46 @@ export function TaskLogsCard(props: TaskLogsCardProps) {
   )
 }
 
-export function NodeStatusCard() {
+type NodeStatusCardProps = {
+  data: MagnetIngestNodeStatus | null
+  status: 'loading' | 'success' | 'error'
+}
+
+function formatBytes(value: number) {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+  let size = value
+  let unitIndex = 0
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex += 1
+  }
+
+  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
+}
+
+export function NodeStatusCard({ data, status }: NodeStatusCardProps) {
+  const hasCapacity =
+    data?.used_bytes !== null &&
+    data?.used_bytes !== undefined &&
+    data?.total_bytes !== null &&
+    data?.total_bytes !== undefined &&
+    data.total_bytes > 0
+  const usagePercent = hasCapacity
+    ? Math.min(100, Math.max(0, (data.used_bytes! / data.total_bytes!) * 100))
+    : 0
+  const isOnline = status === 'success' && data?.online === true
+
   return (
     <section className="space-y-3">
       <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
         节点状态
       </p>
 
-      <div className="rounded-[28px] border border-slate-200 bg-white/95 p-5 shadow-shell">
+      <div
+        aria-busy={status === 'loading'}
+        className="rounded-[28px] border border-slate-200 bg-white/95 p-5 shadow-shell"
+      >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
@@ -113,31 +148,74 @@ export function NodeStatusCard() {
             </div>
 
             <div>
-              <p className="text-lg font-semibold text-slate-950">PikPak API</p>
-              <p className="text-sm text-slate-500">新加坡区域</p>
+              <p className="text-lg font-semibold text-slate-950">
+                {data?.provider ?? 'PikPak'} API
+              </p>
+              <p className="text-sm text-slate-500">OpenList 存储节点</p>
             </div>
           </div>
 
-          <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            在线
+          <span
+            className={cn(
+              'inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium',
+              status === 'loading'
+                ? 'bg-slate-100 text-slate-600'
+                : isOnline
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'bg-rose-50 text-rose-700',
+            )}
+          >
+            {status === 'loading' ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <span
+                className={cn(
+                  'h-2 w-2 rounded-full',
+                  isOnline ? 'bg-emerald-500' : 'bg-rose-500',
+                )}
+              />
+            )}
+            {status === 'loading' ? '检测中' : isOnline ? '在线' : '不可用'}
           </span>
         </div>
 
         <div className="mt-6 space-y-2">
           <div className="flex items-center justify-between text-sm text-slate-500">
-            <span>云盘空间: 78% 已用</span>
-            <span>7.8 TB / 10 TB</span>
+            {status === 'loading' ? (
+              <span>正在读取云盘空间...</span>
+            ) : hasCapacity ? (
+              <>
+                <span>云盘空间: {Math.round(usagePercent)}% 已用</span>
+                <span>
+                  {formatBytes(data.used_bytes!)} / {formatBytes(data.total_bytes!)}
+                </span>
+              </>
+            ) : (
+              <span>云盘空间暂时无法获取</span>
+            )}
           </div>
 
           <div className="h-2 rounded-full bg-slate-100">
-            <div className="h-full w-[78%] rounded-full bg-slate-900" />
+            <div
+              role={hasCapacity ? 'progressbar' : undefined}
+              aria-label={hasCapacity ? '云盘空间使用率' : undefined}
+              aria-valuemin={hasCapacity ? 0 : undefined}
+              aria-valuemax={hasCapacity ? 100 : undefined}
+              aria-valuenow={hasCapacity ? Math.round(usagePercent) : undefined}
+              className={cn(
+                'h-full rounded-full transition-[width]',
+                status === 'loading'
+                  ? 'animate-pulse bg-slate-300'
+                  : 'bg-slate-900',
+              )}
+              style={{ width: status === 'loading' ? '35%' : `${usagePercent}%` }}
+            />
           </div>
         </div>
 
         <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4 text-sm">
-          <span className="text-slate-400">运行时长</span>
-          <span className="font-semibold text-slate-900">24d 18h 12m</span>
+          <span className="text-slate-400">数据来源</span>
+          <span className="font-semibold text-slate-900">OpenList</span>
         </div>
       </div>
     </section>

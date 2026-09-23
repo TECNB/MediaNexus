@@ -21,6 +21,7 @@ import {
   createAnimeMagnetIngestTask,
   createMovieMagnetIngest,
   createSeriesMagnetIngest,
+  getMagnetIngestNodeStatus,
   listAdultMagnetIngestTaskLogs,
   listAdultMagnetIngestTasks,
   listAnimeMagnetIngestTaskLogs,
@@ -52,6 +53,7 @@ import type {
   CreateMovieMagnetIngestPayload,
   CreateSeriesMagnetIngestPayload,
   IngestMode,
+  MagnetIngestNodeStatus,
   MagnetIngestTaskLog,
   MagnetIngestTaskStatus,
   MovieMagnetIngestTask,
@@ -601,6 +603,10 @@ function MagnetIngestContent() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
   const [mode, setMode] = useState<IngestMode>('movie')
+  const [nodeStatus, setNodeStatus] = useState<MagnetIngestNodeStatus | null>(null)
+  const [nodeStatusState, setNodeStatusState] = useState<
+    'loading' | 'success' | 'error'
+  >('loading')
   const [magnetInput, setMagnetInput] = useState('')
   const [adultCategory, setAdultCategory] =
     useState<AdultMagnetCategory>('JAV')
@@ -751,6 +757,27 @@ function MagnetIngestContent() {
       setMode('movie')
     }
   }, [isAdmin, mode])
+
+  useEffect(() => {
+    let active = true
+
+    void getMagnetIngestNodeStatus()
+      .then((data) => {
+        if (active) {
+          setNodeStatus(data)
+          setNodeStatusState('success')
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setNodeStatusState('error')
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   const loadMovieTasks = useCallback(
     async (options: { showLoading?: boolean } = {}) => {
@@ -2305,7 +2332,7 @@ function MagnetIngestContent() {
             selectedTaskId={currentSelectedTaskId}
             emptySelectionMessage={`选择${taskModeLabel}任务后查看执行日志。`}
           />
-          <NodeStatusCard />
+          <NodeStatusCard data={nodeStatus} status={nodeStatusState} />
           <ProTipCard />
         </aside>
       </div>

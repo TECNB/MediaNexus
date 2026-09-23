@@ -16,6 +16,7 @@ import type {
   CreateMovieMagnetIngestPayload,
   CreateMovieMagnetIngestResponse,
   JavaApiResponse,
+  MagnetIngestNodeStatus,
   MagnetIngestTaskLog,
   MovieMagnetIngestTask,
   MovieMagnetIngestTaskListData,
@@ -29,6 +30,22 @@ const JAVA_ANIME_MAGNET_TASK_ERROR_MESSAGE = '动漫磁力任务处理失败，�
 const JAVA_MAGNET_TASK_ERROR_MESSAGE = '磁力任务处理失败，请稍后重试。'
 const JAVA_ADULT_MAGNET_TASK_ERROR_MESSAGE =
   'Adult 磁力任务处理失败，请稍后重试。'
+
+export async function getMagnetIngestNodeStatus(): Promise<MagnetIngestNodeStatus> {
+  try {
+    const response = await javaApiClient.get<
+      JavaApiResponse<MagnetIngestNodeStatus>
+    >('/api/v1/magnet-ingest/node-status')
+
+    if (response.data.code !== 200 || !response.data.data) {
+      throw new Error(response.data.message || 'node status fetch failed')
+    }
+
+    return response.data.data
+  } catch (error) {
+    throw new Error(getJavaErrorMessage(error) || JAVA_MAGNET_TASK_ERROR_MESSAGE)
+  }
+}
 
 export async function createAnimeMagnetIngestTask(
   payload: CreateAnimeMagnetIngestTaskPayload,
