@@ -77,6 +77,7 @@ const stageCopy: Record<string, string> = {
   FORWARDING_CHANNELS: '转发频道资源',
   BACKFILLING_CHANNEL: '转发历史资源',
   WAITING_PIKPAK_FILES: '等待 PikPak 文件到齐并移动',
+  MOVING_PIKPAK_FILES: '整理收件箱并入库',
   REFRESHING_ADULT_AUTOSYMLINK: '刷新 Adult AutoSymlink',
   MEDIA_DELIVERY_FAILED: '媒体入库失败',
   RESOLVING_CHANNEL: '读取频道信息',
@@ -225,6 +226,34 @@ function RunDetails({ run }: { run: TelegramAutomationRun }) {
         </div>
         {run.error_message ? <p className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">{run.error_message}</p> : null}
       </div>
+
+      {run.media_delivery ? (
+        <div className="rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200">
+          <h3 className="font-semibold text-slate-950">收件箱入库详情</h3>
+          <p className="mt-2 text-sm text-slate-600">
+            本次入库 {run.media_delivery.moved_file_count ?? 0} 个文件，包含收件箱中可处理的历史和手动添加内容。
+            尚待保存或移动 {run.media_delivery.pending_files.length} 个视频。
+          </p>
+          {run.media_delivery.as_message ? <p className="mt-2 text-sm text-slate-600">{run.media_delivery.as_message}</p> : null}
+          <ul className="mt-3 space-y-2 text-sm">
+            {run.media_delivery.files.map((file, index) => (
+              <li key={`${file.sourcePath}:${index}`} className="break-all rounded-xl bg-slate-50 px-3 py-2">
+                <span className="font-medium">{file.status === 'MOVED' ? '已入库' : '待处理'} · {file.savedName}</span>
+                {file.originalName !== file.savedName ? <p className="mt-1 text-xs text-slate-500">原文件名：{file.originalName}</p> : null}
+                {file.libraryPath ? <p className="mt-1 text-xs text-slate-500">位置：{file.libraryPath}</p> : null}
+                {file.note ? <p className="mt-1 text-xs text-amber-700">{file.note}</p> : null}
+              </li>
+            ))}
+            {run.media_delivery.pending_files.map((file) => (
+              <li key={file.key} className="break-all rounded-xl bg-amber-50 px-3 py-2 text-amber-900">
+                <span className="font-medium">待处理 · {file.saved_name || file.original_name}</span>
+                {file.caption ? <p className="mt-1 whitespace-pre-wrap text-xs">{file.caption}</p> : null}
+                <p className="mt-1 text-xs">{file.note}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {run.channels.map((channel) => {
         const resources = channel.worker_response?.selectedResources ?? []

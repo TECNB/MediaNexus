@@ -133,6 +133,29 @@ export type TelegramAutomationRun = {
   finished_at: string | null
   channels: TelegramChannelRun[]
   progress: TelegramRunProgress | null
+  media_delivery?: {
+    moved_entry_count?: number
+    moved_file_count?: number
+    as_status?: string
+    as_message?: string
+    files: Array<{
+      key: string | null
+      originalName: string
+      savedName: string
+      sourcePath: string
+      libraryPath: string | null
+      status: string
+      note: string | null
+    }>
+    pending_files: Array<{
+      key: string
+      original_name: string
+      saved_name?: string
+      caption: string
+      status: string
+      note: string
+    }>
+  } | null
 }
 
 export type TelegramAutomationOverview = {
