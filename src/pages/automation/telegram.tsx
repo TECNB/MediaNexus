@@ -64,6 +64,7 @@ const runStatusCopy: Record<string, string> = {
 }
 
 const modeCopy: Record<string, string> = {
+  INBOX: '收件箱检查',
   FOLLOW: '正式追更',
   FOLLOW_DRY_RUN: '追更试运行',
   BACKFILL: '历史回溯',
@@ -77,7 +78,7 @@ const stageCopy: Record<string, string> = {
   FORWARDING_CHANNELS: '转发频道资源',
   BACKFILLING_CHANNEL: '转发历史资源',
   WAITING_PIKPAK_FILES: '等待 PikPak 文件到齐并移动',
-  MOVING_PIKPAK_FILES: '整理收件箱并入库',
+  MOVING_PIKPAK_FILES: '正在整理收件箱并入库',
   REFRESHING_ADULT_AUTOSYMLINK: '刷新 Adult AutoSymlink',
   MEDIA_DELIVERY_FAILED: '媒体入库失败',
   RESOLVING_CHANNEL: '读取频道信息',
@@ -192,6 +193,13 @@ function RunDetails({ run }: { run: TelegramAutomationRun }) {
               </p>
               {progress.channel_title ? <p className="text-xs text-sky-700">当前频道：{progress.channel_title}</p> : null}
             </div>
+            {run.stage === 'MOVING_PIKPAK_FILES' ? (
+              <p className="mt-3 text-sm text-sky-800">
+                正在通过云盘 API 改名和移动文件，并确认入库结果。此阶段不再扫描 Telegram 消息。
+                已确认入库 {run.media_delivery?.files.filter((file) => file.status === 'MOVED').length ?? 0} 个文件，
+                待保存或移动 {run.media_delivery?.pending_files.length ?? 0} 个视频。
+              </p>
+            ) : null}
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 xl:grid-cols-8">
               {[
                 ['已扫描消息', progress.scanned_messages],
