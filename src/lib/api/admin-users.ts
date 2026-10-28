@@ -55,7 +55,7 @@ export async function listAdminUsers(
     if (isJavaRequestCanceledError(error)) {
       throw error
     }
-    throw new Error(getJavaErrorMessage(error) ?? ADMIN_USERS_ERROR_MESSAGE)
+    throw new Error(`用户列表读取失败：${getJavaErrorMessage(error) ?? '请稍后重试'}`)
   }
 }
 

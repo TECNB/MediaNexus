@@ -66,7 +66,6 @@ import type {
   AdultOtherCollectionSyncRun,
 } from '@/types/adult-other-collections'
 
-import { WatchStatisticsPanel } from './watch-statistics'
 import { LiveWatchingPanel } from './live-watching'
 
 type LoadStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -1020,17 +1019,18 @@ export function DashboardPage() {
         return
       }
       setErrorMessage(
-        error instanceof Error ? error.message : '最近同步记录加载失败',
+        `高级恢复工具加载失败：${error instanceof Error ? error.message : '请重试'}`,
       )
       setStatus('error')
     }
   }, [])
 
   useEffect(() => {
+    if (workspace !== 'recovery') return
     const controller = new AbortController()
     void loadLatestRun(controller.signal)
     return () => controller.abort()
-  }, [loadLatestRun])
+  }, [loadLatestRun, workspace])
 
   const loadRegistrationCode = useCallback(async (signal?: AbortSignal) => {
     setRegistrationCodeStatus('loading')
@@ -1064,7 +1064,7 @@ export function DashboardPage() {
         return
       }
       setErrorMessage(
-        error instanceof Error ? error.message : '注册码数据加载失败',
+        `注册码或邀请人加载失败：${error instanceof Error ? error.message : '请重试'}`,
       )
     } finally {
       setRegistrationCodeStatus('idle')
@@ -1251,7 +1251,7 @@ export function DashboardPage() {
   return (
     <PageContainer
       title="控制台"
-      description="查看 Emby 观看统计、Adult-Other 库存健康度与自动化运行情况。"
+      description="查看实时观看、Adult-Other 库存健康度与自动化运行情况。"
     >
       <div className="space-y-6">
         <div className="divide-y divide-slate-200 overflow-hidden rounded-xl bg-white shadow-shell ring-1 ring-slate-200">
@@ -1349,7 +1349,7 @@ export function DashboardPage() {
           }}
         >
           {[
-            ['overview', '观看统计'],
+            ['overview', '实时观看'],
             ['registration', '注册码管理'],
             ['links', '快捷入口'],
             ['recovery', '高级恢复工具'],
@@ -1381,12 +1381,7 @@ export function DashboardPage() {
           tabIndex={0}
           className="space-y-6"
         >
-          {workspace === 'overview' && (
-            <>
-              <LiveWatchingPanel />
-              <WatchStatisticsPanel />
-            </>
-          )}
+          {workspace === 'overview' && <LiveWatchingPanel />}
           {workspace === 'registration' && (
             <div className="max-w-5xl">
               {' '}

@@ -116,7 +116,7 @@ export async function getLatestAdultOtherCollectionSyncRun(
       throw error
     }
     throw new Error(
-      getJavaErrorMessage(error) ?? ADULT_OTHER_COLLECTIONS_ERROR_MESSAGE,
+      `最近同步记录读取失败：${getJavaErrorMessage(error) ?? '请稍后重试'}`,
     )
   }
 }
@@ -147,7 +147,7 @@ export async function getAdultOtherCollectionSourceFolders(
       throw error
     }
     throw new Error(
-      getJavaErrorMessage(error) ?? ADULT_OTHER_COLLECTIONS_ERROR_MESSAGE,
+      `文件夹库存读取失败：${getJavaErrorMessage(error) ?? '请稍后重试'}`,
     )
   }
 }

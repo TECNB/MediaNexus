@@ -39,7 +39,7 @@ export async function getAdminRegistrationCode(
       throw error
     }
     throw new Error(
-      getJavaErrorMessage(error) ?? ADMIN_REGISTRATION_CODE_ERROR_MESSAGE,
+      `注册码读取失败：${getJavaErrorMessage(error) ?? '请稍后重试'}`,
     )
   }
 }
