@@ -66,6 +66,9 @@ import type {
   AdultOtherCollectionSyncRun,
 } from '@/types/adult-other-collections'
 
+import { WatchStatisticsPanel } from './watch-statistics'
+import { LiveWatchingPanel } from './live-watching'
+
 type LoadStatus = 'idle' | 'loading' | 'success' | 'error'
 type SubmitAction = 'preview' | 'sync' | 'cleanupPreview' | 'cleanup'
 type RegistrationCodeStatus = 'idle' | 'loading' | 'saving'
@@ -130,6 +133,11 @@ const adminQuickLinks: AdminQuickLink[] = [
     label: 'AS',
     tone: 'bg-amber-50 text-amber-700 ring-amber-200',
     url: 'http://107.172.224.11:8095',
+  },
+  {
+    description: '动漫订阅管理', icon: Film, id: 'ani-rss', label: 'Ani-RSS',
+    tone: 'bg-orange-50 text-orange-700 ring-orange-200',
+    url: 'http://107.172.46.215:7789/',
   },
 ]
 
@@ -771,7 +779,7 @@ function AdminQuickLinksPanel() {
         <h2 className="text-base font-semibold text-slate-950">快捷入口</h2>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {adminQuickLinks.map((item) => {
           const Icon = item.icon
 
@@ -943,6 +951,7 @@ function ResultTable({ run }: { run: AdultOtherCollectionSyncRun }) {
 }
 
 export function DashboardPage() {
+  const [workspace, setWorkspace] = useState('overview')
   const [automationRuns, setAutomationRuns] = useState<
     AdultOtherAutomationRun[]
   >([])
@@ -976,8 +985,10 @@ export function DashboardPage() {
   const [registrationCodeStatus, setRegistrationCodeStatus] =
     useState<RegistrationCodeStatus>('idle')
   const [registrationCodeCopied, setRegistrationCodeCopied] = useState(false)
-  const [registrationCodeInviter, setRegistrationCodeInviter] =
-    useState<Pick<AdminUser, 'id' | 'username'> | null>(null)
+  const [registrationCodeInviter, setRegistrationCodeInviter] = useState<Pick<
+    AdminUser,
+    'id' | 'username'
+  > | null>(null)
   const [selectedInviterUserId, setSelectedInviterUserId] = useState('')
   const [inviterOptions, setInviterOptions] = useState<AdminUser[]>([])
 
@@ -993,30 +1004,27 @@ export function DashboardPage() {
     isSubmitting || status === 'loading' || !selectedSourceFolderPath
   const selectedRunIsCleanup = selectedRun ? isCleanupRun(selectedRun) : false
   const selectedRunIsCleanupApply = selectedRun?.mode === 'CLEANUP_APPLY'
-  const loadLatestRun = useCallback(
-    async (signal?: AbortSignal) => {
-      setStatus('loading')
-      setErrorMessage(null)
-      try {
-        const [run, inventory] = await Promise.all([
-          getLatestAdultOtherCollectionSyncRun(signal),
-          getAdultOtherCollectionSourceFolders(signal),
-        ])
-        setLatestRun(run)
-        setCollectionInventory(inventory)
-        setStatus('success')
-      } catch (error) {
-        if (isJavaRequestCanceledError(error)) {
-          return
-        }
-        setErrorMessage(
-          error instanceof Error ? error.message : '最近同步记录加载失败',
-        )
-        setStatus('error')
+  const loadLatestRun = useCallback(async (signal?: AbortSignal) => {
+    setStatus('loading')
+    setErrorMessage(null)
+    try {
+      const [run, inventory] = await Promise.all([
+        getLatestAdultOtherCollectionSyncRun(signal),
+        getAdultOtherCollectionSourceFolders(signal),
+      ])
+      setLatestRun(run)
+      setCollectionInventory(inventory)
+      setStatus('success')
+    } catch (error) {
+      if (isJavaRequestCanceledError(error)) {
+        return
       }
-    },
-    [],
-  )
+      setErrorMessage(
+        error instanceof Error ? error.message : '最近同步记录加载失败',
+      )
+      setStatus('error')
+    }
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -1063,24 +1071,27 @@ export function DashboardPage() {
     }
   }, [])
 
-  const loadAutomationRuns = useCallback(async (signal?: AbortSignal) => {
-    setAutomationLoading(true)
-    try {
-      const result = await getAdultOtherAutomationRuns(automationPage, signal)
-      setAutomationRuns(result.items)
-      setAutomationPageSize(result.page_size)
-      setAutomationTotal(result.total)
-      setAutomationError(null)
-    } catch (error) {
-      if (!isJavaRequestCanceledError(error)) {
-        setAutomationError(
-          error instanceof Error ? error.message : '自动化记录加载失败',
-        )
+  const loadAutomationRuns = useCallback(
+    async (signal?: AbortSignal) => {
+      setAutomationLoading(true)
+      try {
+        const result = await getAdultOtherAutomationRuns(automationPage, signal)
+        setAutomationRuns(result.items)
+        setAutomationPageSize(result.page_size)
+        setAutomationTotal(result.total)
+        setAutomationError(null)
+      } catch (error) {
+        if (!isJavaRequestCanceledError(error)) {
+          setAutomationError(
+            error instanceof Error ? error.message : '自动化记录加载失败',
+          )
+        }
+      } finally {
+        setAutomationLoading(false)
       }
-    } finally {
-      setAutomationLoading(false)
-    }
-  }, [automationPage])
+    },
+    [automationPage],
+  )
 
   useEffect(() => {
     const controller = new AbortController()
@@ -1089,17 +1100,27 @@ export function DashboardPage() {
   }, [loadRegistrationCode])
 
   useEffect(() => {
-    const controller = new AbortController()
-    void loadAutomationRuns(controller.signal)
-    const intervalId = window.setInterval(
-      () => void loadAutomationRuns(),
-      5000,
-    )
-    return () => {
-      controller.abort()
-      window.clearInterval(intervalId)
+    if (workspace !== 'recovery') return
+    let controller: AbortController | null = null
+    async function refresh() {
+      if (controller || document.visibilityState !== 'visible') return
+      controller = new AbortController()
+      await loadAutomationRuns(controller.signal)
+      controller = null
     }
-  }, [loadAutomationRuns])
+    function visibilityChanged() {
+      if (document.visibilityState === 'visible') void refresh()
+      else controller?.abort()
+    }
+    void refresh()
+    const intervalId = window.setInterval(() => void refresh(), 5000)
+    document.addEventListener('visibilitychange', visibilityChanged)
+    return () => {
+      controller?.abort()
+      window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', visibilityChanged)
+    }
+  }, [loadAutomationRuns, workspace])
 
   useEffect(() => {
     if (!toastMessage) {
@@ -1117,7 +1138,9 @@ export function DashboardPage() {
     async (action: SubmitAction) => {
       if (
         action === 'cleanup' &&
-        !window.confirm('仅会删除当前成员数为 0 的 Collection，非空 Collection 会跳过。确定继续吗？')
+        !window.confirm(
+          '仅会删除当前成员数为 0 的 Collection，非空 Collection 会跳过。确定继续吗？',
+        )
       ) {
         return
       }
@@ -1206,9 +1229,7 @@ export function DashboardPage() {
       setRegistrationCodeCopied(false)
       setToastMessage('新注册码已生成并启用')
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : '注册码生成失败',
-      )
+      setErrorMessage(error instanceof Error ? error.message : '注册码生成失败')
     } finally {
       setRegistrationCodeStatus('idle')
     }
@@ -1230,11 +1251,239 @@ export function DashboardPage() {
   return (
     <PageContainer
       title="控制台"
-      description="查看 Adult-Other 当前库存健康度与自动化运行情况。"
+      description="查看 Emby 观看统计、Adult-Other 库存健康度与自动化运行情况。"
     >
       <div className="space-y-6">
-        <AdminQuickLinksPanel />
-
+        <div className="divide-y divide-slate-200 overflow-hidden rounded-xl bg-white shadow-shell ring-1 ring-slate-200">
+          <div className="flex flex-wrap items-center gap-3 px-5 py-4">
+            <div className="mr-auto">
+              <h2 className="flex items-center gap-2 text-sm font-semibold">
+                <RefreshCw className="h-4 w-4" />
+                AS 手动同步
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">媒体库手动刷新</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {autoSymlinkTargets.map((item) => (
+                <Button
+                  key={item.target}
+                  type="button"
+                  variant="outline"
+                  className="h-11"
+                  disabled={autoSymlinkTarget !== null || isSubmitting}
+                  onClick={() => void submitAutoSymlinkRefresh(item.target)}
+                >
+                  {autoSymlinkTarget === item.target ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  {item.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 px-5 py-3">
+            <KeyRound className="h-4 w-4 text-slate-500" />
+            <h2 className="text-sm font-medium">注册码</h2>
+            <code className="mr-auto break-all rounded-md bg-slate-100 px-3 py-2 text-sm font-semibold tracking-wider">
+              {registrationCodeStatus === 'loading'
+                ? '加载中'
+                : registrationCode || '未开放注册'}
+            </code>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11"
+              disabled={!registrationCode || registrationCodeStatus !== 'idle'}
+              onClick={() => void copyRegistrationCode()}
+            >
+              <Copy className="h-4 w-4" />
+              {registrationCodeCopied ? '已复制' : '复制'}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-11"
+              onClick={() => setWorkspace('registration')}
+            >
+              管理注册码
+            </Button>
+          </div>
+        </div>
+        <p role="status" className="text-xs text-slate-500">
+          同步状态：
+          {autoSymlinkTarget
+            ? `正在提交 ${autoSymlinkTargetLabel(autoSymlinkTarget)}`
+            : lastAutoSymlinkResult
+              ? `${autoSymlinkStatusLabels[lastAutoSymlinkResult.status]} ${autoSymlinkTargetLabel(lastAutoSymlinkResult.target)} · ${lastAutoSymlinkResult.message}`
+              : '等待手动触发'}
+        </p>
+        {errorMessage ? (
+          <div className="flex items-start gap-3 rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-100">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        ) : null}
+        <div
+          role="tablist"
+          aria-label="控制台工作区"
+          className="flex gap-5 overflow-x-auto border-b border-slate-200"
+          onKeyDown={(event) => {
+            const tabs = ['overview', 'registration', 'links', 'recovery']
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key))
+              return
+            event.preventDefault()
+            const next =
+              event.key === 'Home'
+                ? tabs[0]
+                : event.key === 'End'
+                  ? tabs[3]
+                  : tabs[
+                      (tabs.indexOf(workspace) +
+                        (event.key === 'ArrowRight' ? 1 : 3)) %
+                        4
+                    ]
+            setWorkspace(next)
+            document.getElementById(`dashboard-tab-${next}`)?.focus()
+          }}
+        >
+          {[
+            ['overview', '观看统计'],
+            ['registration', '注册码管理'],
+            ['links', '快捷入口'],
+            ['recovery', '高级恢复工具'],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              id={`dashboard-tab-${id}`}
+              aria-selected={workspace === id}
+              aria-controls={`dashboard-workspace-${id}`}
+              tabIndex={workspace === id ? 0 : -1}
+              onClick={() => setWorkspace(id)}
+              className={cn(
+                'min-h-12 shrink-0 border-b-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-500',
+                workspace === id
+                  ? 'border-slate-950 font-semibold text-slate-950'
+                  : 'border-transparent text-slate-500 hover:text-slate-900',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div
+          role="tabpanel"
+          id={`dashboard-workspace-${workspace}`}
+          aria-labelledby={`dashboard-tab-${workspace}`}
+          tabIndex={0}
+          className="space-y-6"
+        >
+          {workspace === 'overview' && (
+            <>
+              <LiveWatchingPanel />
+              <WatchStatisticsPanel />
+            </>
+          )}
+          {workspace === 'registration' && (
+            <div className="max-w-5xl">
+              {' '}
+              <OperationPanel icon={KeyRound} title="注册码">
+                <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_18rem_16rem] xl:items-start">
+                  <div className="min-w-0">
+                    <div className="flex min-h-16 items-center rounded-lg bg-slate-950 px-5 py-4">
+                      <p className="break-all font-mono text-xl font-semibold leading-8 tracking-[0.12em] text-white sm:text-2xl">
+                        {registrationCodeStatus === 'loading'
+                          ? '加载中'
+                          : registrationCode || '未开放注册'}
+                      </p>
+                    </div>
+                    <p className="mt-3 text-xs leading-5 text-slate-500">
+                      {registrationCodeSourceLabel(registrationCodeSource)}
+                      。生成新注册码后，旧注册码立即失效。
+                    </p>
+                    <p className="mt-1 truncate text-xs text-slate-500">
+                      当前邀请人：
+                      {registrationCodeInviter
+                        ? `${registrationCodeInviter.username} · ID ${registrationCodeInviter.id}`
+                        : '无邀请人（管理员直接邀请）'}
+                    </p>
+                  </div>
+                  <div className="min-w-0">
+                    <label
+                      className="mb-2 block text-xs font-semibold text-slate-500"
+                      htmlFor="registration-code-inviter"
+                    >
+                      新注册码邀请人
+                    </label>
+                    <SelectControl
+                      className="h-11 w-full"
+                      disabled={registrationCodeStatus !== 'idle'}
+                      id="registration-code-inviter"
+                      onChange={(event) =>
+                        setSelectedInviterUserId(event.target.value)
+                      }
+                      value={selectedInviterUserId}
+                    >
+                      <option value="">无邀请人（管理员直接邀请）</option>
+                      {registrationCodeInviter &&
+                      !inviterOptions.some(
+                        (user) => user.id === registrationCodeInviter.id,
+                      ) ? (
+                        <option value={registrationCodeInviter.id}>
+                          {registrationCodeInviter.username} · ID{' '}
+                          {registrationCodeInviter.id}
+                        </option>
+                      ) : null}
+                      {inviterOptions.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.username} · ID {user.id}
+                        </option>
+                      ))}
+                    </SelectControl>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      仅随下一次“生成并启用”生效。
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                    <Button
+                      className="h-11 w-full"
+                      disabled={registrationCodeStatus !== 'idle'}
+                      onClick={() => void generateRegistrationCode()}
+                      type="button"
+                    >
+                      {registrationCodeStatus === 'saving' ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" />
+                      )}
+                      生成并启用
+                    </Button>
+                    <Button
+                      className="h-11 w-full"
+                      disabled={
+                        !registrationCode || registrationCodeStatus !== 'idle'
+                      }
+                      onClick={() => void copyRegistrationCode()}
+                      type="button"
+                      variant="outline"
+                    >
+                      {registrationCodeCopied ? (
+                        <CheckCircle2 className="h-4 w-4" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                      {registrationCodeCopied ? '已复制' : '复制'}
+                    </Button>
+                  </div>
+                </div>
+              </OperationPanel>
+            </div>
+          )}
+          {workspace === 'links' && <AdminQuickLinksPanel />}
+          <div hidden={workspace !== 'recovery'} className="space-y-6">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard
             icon={Layers}
@@ -1273,7 +1522,7 @@ export function DashboardPage() {
           total={automationTotal}
         />
 
-        <details className="rounded-lg bg-white shadow-shell ring-1 ring-slate-200">
+        <details open className="rounded-lg bg-white shadow-shell ring-1 ring-slate-200">
           <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-slate-950">
             高级恢复工具
             <span className="ml-2 font-normal text-slate-500">
@@ -1281,7 +1530,7 @@ export function DashboardPage() {
             </span>
           </summary>
           <div className="space-y-6 border-t border-slate-100 p-5">
-            <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.25fr)_repeat(3,minmax(16rem,1fr))]">
+            <div className="grid gap-4 lg:grid-cols-3">
           <OperationPanel
             action={
               <Button
@@ -1448,139 +1697,12 @@ export function DashboardPage() {
             </div>
           </OperationPanel>
 
-          <OperationPanel icon={RefreshCw} title="AS 手动同步">
-            <div className="grid grid-cols-2 gap-3">
-              {autoSymlinkTargets.map((item) => (
-                <Button
-                  className="h-11"
-                  disabled={autoSymlinkTarget !== null || isSubmitting}
-                  key={item.target}
-                  onClick={() => void submitAutoSymlinkRefresh(item.target)}
-                  type="button"
-                  variant={item.target === 'ADULT' ? 'default' : 'outline'}
-                >
-                  {autoSymlinkTarget === item.target ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                  {item.label}
-                </Button>
-              ))}
-            </div>
-            <div className="mt-5 border-t border-slate-100 pt-4 text-sm">
-              <p className="text-xs text-slate-500">同步状态</p>
-              <p className="mt-1 truncate font-medium text-slate-900">
-                {autoSymlinkTarget
-                  ? `正在提交 ${autoSymlinkTargetLabel(autoSymlinkTarget)}`
-                  : lastAutoSymlinkResult
-                    ? `${autoSymlinkStatusLabels[lastAutoSymlinkResult.status]} ${autoSymlinkTargetLabel(lastAutoSymlinkResult.target)}`
-                    : '等待手动触发'}
-              </p>
-              {lastAutoSymlinkResult ? (
-                <p className="mt-1 truncate text-xs text-slate-500">
-                  {lastAutoSymlinkResult.message} ·{' '}
-                  {formatDateTime(lastAutoSymlinkResult.finishedAt)}
-                </p>
-              ) : null}
-            </div>
-          </OperationPanel>
+
             </div>
 
-        <OperationPanel icon={KeyRound} title="注册码">
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_18rem_16rem] xl:items-start">
-            <div className="min-w-0">
-              <div className="flex min-h-16 items-center rounded-lg bg-slate-950 px-5 py-4">
-                <p className="break-all font-mono text-xl font-semibold leading-8 tracking-[0.12em] text-white sm:text-2xl">
-                  {registrationCodeStatus === 'loading'
-                    ? '加载中'
-                    : registrationCode || '未开放注册'}
-                </p>
-              </div>
-              <p className="mt-3 text-xs leading-5 text-slate-500">
-                {registrationCodeSourceLabel(registrationCodeSource)}。生成新注册码会写入后端数据库，并立即作为注册页校验值。
-              </p>
-              <p className="mt-1 truncate text-xs text-slate-500">
-                当前邀请人：
-                {registrationCodeInviter
-                  ? `${registrationCodeInviter.username} · ID ${registrationCodeInviter.id}`
-                  : '无邀请人（管理员直接邀请）'}
-              </p>
-            </div>
-            <div className="min-w-0">
-              <label
-                className="mb-2 block text-xs font-semibold text-slate-500"
-                htmlFor="registration-code-inviter"
-              >
-                新注册码邀请人
-              </label>
-              <SelectControl
-                className="h-11 w-full"
-                disabled={registrationCodeStatus !== 'idle'}
-                id="registration-code-inviter"
-                onChange={(event) =>
-                  setSelectedInviterUserId(event.target.value)
-                }
-                value={selectedInviterUserId}
-              >
-                <option value="">无邀请人（管理员直接邀请）</option>
-                {registrationCodeInviter &&
-                !inviterOptions.some(
-                  (user) => user.id === registrationCodeInviter.id,
-                ) ? (
-                  <option value={registrationCodeInviter.id}>
-                    {registrationCodeInviter.username} · ID{' '}
-                    {registrationCodeInviter.id}
-                  </option>
-                ) : null}
-                {inviterOptions.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.username} · ID {user.id}
-                  </option>
-                ))}
-              </SelectControl>
-              <p className="mt-2 text-xs leading-5 text-slate-500">
-                仅随下一次“生成并启用”生效。
-              </p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <Button
-                className="h-11 w-full"
-                disabled={registrationCodeStatus !== 'idle'}
-                onClick={() => void generateRegistrationCode()}
-                type="button"
-              >
-                {registrationCodeStatus === 'saving' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                生成并启用
-              </Button>
-              <Button
-                className="h-11 w-full"
-                disabled={!registrationCode || registrationCodeStatus !== 'idle'}
-                onClick={() => void copyRegistrationCode()}
-                type="button"
-                variant="outline"
-              >
-                {registrationCodeCopied ? (
-                  <CheckCircle2 className="h-4 w-4" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-                {registrationCodeCopied ? '已复制' : '复制'}
-              </Button>
-            </div>
-          </div>
-        </OperationPanel>
 
-        {errorMessage ? (
-          <div className="flex items-start gap-3 rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-100">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{errorMessage}</span>
-          </div>
-        ) : null}
+
+
 
             {selectedRun ? (
           <>
@@ -1681,6 +1803,8 @@ export function DashboardPage() {
             )}
           </div>
         </details>
+          </div>
+        </div>
       </div>
 
       {toastMessage ? (

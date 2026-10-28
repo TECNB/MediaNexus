@@ -1,21 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  Activity,
+  Clock3,
+  Play,
+  Users,
   CalendarRange,
   Hash,
-  Lightbulb,
   Loader2,
   RefreshCw,
-  ShieldCheck,
   Terminal,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
 
-import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
 import { DateControl } from '@/components/ui/form-control'
 import { getEmbyWatchRankings } from '@/lib/api/emby-watch-rankings'
 import { isJavaRequestCanceledError } from '@/lib/java-api'
-import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
 import type {
   EmbyMediaWatchRankingItem,
@@ -182,78 +181,25 @@ function getAvatarTone(index: number) {
   return tones[index % tones.length]
 }
 
-function ForbiddenWatchRankingsPage() {
-  const navigate = useNavigate()
-
-  return (
-    <PageContainer
-      title="无权限"
-      description="Emby 观看活跃与排行统计仅管理员可见。"
-    >
-      <div className="rounded-2xl bg-white p-8 shadow-shell ring-1 ring-slate-200">
-        <div className="flex items-start gap-4">
-          <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
-            <ShieldCheck className="h-5 w-5" />
-          </div>
-          <div className="space-y-4">
-            <div>
-              <p className="text-base font-semibold text-slate-950">
-                你没有访问观看统计的权限
-              </p>
-              <p className="mt-1 text-sm text-slate-500">
-                该页面用于管理员查看 Emby 使用活跃情况。
-              </p>
-            </div>
-            <Button onClick={() => navigate('/resources')} type="button">
-              返回资源搜索
-            </Button>
-          </div>
-        </div>
-      </div>
-    </PageContainer>
-  )
-}
-
 function SummaryPanel({ data }: { data: EmbyWatchRankingData }) {
-  const summaryLabel = data.period === 'month' ? '月统计概览' : '日统计概览'
+  const metrics = [
+    { label: '活跃用户', value: data.summary.active_user_count, icon: Users },
+    { label: '播放次数', value: data.summary.total_play_count, icon: Play },
+    { label: '总观看时长', value: formatDuration(data.summary.total_watch_seconds), icon: Clock3 },
+    { label: '跟踪中的会话', value: data.webhook_status.active_session_count, icon: Activity },
+  ]
 
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-shell ring-1 ring-slate-200">
-      <div className="mb-6 flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase text-slate-400">
-          {summaryLabel}
-        </p>
-        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[0.6875rem] font-semibold text-slate-500">
-          {data.timezone}
-        </span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-5">
-        <div>
-          <p className="text-xs text-slate-500">活跃用户</p>
-          <p className="mt-1 text-3xl font-semibold text-slate-950">
-            {data.summary.active_user_count}
-          </p>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {metrics.map(({ label, value, icon: Icon }) => (
+        <div className="rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200" key={label}>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-slate-500">{label}</p>
+            <Icon aria-hidden="true" className="h-5 w-5 text-emerald-600" />
+          </div>
+          <p className="mt-4 break-words text-2xl font-semibold text-slate-950">{value}</p>
         </div>
-        <div>
-          <p className="text-xs text-slate-500">播放次数</p>
-          <p className="mt-1 text-3xl font-semibold text-slate-950">
-            {data.summary.total_play_count}
-          </p>
-        </div>
-        <div className="col-span-2">
-          <p className="text-xs text-slate-500">总观看时长</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-950">
-            {formatDuration(data.summary.total_watch_seconds)}
-          </p>
-        </div>
-        <div className="col-span-2 rounded-xl bg-slate-50 p-4">
-          <p className="text-xs text-slate-500">最近观看</p>
-          <p className="mt-1 text-sm font-semibold text-slate-900">
-            {formatDateTime(data.summary.last_watched_at)}
-          </p>
-        </div>
-      </div>
+      ))}
     </div>
   )
 }
@@ -265,6 +211,8 @@ function UserRankingTable({
   period: EmbyWatchRankingPeriod
   users: EmbyUserWatchRankingItem[]
 }) {
+  const maxWatchSeconds = Math.max(1, ...users.map((user) => user.watch_seconds))
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
@@ -308,7 +256,10 @@ function UserRankingTable({
                   </div>
                 </td>
                 <td className="py-4 pr-4 font-semibold text-slate-950">
-                  {formatCompactDuration(user.watch_seconds)}
+                  <span className="whitespace-nowrap">{formatCompactDuration(user.watch_seconds)}</span>
+                  <div aria-hidden="true" className="mt-2 h-1.5 w-24 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.max(0, Math.min(100, user.watch_seconds / maxWatchSeconds * 100))}%` }} />
+                  </div>
                 </td>
                 <td className="py-4 pr-4 text-slate-500">
                   {user.play_count} 次
@@ -347,38 +298,30 @@ function MediaRankingCard({
   title: string
   items: EmbyMediaWatchRankingItem[]
 }) {
+  const maxWatchSeconds = Math.max(1, ...items.map((item) => item.watch_seconds))
+
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-shell ring-1 ring-slate-200">
-      <h2 className="text-base font-semibold text-slate-950">{title}</h2>
-      <div className="mt-5 overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="text-xs text-slate-400">
-              <th className="pb-3 pr-3 font-semibold">Rank</th>
-              <th className="pb-3 pr-3 font-semibold">Title</th>
-              <th className="pb-3 text-right font-semibold">Watch Time</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {items.map((item) => (
-              <tr
-                className="transition-colors hover:bg-slate-50/80"
-                key={item.media_id}
-              >
-                <td className="py-3 pr-3 font-medium text-slate-400">
-                  {item.rank}
-                </td>
-                <td className="max-w-[220px] truncate py-3 pr-3 font-semibold text-slate-950">
-                  {item.title}
-                </td>
-                <td className="py-3 text-right font-semibold text-slate-950">
-                  {formatCompactDuration(item.watch_seconds)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div className="min-w-0 rounded-2xl bg-white p-6 shadow-shell ring-1 ring-slate-200">
+      <h3 className="text-base font-semibold text-slate-950">{title}</h3>
+      <ol className="mt-5 divide-y divide-slate-100">
+        {items.map((item) => (
+          <li className="flex items-start gap-3 py-4" key={item.media_id}>
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-sm font-semibold text-slate-500">
+              {item.rank}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-slate-950" title={item.title}>{item.title}</p>
+              <div className="mt-1 flex flex-wrap justify-between gap-x-3 text-xs text-slate-500">
+                <span>{item.play_count} 次播放</span>
+                <span>{formatCompactDuration(item.watch_seconds)}</span>
+              </div>
+              <div aria-hidden="true" className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.max(0, Math.min(100, item.watch_seconds / maxWatchSeconds * 100))}%` }} />
+              </div>
+            </div>
+          </li>
+        ))}
+      </ol>
     </div>
   )
 }
@@ -451,7 +394,7 @@ function WebhookMonitor({ data }: { data: EmbyWatchRankingData }) {
   )
 }
 
-function EmbyWatchRankingPageContent() {
+export function WatchStatisticsPanel() {
   const [period, setPeriod] = useState<EmbyWatchRankingPeriod>('day')
   const [date, setDate] = useState(getTodayDateInput)
   const [month, setMonth] = useState(getCurrentMonthInput)
@@ -474,10 +417,11 @@ function EmbyWatchRankingPageContent() {
             : { period, date, limit },
           signal,
         )
+        if (signal?.aborted) return
         setData(rankingData)
         setStatus('success')
       } catch (error) {
-        if (isJavaRequestCanceledError(error)) {
+        if (signal?.aborted || isJavaRequestCanceledError(error)) {
           return
         }
         setStatus('error')
@@ -509,10 +453,14 @@ function EmbyWatchRankingPageContent() {
   }, [loadRankings, refreshIndex])
 
   return (
-    <PageContainer
-      title="Emby 观看活跃与排行统计"
-      description="查看朋友们是否在使用媒体服务，以及按天或按月聚合的用户和作品观看排行。"
-    >
+    <section aria-labelledby="watch-statistics-title" aria-busy={status === 'loading'} className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-950" id="watch-statistics-title">观看统计</h2>
+          <p className="mt-1 text-sm text-slate-500">Emby 观看活跃与排行统计</p>
+        </div>
+        {data ? <span className="text-xs text-slate-500">{data.period === 'month' ? data.month : data.date} · {data.timezone}</span> : null}
+      </div>
       <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-shell ring-1 ring-slate-200 md:flex-row md:items-center md:justify-between">
         <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1 text-sm font-semibold text-slate-500 md:w-[180px]">
           <button
@@ -522,6 +470,7 @@ function EmbyWatchRankingPageContent() {
                 ? 'bg-white text-slate-950 shadow-sm'
                 : 'hover:text-slate-700',
             )}
+            aria-pressed={period === 'day'}
             onClick={() => handlePeriodChange('day')}
             type="button"
           >
@@ -534,6 +483,7 @@ function EmbyWatchRankingPageContent() {
                 ? 'bg-white text-slate-950 shadow-sm'
                 : 'hover:text-slate-700',
             )}
+            aria-pressed={period === 'month'}
             onClick={() => handlePeriodChange('month')}
             type="button"
           >
@@ -543,6 +493,7 @@ function EmbyWatchRankingPageContent() {
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
           {period === 'month' ? (
             <DateControl
+              aria-label="统计月份"
               icon={<CalendarRange className="h-4 w-4" />}
               onChange={(event) => setMonth(event.target.value)}
               type="month"
@@ -552,6 +503,7 @@ function EmbyWatchRankingPageContent() {
             />
           ) : (
             <DateControl
+              aria-label="统计日期"
               onChange={(event) => setDate(event.target.value)}
               type="date"
               value={date}
@@ -563,6 +515,7 @@ function EmbyWatchRankingPageContent() {
             <Hash className="h-4 w-4 text-slate-400" />
             <input
               className="w-16 bg-transparent text-center font-medium text-slate-950 outline-none"
+              aria-label="排行数量"
               min="1"
               onChange={(event) => setLimitDraft(event.target.value)}
               type="number"
@@ -571,11 +524,12 @@ function EmbyWatchRankingPageContent() {
           </label>
           <Button
             className="h-10"
+            disabled={status === 'loading'}
             onClick={() => setRefreshIndex((value) => value + 1)}
             type="button"
             variant="outline"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className={cn('h-4 w-4', status === 'loading' && 'animate-spin')} />
             刷新
           </Button>
         </div>
@@ -598,14 +552,15 @@ function EmbyWatchRankingPageContent() {
       ) : null}
 
       {data ? (
-        <div className="grid grid-cols-1 gap-8 xl:grid-cols-12">
-          <div className="space-y-8 xl:col-span-8">
+        <div className="space-y-5">
+          <SummaryPanel data={data} />
+          <div className="space-y-5">
             <div className="rounded-2xl bg-white p-6 shadow-shell ring-1 ring-slate-200">
               <div className="mb-6 flex items-center justify-between">
                 <div>
-                  <h2 className="text-base font-semibold text-slate-950">
+                  <h3 className="text-base font-semibold text-slate-950">
                     用户观看排行
-                  </h2>
+                  </h3>
                   <p className="mt-1 text-xs text-slate-500">
                     根据已结束播放会话统计，正在播放中的会话会在停止后入账。
                   </p>
@@ -625,7 +580,7 @@ function EmbyWatchRankingPageContent() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
               {data.movies.length > 0 ? (
                 <MediaRankingCard items={data.movies} title="电影排行" />
               ) : (
@@ -647,39 +602,20 @@ function EmbyWatchRankingPageContent() {
             </div>
           </div>
 
-          <div className="space-y-8 xl:col-span-4">
-            <SummaryPanel data={data} />
-            <WebhookMonitor data={data} />
-            <div className="relative overflow-hidden rounded-2xl bg-slate-100 p-5 ring-1 ring-slate-200">
-              <div className="absolute -right-4 -top-4 h-16 w-16 rounded-full bg-slate-950/5 blur-xl" />
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-                <Lightbulb className="h-4 w-4" />
-                Pro Tip
-              </h2>
-              <p className="mt-2 text-xs leading-6 text-slate-500">
-                排行数据基于 Emby Webhooks 实时入库。配置
-                playback.start 与 playback.stop 后，观看时长会在停止播放时更新。
-              </p>
-            </div>
-          </div>
+          <details className="rounded-2xl bg-white shadow-shell ring-1 ring-slate-200">
+            <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-slate-700 focus-visible:outline-emerald-600">
+              Webhooks 实时监控
+            </summary>
+            <div className="px-5 pb-5"><WebhookMonitor data={data} /></div>
+          </details>
         </div>
       ) : null}
 
       {data ? (
         <footer className="text-right text-xs text-slate-400">
-          数据每次播放停止后更新 · Generated at {formatDateTime(data.generated_at)}
+          最近观看 {formatDateTime(data.summary.last_watched_at)} · 数据每次播放停止后更新 · Generated at {formatDateTime(data.generated_at)}
         </footer>
       ) : null}
-    </PageContainer>
+    </section>
   )
-}
-
-export function EmbyWatchRankingsPage() {
-  const { user } = useAuth()
-
-  if (user?.role !== 'ADMIN') {
-    return <ForbiddenWatchRankingsPage />
-  }
-
-  return <EmbyWatchRankingPageContent />
 }

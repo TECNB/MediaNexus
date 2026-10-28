@@ -5,7 +5,6 @@ import { AdminLayout } from '@/layouts/admin-layout'
 import { LoginPage, RegisterPage } from '@/pages/auth'
 import { DashboardPage } from '@/pages/dashboard'
 import { DocsPage } from '@/pages/docs'
-import { EmbyWatchRankingsPage } from '@/pages/emby-watch-rankings'
 import { AutomationPage } from '@/pages/automation'
 import { TelegramAutomationPage } from '@/pages/automation/telegram'
 import { MagnetIngestPage } from '@/pages/magnet-ingest'
@@ -60,7 +59,7 @@ export const router = createBrowserRouter([
       { path: 'tasks/quark/:taskId', element: <QuarkTaskCenterDetailPage /> },
       { path: 'tasks/:taskType/:taskId', element: <TaskCenterDetailPage /> },
       { path: 'subtitles', element: <SubtitleManagePage /> },
-      { path: 'emby-watch-rankings', element: <EmbyWatchRankingsPage /> },
+      { path: 'emby-watch-rankings', element: <Navigate to="/dashboard" replace /> },
       { path: 'users', element: <UserManagementPage /> },
       {
         path: 'settings',
