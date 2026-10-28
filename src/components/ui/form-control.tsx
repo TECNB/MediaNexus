@@ -299,6 +299,7 @@ type DateControlProps = Omit<
 > & {
   onBlur?: React.FocusEventHandler<HTMLButtonElement>
   type?: 'date' | 'month'
+  getTodayValue?: () => string
   wrapperClassName?: string
   icon?: React.ReactNode
   iconClassName?: string
@@ -378,6 +379,7 @@ const DateControl = React.forwardRef<HTMLButtonElement, DateControlProps>(
       icon,
       iconClassName,
       type = 'date',
+      getTodayValue,
       ...props
     },
     ref,
@@ -621,6 +623,10 @@ const DateControl = React.forwardRef<HTMLButtonElement, DateControlProps>(
                   <button
                     className="rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-950 hover:bg-slate-100"
                     onClick={() => {
+                      if (getTodayValue) {
+                        commitValue(getTodayValue())
+                        return
+                      }
                       const today = new Date()
                       commitValue(
                         type === 'month'
