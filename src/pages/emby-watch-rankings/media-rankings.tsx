@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useState } from 'react'
-import { ArrowDownWideNarrow, ChevronDown, Film, ShieldCheck, Users } from 'lucide-react'
+import { ArrowDownWideNarrow, ChevronDown, Film, ShieldCheck } from 'lucide-react'
 import { getWatchMedia, getWatchViewers } from '@/lib/api/emby-watch-rankings'
 import { cn } from '@/lib/utils'
 import type { EmbyMediaWatchRankingItem, WatchCategory, WatchSort } from '@/types/emby-watch-rankings'
@@ -91,7 +91,6 @@ function CategoryRanking({ category, sort, enabled, ...view }: WatchViewProps & 
       <h4 className="text-sm font-semibold text-foreground">{categoryNames[category]}</h4>
       {category === 'adult' ? <ShieldCheck aria-label="始终无海报" className="h-4 w-4 text-muted-foreground" /> : query.data && <span className="text-xs text-muted-foreground">共 {query.data.total} 部作品</span>}
     </div>
-    {category === 'adult' && <p className="border-b border-border px-5 py-3 text-xs leading-6 text-muted-foreground">{view.reveal ? '仅展开文字片名，始终不展示海报。' : '片名已隐藏，时长和统计贡献保留。'}</p>}
     {query.loading && <WatchLoading />}
     {query.error && <WatchError message={query.error} retry={query.retry} />}
     {privateTitles.error && <p className="px-5 py-3 text-xs text-rose-700" role="alert">{privateTitles.error}</p>}
@@ -121,14 +120,12 @@ export function MediaWatchRankings({ enabled, ...view }: WatchViewProps & { enab
   const canLoad = enabled || visited
   return <section className="min-w-0 space-y-5">
     <div className="flex flex-wrap items-end justify-between gap-3">
-      <div><h3 className="flex items-center gap-2 text-base font-semibold text-foreground"><Film aria-hidden="true" className="h-4 w-4 text-primary" />作品观看排行</h3><p className="mt-1 text-xs leading-6 text-muted-foreground">按整部作品汇总 · 剧集各季各集合并 · 仅计已结束有效播放</p></div>
+      <div><h3 className="flex items-center gap-2 text-base font-semibold text-foreground"><Film aria-hidden="true" className="h-4 w-4 text-primary" />作品观看排行</h3></div>
       <label className="flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-3 text-sm text-muted-foreground"><ArrowDownWideNarrow aria-hidden="true" className="h-4 w-4" /><span className="sr-only">作品排行排序</span><select className="min-h-11 bg-transparent text-sm focus-visible:outline-ring" onChange={event => setSort(event.target.value as WatchSort)} value={sort}><option value="duration">按观看时长</option><option value="viewers">按观看人数</option><option value="plays">按播放次数</option></select></label>
     </div>
     <div className="grid min-w-0 items-start gap-5 lg:grid-cols-3">{(['movie', 'series', 'adult'] as const).map(category => <CategoryRanking {...view} category={category} enabled={canLoad} key={`${category}:${view.pageSize}`} sort={sort} />)}</div>
-    <p className="flex items-start gap-2 text-xs leading-6 text-muted-foreground"><Users aria-hidden="true" className="mt-1 h-4 w-4 shrink-0" />观看人数按 Emby 用户去重；播放次数按有效会话计数，多设备时长累加。排序覆盖完整类别后再分页。</p>
     <details className="rounded-2xl border border-border bg-muted/50 p-4" onToggle={event => setUnknownOpen(event.currentTarget.open)}>
       <summary className="min-h-8 cursor-pointer text-sm font-medium text-muted-foreground focus-visible:outline-ring">分类待确认的观看作品</summary>
-      <p className="py-3 text-xs leading-6 text-muted-foreground">已保留总览与用户统计贡献；分类未确认前隐藏片名与海报。</p>
       <CategoryRanking {...view} key={`unknown:${view.pageSize}`} category="unknown" enabled={canLoad && unknownOpen} sort={sort} />
     </details>
   </section>

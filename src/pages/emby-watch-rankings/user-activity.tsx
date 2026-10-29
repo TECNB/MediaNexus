@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { ChevronDown, Clock3, ShieldCheck, Users } from 'lucide-react'
+import { ChevronDown, Clock3, Users } from 'lucide-react'
 import { getWatchActivity, getWatchSessions, getWatchUsers, getWatchWorks } from '@/lib/api/emby-watch-rankings'
 import type { EmbyWatchRankingParams, WatchSession, WatchCategory, EmbyMediaWatchRankingItem } from '@/types/emby-watch-rankings'
 import { cn } from '@/lib/utils'
@@ -69,7 +69,7 @@ export function UserWatchActivity(view: WatchViewProps) {
   const query = useWatchQuery(load, true, view.refresh)
   const privateTitles = usePrivateWatchTitles(query.data?.items.filter(user => user.last_category === 'adult').flatMap(user => user.last_item_id ? [user.last_item_id] : []) ?? [], view.reveal)
   return <section aria-busy={query.loading} className="min-w-0 overflow-hidden rounded-2xl bg-card ring-1 ring-border">
-    <div className="flex items-center justify-between border-b border-border px-5 py-4"><div><h3 className="font-semibold text-foreground">用户观看排行</h3><p className="mt-1 text-xs text-muted-foreground">按已结束有效播放时长排序 · 展开查看作品和播放时间线</p></div><Users aria-hidden="true" className="h-5 w-5 shrink-0 text-primary" /></div>
+    <div className="flex items-center justify-between border-b border-border px-5 py-4"><div><h3 className="font-semibold text-foreground">用户观看排行</h3></div><Users aria-hidden="true" className="h-5 w-5 shrink-0 text-primary" /></div>
     {query.loading && <WatchLoading />}{query.error && <WatchError message={query.error} retry={query.retry} />}{privateTitles.error && <p className="px-5 pt-3 text-xs text-rose-700" role="alert">{privateTitles.error}</p>}
     {query.data && <><ol className="divide-y divide-border">{query.data.items.map(user => {
       const open = expanded.includes(user.emby_user_id)
@@ -82,7 +82,7 @@ export function UserWatchActivity(view: WatchViewProps) {
           <span className="order-last w-full min-w-0 pl-8 text-xs leading-6 text-muted-foreground sm:order-none sm:w-48 sm:pl-0">最近观看 · {watchTime(user.last_watched_at)}<span className="block break-words text-foreground">{lastTitle} {episode && <code className="rounded bg-muted px-1 text-primary">{episode}</code>}</span></span>
           <strong className="text-sm font-semibold text-foreground">{watchDuration(user.watch_seconds)}</strong><ChevronDown aria-hidden="true" className={cn('h-4 w-4 text-muted-foreground transition-transform', open && 'rotate-180')} />
         </button>
-        {open && <div className="grid min-w-0 gap-7 border-t border-border p-5 xl:grid-cols-2"><section className="min-w-0"><h4 className="mb-4 text-sm font-medium text-muted-foreground">所选范围的全部作品</h4><UserWorks {...view} userId={user.emby_user_id} /></section><section className="min-w-0"><h4 className="mb-4 flex flex-wrap justify-between gap-2 text-sm font-medium text-muted-foreground">逐次播放时间线<span className="text-xs font-normal text-muted-foreground">北京时间</span></h4><UserSessions {...view} userId={user.emby_user_id} /><p className="mt-5 text-xs leading-6 text-muted-foreground">时间段包含暂停，观看时长扣除暂停；跨日记录同时显示所选范围贡献和整次时长。</p></section></div>}
+        {open && <div className="grid min-w-0 gap-7 border-t border-border p-5 xl:grid-cols-2"><section className="min-w-0"><h4 className="mb-4 text-sm font-medium text-muted-foreground">所选范围的全部作品</h4><UserWorks {...view} userId={user.emby_user_id} /></section><section className="min-w-0"><h4 className="mb-4 flex flex-wrap justify-between gap-2 text-sm font-medium text-muted-foreground">逐次播放时间线</h4><UserSessions {...view} userId={user.emby_user_id} /></section></div>}
       </li>
     })}</ol>{!query.data.items.length && <p className="p-8 text-center text-sm text-muted-foreground">所选范围暂无已结算观看记录。</p>}<div className="px-5 pb-4"><WatchPagination loading={query.loading} onPage={setPage} page={page} pageSize={view.pageSize} total={query.data.total} /></div></>}
   </section>
@@ -93,7 +93,7 @@ export function TrackedWatchActivity(view: WatchViewProps) {
   const [selectedUser, setSelectedUser] = useState<string | null>(null)
   const load = useCallback((signal: AbortSignal) => getWatchActivity({ ...view.range, page, page_size: view.pageSize }, signal), [view.range, page, view.pageSize])
   const query = useWatchQuery(load, true, view.refresh)
-  return <section className="min-w-0 rounded-2xl bg-card p-5 ring-1 ring-border" aria-busy={query.loading}><div className="mb-4 flex items-center gap-2"><Clock3 aria-hidden="true" className="h-4 w-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">进行中与待确认的动向</h3></div><p className="mb-5 flex items-start gap-2 text-xs leading-6 text-muted-foreground"><ShieldCheck aria-hidden="true" className="mt-1 h-4 w-4 shrink-0" />估算仅供了解动向，不进入正式排行；核验失败时冻结在最后已知时间。暂停时长不持续增长。</p>
+  return <section className="min-w-0 rounded-2xl bg-card p-5 ring-1 ring-border" aria-busy={query.loading}><div className="mb-4 flex items-center gap-2"><Clock3 aria-hidden="true" className="h-4 w-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">进行中与待确认的动向</h3></div>
     {query.loading && <WatchLoading />}{query.error && <WatchError message={query.error} retry={query.retry} />}{query.data && <>{!query.data.items.length ? <p className="text-sm text-muted-foreground">所选范围暂无跟踪中的播放。</p> : <ul className="space-y-5">{query.data.items.map(session => <li className="min-w-0 rounded-xl border border-border p-4" key={session.id}><button className="mb-3 min-h-10 text-sm font-semibold text-primary hover:underline focus-visible:outline-ring" onClick={() => setSelectedUser(selectedUser === session.emby_user_id ? null : session.emby_user_id)} type="button" aria-expanded={selectedUser === session.emby_user_id}>{session.user_name} · 查看完整动向</button><SessionList sessions={[session]} reveal={view.reveal} />{selectedUser === session.emby_user_id && <div className="mt-5 border-t border-border pt-5"><UserSessions {...view} userId={session.emby_user_id} /></div>}</li>)}</ul>}<WatchPagination loading={query.loading} onPage={setPage} page={page} pageSize={view.pageSize} total={query.data.total} /></>}
   </section>
 }
