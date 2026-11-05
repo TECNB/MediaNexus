@@ -50,7 +50,8 @@ export type WatchSession = {
   episode_number: number | null
   start_time: string
   stop_time: string | null
-  stop_time_source: 'event' | 'superseded' | 'unknown' | null
+  stop_time_source: 'event' | 'superseded' | 'inferred' | 'migration' | 'unknown' | null
+  source?: 'sampling' | 'webhook' | null
   watch_seconds: number
   range_watch_seconds: number
   accounting_basis: 'calendar' | 'legacy'
@@ -63,9 +64,11 @@ export type WatchSession = {
 }
 export type WatchViewer = { emby_user_id: string; user_name: string; watch_seconds: number; play_count: number }
 export type WatchPage<T> = { items: T[]; page: number; page_size: number; total: number }
-export type PrivateWatchTitle = { item_id: string; media_id: string; title: string }
+export type PrivateWatchTitle = { item_id: string; media_id: string; title: string | null }
 export type EmbyWebhookRecentEvent = {
   event: string
+  source?: 'sampling' | 'webhook' | null
+  stop_time_source?: WatchSession['stop_time_source']
   item_id: string
   media_id: string
   category: WatchCategory

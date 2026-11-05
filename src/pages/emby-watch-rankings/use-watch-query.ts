@@ -33,7 +33,7 @@ export function useWatchQuery<T>(load: (signal: AbortSignal) => Promise<T>, enab
 
 export function usePrivateWatchTitles(ids: string[], reveal: boolean) {
   const key = [...new Set(ids)].sort().join(',')
-  const [titles, setTitles] = useState<{ key: string; entries: Record<string, string> } | null>(null)
+  const [titles, setTitles] = useState<{ key: string; entries: Record<string, string | null> } | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     const controller = new AbortController()

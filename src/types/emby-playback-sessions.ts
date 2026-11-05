@@ -1,3 +1,5 @@
+import type { WatchCategory } from './emby-watch-rankings'
+
 export type EmbyPlaybackSession = {
   id: string
   userId: string | null
@@ -7,6 +9,7 @@ export type EmbyPlaybackSession = {
   paused: boolean | null
   itemId: string
   type: string
+  category: WatchCategory
   title: string | null
   seriesName: string | null
   seasonNumber: number | null
@@ -20,4 +23,8 @@ export type EmbyPlaybackSession = {
 export type EmbyPlaybackSnapshot = {
   collectedAt: string
   sessions: EmbyPlaybackSession[]
+  stale: boolean
+  lastAttemptAt: string | null
+  collectionStatus: 'fresh' | 'stale' | 'unavailable'
+  collectionMessage: string | null
 }

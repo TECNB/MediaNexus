@@ -19,4 +19,11 @@ export const getWatchSessions = (userId: string, params: WatchPageParams & { med
 export const getWatchActivity = (params: WatchPageParams, signal?: AbortSignal) => readWatchStatistics<WatchPage<WatchSession>>('/activity', params, signal)
 export const getWatchMedia = (params: WatchPageParams & { category: WatchCategory; sort: WatchSort }, signal?: AbortSignal) => readWatchStatistics<WatchPage<EmbyMediaWatchRankingItem>>('/media', params, signal)
 export const getWatchViewers = (params: WatchPageParams & { media_id: string; category: WatchCategory }, signal?: AbortSignal) => readWatchStatistics<WatchPage<WatchViewer>>('/viewers', params, signal)
-export const getPrivateWatchTitles = (itemIds: string[], signal?: AbortSignal) => readWatchStatistics<PrivateWatchTitle[]>('/private-titles', { item_ids: itemIds.join(',') }, signal)
+export const getPrivateWatchTitles = async (itemIds: string[], signal?: AbortSignal) => {
+  if (itemIds.length <= 100) return readWatchStatistics<PrivateWatchTitle[]>('/private-titles', { item_ids: itemIds.join(',') }, signal)
+  const requests = []
+  for (let offset = 0; offset < itemIds.length; offset += 100) {
+    requests.push(readWatchStatistics<PrivateWatchTitle[]>('/private-titles', { item_ids: itemIds.slice(offset, offset + 100).join(',') }, signal))
+  }
+  return (await Promise.all(requests)).flat()
+}

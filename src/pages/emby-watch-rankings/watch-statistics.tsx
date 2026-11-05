@@ -4,12 +4,20 @@ import { Button } from '@/components/ui/button'
 import { DateControl, SelectControl } from '@/components/ui/form-control'
 import { getEmbyWatchRankings } from '@/lib/api/emby-watch-rankings'
 import { cn } from '@/lib/utils'
-import type { EmbyWatchRankingParams, EmbyWatchRankingPeriod } from '@/types/emby-watch-rankings'
+import type { EmbyWatchRankingParams, EmbyWatchRankingPeriod, EmbyWebhookRecentEvent } from '@/types/emby-watch-rankings'
 import { todayInShanghai, watchDuration, watchTime } from './watch-format'
 import { WatchError, WatchLoading } from './watch-components'
 import { usePrivateWatchTitles, useWatchQuery } from './use-watch-query'
 import { TrackedWatchActivity, UserWatchActivity } from './user-activity'
 import { MediaWatchRankings } from './media-rankings'
+
+function movementLabel(event: EmbyWebhookRecentEvent) {
+  if (event.event === 'playback.stop') {
+    if (event.stop_time_source === 'migration') return '迁移交接推定结束'
+    return event.source === 'sampling' ? '推定结束' : '播放结束'
+  }
+  return event.source === 'sampling' ? '观察到播放' : '播放开始'
+}
 
 function RecentWatchEvents({ range, reveal, refresh }: { range: EmbyWatchRankingParams; reveal: boolean; refresh: number }) {
   const [open, setOpen] = useState(false)
@@ -19,13 +27,13 @@ function RecentWatchEvents({ range, reveal, refresh }: { range: EmbyWatchRanking
   const privateTitles = usePrivateWatchTitles(events.filter(event => event.category === 'adult').map(event => event.item_id), reveal && open)
 
   return <details className="rounded-2xl bg-card p-5 ring-1 ring-border" onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary className="cursor-pointer text-sm font-medium text-muted-foreground focus-visible:outline-ring">最近播放事件</summary>
+    <summary className="cursor-pointer text-sm font-medium text-muted-foreground focus-visible:outline-ring">最近播放动向</summary>
     {open && <div className="mt-4">
       {query.loading && <WatchLoading />}
       {query.error && <WatchError message={query.error} retry={query.retry} />}
       {privateTitles.error && <p role="alert" className="mb-3 text-xs text-rose-700">{privateTitles.error}</p>}
-      {query.data && <ul className="space-y-3 text-xs leading-6 text-muted-foreground">{events.map((event, index) => <li className="break-words" key={`${event.item_id}-${event.event_time}-${index}`}>{watchTime(event.event_time)} · {event.user_name} · {event.category === 'unknown' ? '分类待确认' : event.category === 'adult' ? privateTitles.titles[event.item_id] || '私密观看' : event.item_name} · {event.event === 'playback.stop' ? '播放结束' : '播放开始'}{event.watch_seconds !== null && ` · 观看 ${watchDuration(event.watch_seconds)}`}</li>)}</ul>}
-      {query.data && !events.length && <p className="text-sm text-muted-foreground">暂无最近播放事件。</p>}
+      {query.data && <ul className="space-y-3 text-xs leading-6 text-muted-foreground">{events.map((event, index) => <li className="break-words" key={`${event.item_id}-${event.event_time}-${index}`}>{watchTime(event.event_time)} · {event.user_name} · {event.category === 'unknown' ? '分类待确认' : event.category === 'adult' ? privateTitles.titles[event.item_id] || '私密观看' : event.item_name} · {movementLabel(event)}{event.watch_seconds !== null && ` · 观看 ${watchDuration(event.watch_seconds)}`}</li>)}</ul>}
+      {query.data && !events.length && <p className="text-sm text-muted-foreground">暂无最近播放动向。</p>}
     </div>}
   </details>
 }

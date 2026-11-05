@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Film, Monitor, Pause, Play, RefreshCw, Users } from 'lucide-react'
+import { Eye, EyeOff, Film, Monitor, Pause, Play, RefreshCw, ShieldCheck, Users } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { getEmbyPlaybackSessions } from '@/lib/api/emby-playback-sessions'
 import { getMediaLibraryPoster } from '@/lib/api/media-library'
 import { isJavaRequestCanceledError } from '@/lib/java-api'
 import { cn } from '@/lib/utils'
+import { usePrivateWatchTitles } from '@/pages/emby-watch-rankings/use-watch-query'
 import type {
   EmbyPlaybackSession,
   EmbyPlaybackSnapshot,
@@ -24,8 +25,9 @@ function formatTime(seconds: number | null) {
 function SessionPoster({ session }: { session: EmbyPlaybackSession }) {
   const [url, setUrl] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
+  const allowed = session.category === 'movie' || session.category === 'series'
   // Stable across polling responses; a changed image version reloads the authenticated blob.
-  const candidates = JSON.stringify(session.posters)
+  const candidates = JSON.stringify(allowed ? session.posters : [])
   useEffect(() => {
     const controller = new AbortController()
     let objectUrl: string | null = null
@@ -57,7 +59,7 @@ function SessionPoster({ session }: { session: EmbyPlaybackSession }) {
   }, [candidates])
   return (
     <div className="h-44 w-28 shrink-0 overflow-hidden rounded-lg bg-slate-200 sm:h-48 sm:w-32">
-      {url && !failed ? (
+      {allowed && url && !failed ? (
         <img
           src={url}
           alt={`${session.seriesName || session.title || '媒体'}海报`}
@@ -66,8 +68,8 @@ function SessionPoster({ session }: { session: EmbyPlaybackSession }) {
         />
       ) : (
         <div className="flex h-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-slate-800 to-slate-600 px-2 text-center text-white">
-          <Film className="h-6 w-6 opacity-70" />
-          <span className="text-xs">封面暂缺</span>
+          {allowed ? <Film aria-hidden="true" className="h-6 w-6 opacity-70" /> : <ShieldCheck aria-hidden="true" className="h-6 w-6 opacity-70" />}
+          <span className="text-xs">{allowed ? '封面暂缺' : session.category === 'adult' ? '私密观看 · 无海报' : '分类待确认 · 无海报'}</span>
         </div>
       )}
     </div>
@@ -79,6 +81,9 @@ export function LiveWatchingPanel() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [stale, setStale] = useState(true)
+  const [reveal, setReveal] = useState(false)
+  const privateIds = snapshot?.sessions.filter(session => session.category === 'adult').map(session => session.itemId) ?? []
+  const privateTitles = usePrivateWatchTitles(privateIds, reveal)
   const pending = useRef<AbortController | null>(null)
   const load = useCallback(async () => {
     if (pending.current || document.visibilityState !== 'visible') return
@@ -89,8 +94,16 @@ export function LiveWatchingPanel() {
       const next = await getEmbyPlaybackSessions(controller.signal)
       if (controller.signal.aborted) return
       setSnapshot(next)
-      setError(null)
-      setStale(false)
+      const collectionStale = next.stale || next.collectionStatus !== 'fresh'
+      setError(
+        collectionStale
+          ? next.collectionMessage ||
+              (next.collectionStatus === 'unavailable'
+                ? '播放会话采集暂不可用'
+                : '播放会话采集已过时')
+          : null,
+      )
+      setStale(collectionStale)
     } catch (failure) {
       if (!controller.signal.aborted && !isJavaRequestCanceledError(failure)) {
         setError(
@@ -146,16 +159,22 @@ export function LiveWatchingPanel() {
               : '正在获取播放会话'}
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-11"
-          disabled={loading}
-          onClick={() => void load()}
-        >
-          <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
-          {loading ? '刷新中' : '刷新'}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {privateIds.length > 0 && <Button type="button" variant="outline" className="h-11" aria-pressed={reveal} onClick={() => setReveal(value => !value)}>
+            {reveal ? <Eye aria-hidden="true" className="h-4 w-4" /> : <EyeOff aria-hidden="true" className="h-4 w-4" />}
+            {reveal ? '收起私密内容' : '查看私密片名'}
+          </Button>}
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11"
+            disabled={loading}
+            onClick={() => void load()}
+          >
+            <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+            {loading ? '刷新中' : '刷新'}
+          </Button>
+        </div>
       </div>
       <div className="flex flex-wrap justify-between gap-2 text-xs text-slate-500">
         <span>
@@ -181,6 +200,7 @@ export function LiveWatchingPanel() {
           正在更新上次快照，以下内容不代表当前播放状态。
         </p>
       )}
+      {privateTitles.error && <p role="alert" className="text-sm text-amber-800">{privateTitles.error}</p>}
       {!snapshot ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
           {error ? '无法获取播放会话，请重试' : '加载播放会话…'}
@@ -210,9 +230,12 @@ export function LiveWatchingPanel() {
                     ),
                   )
                 : null
-            const title = session.seriesName || session.title || '标题未知'
+            const ordinary = session.category === 'movie' || session.category === 'series'
+            const title = ordinary ? session.seriesName || session.title || '标题未知' : session.category === 'adult' ? privateTitles.titles[session.itemId] || '私密观看' : '分类待确认'
             const episode =
-              session.type === 'Episode'
+              !ordinary
+                ? session.category === 'adult' ? 'Adult · 无海报' : '分类待确认 · 无海报'
+                : session.type === 'Episode'
                 ? `${session.seasonNumber === null ? '季数未知' : `第 ${session.seasonNumber} 季`} · ${session.episodeNumber === null ? '集数未知' : `第 ${session.episodeNumber}${session.episodeNumberEnd !== null && session.episodeNumberEnd !== session.episodeNumber ? `–${session.episodeNumberEnd}` : ''} 集`}`
                 : session.type === 'Movie'
                   ? '电影'
