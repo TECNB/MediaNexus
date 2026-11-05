@@ -13,15 +13,10 @@ function SessionRow({ session, title }: { session: WatchSession; title: string }
   const episode = episodeLabel(session.season_number, session.episode_number)
   const settled = session.state === 'settled'
   return <li className="relative min-w-0 border-l border-border pb-5 pl-5 last:pb-0">
-    <span aria-hidden="true" className={cn('absolute -left-1 top-1.5 h-2 w-2 rounded-full ring-4 ring-card', settled ? 'bg-slate-300' : 'bg-muted0')} />
-    <div className="flex flex-wrap items-center gap-2"><strong className="break-words text-sm font-medium text-foreground">{title}</strong>{episode && <code className="rounded bg-muted px-1.5 py-0.5 text-xs text-primary">{episode}</code>}{!settled && <span className="rounded bg-amber-50 px-2 py-0.5 text-xs text-amber-800">{session.state === 'playing' ? '播放中 · 估算' : session.state === 'paused' ? '已暂停 · 估算' : '状态待确认 · 估算冻结'}</span>}</div>
+    <span aria-hidden="true" className={cn('absolute -left-1 top-1.5 h-2 w-2 rounded-full ring-4 ring-card', session.state === 'playing' ? 'bg-emerald-500' : session.state === 'paused' ? 'bg-amber-500' : 'bg-slate-300')} />
+    <div className="flex flex-wrap items-center gap-2"><strong className="break-words text-sm font-medium text-foreground">{title}</strong>{episode && <code className="rounded bg-muted px-1.5 py-0.5 text-xs text-primary">{episode}</code>}{!settled && <span className={cn('rounded px-2 py-0.5 text-xs', session.state === 'playing' ? 'bg-emerald-50 text-emerald-700' : session.state === 'paused' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600')}>{session.state === 'playing' ? '播放中' : session.state === 'paused' ? '已暂停' : '状态未知'}</span>}</div>
     <p className="mt-1 text-xs leading-6 text-muted-foreground">{watchTime(session.start_time)} — {settled ? watchTime(session.stop_time) : session.observed_at ? `截至 ${watchTime(session.observed_at)}` : '结束时间未知'}</p>
-    <p className="text-xs leading-6 text-muted-foreground">{settled ? '观看' : '估算观看'} {watchDuration(session.range_watch_seconds)}{session.watch_seconds !== session.range_watch_seconds && <> · 整次 {watchDuration(session.watch_seconds)}</>} · {session.device_name || '设备未知'}{session.client_name && ` / ${session.client_name}`}</p>
-    {session.source === 'sampling' && <p className="mt-1 text-xs text-muted-foreground">采样记录</p>}
-    {settled && session.stop_time_source === 'inferred' && <p className="mt-1 text-xs text-amber-700">结束时间由采样推定</p>}
-    {settled && session.stop_time_source === 'migration' && <p className="mt-1 text-xs text-amber-700">结束时间由迁移交接推定</p>}
-    {settled && session.stop_time_source === 'superseded' && <p className="mt-1 text-xs text-amber-700">结束时间由后续播放推定</p>}
-    {settled && session.stop_time_source === 'unknown' && <p className="mt-1 text-xs text-muted-foreground">结束时间来源未记录</p>}
+    <p className="text-xs leading-6 text-muted-foreground">观看 {watchDuration(session.range_watch_seconds)}{session.watch_seconds !== session.range_watch_seconds && <> · 整次 {watchDuration(session.watch_seconds)}</>} · {session.device_name || '设备未知'}{session.client_name && ` / ${session.client_name}`}</p>
     {session.accounting_basis === 'legacy' && <p className="mt-1 text-xs text-muted-foreground">历史口径 · 整次观看按结束日入账</p>}
     {session.category === 'unknown' && <p className="mt-1 text-xs text-muted-foreground">分类待确认 · 暂不展示片名与海报</p>}
   </li>

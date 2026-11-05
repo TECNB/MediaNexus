@@ -11,7 +11,8 @@ export function watchDuration(seconds: number) {
   if (seconds < 60) return `${Math.floor(seconds)} 秒`
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor(seconds % 3600 / 60)
-  return hours ? `${hours} 小时 ${minutes} 分` : `${minutes} 分钟`
+  const remainingSeconds = Math.floor(seconds % 60)
+  return hours ? `${hours} 小时 ${minutes} 分 ${remainingSeconds} 秒` : `${minutes} 分钟 ${remainingSeconds} 秒`
 }
 
 export function watchTime(value: string | null) {
@@ -22,7 +23,7 @@ export function watchTime(value: string | null) {
   const date = new Date(zoned)
   if (Number.isNaN(date.getTime())) return '时间未知'
   return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: WATCH_ZONE, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+    timeZone: WATCH_ZONE, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
   }).format(date)
 }
 
