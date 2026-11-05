@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { getPrivateWatchTitles } from '@/lib/api/emby-watch-rankings'
 import { isJavaRequestCanceledError } from '@/lib/java-api'
 
-export function useWatchQuery<T>(load: (signal: AbortSignal) => Promise<T>, enabled = true, refresh = 0) {
+export function useWatchQuery<T>(load: (signal: AbortSignal) => Promise<T>, enabled = true, refresh = 0, refreshIntervalMs = 5000) {
   const [result, setResult] = useState<{ owner: typeof load; data: T } | null>(null)
   const [failure, setFailure] = useState<{ owner: typeof load; message: string } | null>(null)
   const [retryIndex, setRetryIndex] = useState(0)
@@ -39,14 +39,14 @@ export function useWatchQuery<T>(load: (signal: AbortSignal) => Promise<T>, enab
       }
     }
     void read()
-    const timer = window.setInterval(() => void read(), 5000)
+    const timer = window.setInterval(() => void read(), refreshIntervalMs)
     document.addEventListener('visibilitychange', visibilityChanged)
     return () => {
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', visibilityChanged)
       pending?.abort()
     }
-  }, [load, enabled, retryIndex, refresh])
+  }, [load, enabled, retryIndex, refresh, refreshIntervalMs])
   return {
     data: result?.owner === load ? result.data : null,
     error: failure?.owner === load ? failure.message : null,

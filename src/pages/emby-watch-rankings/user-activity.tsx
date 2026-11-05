@@ -30,7 +30,7 @@ export function SessionList({ sessions, reveal }: { sessions: WatchSession[]; re
 function UserSessions({ userId, mediaId, category, range, pageSize, reveal, refresh }: WatchViewProps & { userId: string; mediaId?: string; category?: WatchCategory }) {
   const [page, setPage] = useState(1)
   const load = useCallback((signal: AbortSignal) => getWatchSessions(userId, { ...range, page, page_size: pageSize, media_id: mediaId, category }, signal), [userId, mediaId, category, range, page, pageSize])
-  const query = useWatchQuery(load, true, refresh)
+  const query = useWatchQuery(load, true, refresh, 1000)
   return <div aria-busy={query.loading} className="min-w-0 space-y-4">
     {query.loading && <WatchLoading />}{query.error && <WatchError message={query.error} retry={query.retry} />}
     {query.data && <><SessionList sessions={query.data.items} reveal={reveal} />{!query.data.items.length && <p className="py-4 text-sm text-muted-foreground">所选范围暂无播放记录。</p>}<WatchPagination loading={query.loading} onPage={setPage} page={page} pageSize={pageSize} total={query.data.total} /></>}
@@ -90,7 +90,7 @@ export function TrackedWatchActivity(view: WatchViewProps) {
   const [page, setPage] = useState(1)
   const [selectedUser, setSelectedUser] = useState<string | null>(null)
   const load = useCallback((signal: AbortSignal) => getWatchActivity({ ...view.range, page, page_size: view.pageSize }, signal), [view.range, page, view.pageSize])
-  const query = useWatchQuery(load, true, view.refresh)
+  const query = useWatchQuery(load, true, view.refresh, 1000)
   return <section className="min-w-0 rounded-2xl bg-card p-5 ring-1 ring-border" aria-busy={query.loading}><div className="mb-4 flex items-center gap-2"><Clock3 aria-hidden="true" className="h-4 w-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">进行中与待确认的动向</h3></div>
     {query.loading && <WatchLoading />}{query.error && <WatchError message={query.error} retry={query.retry} />}{query.data && <>{!query.data.items.length ? <p className="text-sm text-muted-foreground">所选范围暂无跟踪中的播放。</p> : <ul className="space-y-5">{query.data.items.map(session => <li className="min-w-0 rounded-xl border border-border p-4" key={session.id}><button className="mb-3 min-h-10 text-sm font-semibold text-primary hover:underline focus-visible:outline-ring" onClick={() => setSelectedUser(selectedUser === session.emby_user_id ? null : session.emby_user_id)} type="button" aria-expanded={selectedUser === session.emby_user_id}>{session.user_name} · 查看完整动向</button><SessionList sessions={[session]} reveal={view.reveal} />{selectedUser === session.emby_user_id && <div className="mt-5 border-t border-border pt-5"><UserSessions {...view} userId={session.emby_user_id} /></div>}</li>)}</ul>}<WatchPagination loading={query.loading} onPage={setPage} page={page} pageSize={view.pageSize} total={query.data.total} /></>}
   </section>
