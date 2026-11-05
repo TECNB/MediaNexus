@@ -9,24 +9,48 @@ export function useWatchQuery<T>(load: (signal: AbortSignal) => Promise<T>, enab
   const [loading, setLoading] = useState(enabled)
   useEffect(() => {
     if (!enabled) return
-    const controller = new AbortController()
-    setLoading(true)
-    setFailure(null)
-    void load(controller.signal).then(data => {
-      if (controller.signal.aborted) return
-      setResult({ owner: load, data })
-      setLoading(false)
-    }).catch(error => {
-      if (controller.signal.aborted || isJavaRequestCanceledError(error)) return
-      setFailure({ owner: load, message: error instanceof Error ? error.message : '观看记录加载失败。' })
-      setLoading(false)
-    })
-    return () => controller.abort()
+    let pending: AbortController | null = null
+    async function read() {
+      if (pending || document.visibilityState !== 'visible') return
+      const controller = new AbortController()
+      pending = controller
+      setLoading(true)
+      try {
+        const data = await load(controller.signal)
+        if (controller.signal.aborted) return
+        setResult({ owner: load, data })
+        setFailure(null)
+      } catch (error) {
+        if (controller.signal.aborted || isJavaRequestCanceledError(error)) return
+        setFailure({ owner: load, message: error instanceof Error ? error.message : '观看记录加载失败。' })
+      } finally {
+        if (pending === controller) {
+          pending = null
+          setLoading(false)
+        }
+      }
+    }
+    function visibilityChanged() {
+      if (document.visibilityState === 'visible') void read()
+      else {
+        pending?.abort()
+        pending = null
+        setLoading(false)
+      }
+    }
+    void read()
+    const timer = window.setInterval(() => void read(), 5000)
+    document.addEventListener('visibilitychange', visibilityChanged)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', visibilityChanged)
+      pending?.abort()
+    }
   }, [load, enabled, retryIndex, refresh])
   return {
     data: result?.owner === load ? result.data : null,
     error: failure?.owner === load ? failure.message : null,
-    loading: enabled && (loading || (result?.owner !== load && failure?.owner !== load)),
+    loading: enabled && result?.owner !== load && (loading || failure?.owner !== load),
     retry: () => setRetryIndex(index => index + 1),
   }
 }
