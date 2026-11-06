@@ -8,6 +8,7 @@ import { EmbyWatchRankingsPage } from '@/pages/emby-watch-rankings'
 import { DocsPage } from '@/pages/docs'
 import { AutomationPage } from '@/pages/automation'
 import { TelegramAutomationPage } from '@/pages/automation/telegram'
+import { BgmWishlistPage } from '@/pages/automation/bgm-wishlist'
 import { MagnetIngestPage } from '@/pages/magnet-ingest'
 import { MediaLibraryPage } from '@/pages/media-library'
 import { LegacyResourceIngestRedirect } from '@/pages/resources/legacy-ingest-redirect'
@@ -83,6 +84,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredRole="ADMIN">
             <TelegramAutomationPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'automation/bgm-wishlist',
+        element: (
+          <ProtectedRoute requiredRole="ADMIN">
+            <BgmWishlistPage />
           </ProtectedRoute>
         ),
       },

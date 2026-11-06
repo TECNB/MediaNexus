@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import {
   CheckCircle2,
   ChevronLeft,
@@ -15,6 +14,7 @@ import {
 } from 'lucide-react'
 
 import { PageContainer } from '@/components/layout/page-container'
+import { AutomationNavigation } from './navigation'
 import { Button } from '@/components/ui/button'
 import {
   getTelegramAutomationOverview,
@@ -538,10 +538,7 @@ export function TelegramAutomationPage() {
   return (
     <PageContainer title="Telegram 自动化" description="按频道配置 Forward Rate 分位数，每天零点追更，并保留每次资源筛选、去重和转发结果。">
       <div className="space-y-6">
-        <div className="flex gap-2">
-          <Button asChild type="button" size="sm" variant="outline"><Link to="/automation">JAVDB 自动化</Link></Button>
-          <Button type="button" size="sm">Telegram 自动化</Button>
-        </div>
+        <AutomationNavigation active="telegram" />
 
         <section className="rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200">
           <div className="flex flex-wrap items-start justify-between gap-3">
