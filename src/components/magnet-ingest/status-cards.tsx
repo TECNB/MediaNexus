@@ -134,7 +134,7 @@ export function NodeStatusCard({ data, status }: NodeStatusCardProps) {
   return (
     <section className="space-y-3">
       <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
-        节点状态
+        当前类别入库目标
       </p>
 
       <div
@@ -149,9 +149,9 @@ export function NodeStatusCard({ data, status }: NodeStatusCardProps) {
 
             <div>
               <p className="text-lg font-semibold text-slate-950">
-                {data?.provider ?? 'PikPak'} API
+                {data?.target_name ?? data?.provider ?? (status === 'error' ? '目标读取失败' : '正在读取目标')}
               </p>
-              <p className="text-sm text-slate-500">OpenList 存储节点</p>
+              <p className="text-sm text-slate-500">{status === 'error' ? '无法确认此类别的新任务去向' : status === 'loading' ? '正在确认此类别的新任务去向' : data?.target_id ? '此类别的新任务使用该账号' : '部署初始存储 · 尚未接管'}</p>
             </div>
           </div>
 

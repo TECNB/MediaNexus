@@ -28,16 +28,19 @@ import {
 } from '@/lib/api/resources'
 import {
   getSubtitleUpload,
+  listSubtitleLocations,
   listSubtitleUploadLogs,
   listSubtitleUploads,
   uploadSubtitleByAssociation,
 } from '@/lib/api/subtitles'
+import { getJavaErrorMessage, isJavaRequestCanceledError } from '@/lib/java-api'
 import { cn } from '@/lib/utils'
 import type { EmbyLibrarySummary } from '@/types/emby-library'
 import type { MovieSearchItem, SeriesSearchItem } from '@/types/resources'
 import type {
   SubtitleUploadResponse,
   SubtitleUploadStatus,
+  SubtitleLocation,
 } from '@/types/subtitles'
 
 type ProcessStatus = 'mounted' | 'uploaded' | 'matching' | 'failed'
@@ -439,6 +442,7 @@ function AssociationResultItem({
 }
 
 type MediaAssociationComboboxProps = {
+  disabled: boolean
   keyword: string
   open: boolean
   status: AssociationStatus
@@ -454,6 +458,7 @@ type MediaAssociationComboboxProps = {
 }
 
 function MediaAssociationCombobox({
+  disabled,
   keyword,
   open,
   status,
@@ -467,7 +472,7 @@ function MediaAssociationCombobox({
   onSelectItem,
   onDemoInteraction,
 }: MediaAssociationComboboxProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null)
+  const containerRef = useRef<HTMLFieldSetElement | null>(null)
   const isManualMode = true
   const isSearching = status === 'loading'
   const isSearchDisabled = isSearching || !keyword.trim()
@@ -498,7 +503,8 @@ function MediaAssociationCombobox({
   }, [onClose, shouldRenderPanel])
 
   return (
-    <section
+    <fieldset
+      disabled={disabled}
       ref={containerRef}
       className="relative min-w-0 rounded-[26px] border border-slate-200 bg-white/95 p-4 shadow-shell"
     >
@@ -623,7 +629,7 @@ function MediaAssociationCombobox({
           ) : null}
         </div>
       </div>
-    </section>
+    </fieldset>
   )
 }
 
@@ -798,6 +804,7 @@ export function SubtitleManagePage() {
   const associationRequestControllerRef = useRef<AbortController | null>(null)
   const associationLatestRequestIdRef = useRef(0)
   const seasonLatestRequestIdRef = useRef(0)
+  const locationRequestControllerRef = useRef<AbortController | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [uploadStatus, setUploadStatus] =
@@ -828,6 +835,8 @@ export function SubtitleManagePage() {
   const [selectedAssociationItem, setSelectedAssociationItem] =
     useState<SubtitleAssociationItem | null>(null)
   const [selectedSeasonNumber, setSelectedSeasonNumber] = useState(1)
+  const [subtitleLocations, setSubtitleLocations] = useState<SubtitleLocation[]>([])
+  const [selectedTargetId, setSelectedTargetId] = useState('')
   const [seriesSeasonOptions, setSeriesSeasonOptions] = useState<number[]>([])
   const [seriesSeasonStatus, setSeriesSeasonStatus] =
     useState<'idle' | 'loading' | 'success' | 'error'>('idle')
@@ -840,6 +849,16 @@ export function SubtitleManagePage() {
     useState<EmbyLibraryLoadStatus>('loading')
   const [embyLibraryRefreshPending, setEmbyLibraryRefreshPending] =
     useState(false)
+
+  useEffect(() => {
+    setSubtitleLocations([])
+    setSelectedTargetId('')
+    setUploadErrorMessage(null)
+    setUploadStatus('idle')
+    return () => {
+      locationRequestControllerRef.current?.abort()
+    }
+  }, [selectedAssociationItem, selectedSeasonNumber])
 
   useEffect(() => {
     if (!toastMessage) {
@@ -1108,7 +1127,7 @@ export function SubtitleManagePage() {
   }
 
   function openFilePicker() {
-    if (!fileInputRef.current) {
+    if (locationRequestControllerRef.current || !fileInputRef.current) {
       return
     }
 
@@ -1126,6 +1145,7 @@ export function SubtitleManagePage() {
   }
 
   function handleFileSelect(event: ChangeEvent<HTMLInputElement>) {
+    if (locationRequestControllerRef.current) return
     const file = event.target.files?.[0] ?? null
 
     if (!file) {
@@ -1174,6 +1194,7 @@ export function SubtitleManagePage() {
   }
 
   function handleAssociationKeywordChange(value: string) {
+    if (locationRequestControllerRef.current) return
     resetAssociationSearchState({
       keepKeyword: false,
       nextKeyword: value,
@@ -1199,7 +1220,7 @@ export function SubtitleManagePage() {
   }
 
   function handleAssociationSubmit() {
-    if (associationStatus === 'loading') {
+    if (locationRequestControllerRef.current || associationStatus === 'loading') {
       return
     }
 
@@ -1259,6 +1280,7 @@ export function SubtitleManagePage() {
   }
 
   function handleAssociationSelect(item: SubtitleAssociationItem) {
+    if (locationRequestControllerRef.current) return
     setSelectedAssociationItem(item)
     setSelectedSeasonNumber(1)
     setSeriesSeasonOptions([])
@@ -1306,7 +1328,7 @@ export function SubtitleManagePage() {
   }
 
   async function handleUploadSubmit() {
-    if (uploadStatus === 'submitting') {
+    if (locationRequestControllerRef.current || uploadStatus === 'submitting') {
       return
     }
 
@@ -1362,8 +1384,34 @@ export function SubtitleManagePage() {
 
     setUploadStatus('submitting')
     setUploadErrorMessage(null)
+    const controller = new AbortController()
+    locationRequestControllerRef.current = controller
 
     try {
+      const locations = await listSubtitleLocations({
+        mediaType: selectedAssociationItem.mediaType,
+        title: selectedTitle,
+        originalTitle: selectedAssociationItem.originalTitle,
+        year: libraryYear,
+        seasonNumber:
+          selectedAssociationItem.mediaType === 'series'
+            ? selectedSeasonNumber
+            : null,
+      }, controller.signal)
+      if (controller.signal.aborted) return
+      setSubtitleLocations(locations)
+      if (locations.length === 0) {
+        throw new Error('未找到该媒体的源目录，请确认影片和季数。')
+      }
+      const location = locations.length === 1
+        ? locations[0]
+        : locations.find((item) => item.target_id === selectedTargetId)
+      if (!location) {
+        setSelectedTargetId('')
+        setUploadStatus('idle')
+        setUploadErrorMessage('该媒体位于多个账号，请选择字幕要上传的账号。')
+        return
+      }
       const response = await uploadSubtitleByAssociation({
         file: selectedFile,
         overwrite: false,
@@ -1375,7 +1423,9 @@ export function SubtitleManagePage() {
           selectedAssociationItem.mediaType === 'series'
             ? selectedSeasonNumber
             : null,
-      })
+        targetId: location.target_id,
+      }, controller.signal)
+      if (controller.signal.aborted) return
       const projectTitle = getAssociationProjectLabel(
         selectedAssociationItem,
         selectedAssociationItem.mediaType === 'series'
@@ -1413,10 +1463,9 @@ export function SubtitleManagePage() {
 
       showToast('文件已接收，正在后台处理')
     } catch (error) {
+      if (controller.signal.aborted || isJavaRequestCanceledError(error)) return
       const message =
-        error instanceof Error && error.message.trim()
-          ? error.message.trim()
-          : '上传失败，请稍后重试'
+        getJavaErrorMessage(error) || '上传失败，请稍后重试'
 
       console.error('subtitle upload failed', error)
 
@@ -1428,6 +1477,10 @@ export function SubtitleManagePage() {
       setSystemLogError(null)
       setSystemLogStatus('success')
       showToast(message)
+    } finally {
+      if (locationRequestControllerRef.current === controller) {
+        locationRequestControllerRef.current = null
+      }
     }
   }
 
@@ -1451,11 +1504,13 @@ export function SubtitleManagePage() {
                 onClick={openFilePicker}
                 onKeyDown={handleUploadZoneKeyDown}
                 role="button"
-                tabIndex={0}
+                aria-disabled={uploadStatus === 'submitting'}
+                tabIndex={uploadStatus === 'submitting' ? -1 : 0}
               >
                 <input
                   ref={fileInputRef}
                   type="file"
+                  disabled={uploadStatus === 'submitting'}
                   accept=".zip,.srt,.ass,.sup"
                   className="hidden"
                   onChange={handleFileSelect}
@@ -1469,7 +1524,7 @@ export function SubtitleManagePage() {
                   拖拽或点击上传字幕压缩包
                 </h2>
                 <p className="mt-1.5 text-xs text-slate-500">
-                  支持 ZIP / SRT / ASS / SUP · 最大 50MB
+                  字幕文件或 ZIP 压缩包 · 格式与大小按系统设置检查
                 </p>
 
                 <span className="mt-4 inline-flex h-9 items-center justify-center rounded-2xl border border-slate-900 px-4 text-sm font-medium text-slate-950 transition-colors group-hover:bg-slate-950 group-hover:text-white">
@@ -1495,6 +1550,7 @@ export function SubtitleManagePage() {
             </section>
 
             <MediaAssociationCombobox
+              disabled={uploadStatus === 'submitting'}
               keyword={associationKeyword}
               open={associationOpen}
               status={associationStatus}
@@ -1528,12 +1584,14 @@ export function SubtitleManagePage() {
                 ) : seriesSeasonOptions.length > 0 ? (
                   <SelectControl
                     id="subtitle-season-number"
+                    disabled={uploadStatus === 'submitting'}
                     value={selectedSeasonNumber}
                     wrapperClassName="mt-3"
                     className="rounded-[14px] text-slate-900"
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      if (locationRequestControllerRef.current) return
                       setSelectedSeasonNumber(Number(event.target.value))
-                    }
+                    }}
                   >
                     {seriesSeasonOptions.map((seasonNumber) => (
                       <option key={seasonNumber} value={seasonNumber}>
@@ -1544,12 +1602,14 @@ export function SubtitleManagePage() {
                 ) : (
                   <input
                     id="subtitle-season-number"
+                    disabled={uploadStatus === 'submitting'}
                     type="number"
                     min={1}
                     step={1}
                     value={selectedSeasonNumber}
                     className="mt-3 h-10 w-full rounded-[14px] border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200/60"
                     onChange={(event) => {
+                      if (locationRequestControllerRef.current) return
                       const value = Number.parseInt(event.target.value, 10)
                       setSelectedSeasonNumber(
                         Number.isFinite(value) ? value : 1,
@@ -1562,6 +1622,35 @@ export function SubtitleManagePage() {
                     未能获取季列表，可手动填写目标季数。
                   </p>
                 ) : null}
+              </section>
+            ) : null}
+
+            {subtitleLocations.length > 1 ? (
+              <section className="rounded-[22px] border border-slate-200 bg-white/95 p-4 shadow-shell">
+                <label htmlFor="subtitle-target" className="text-sm font-semibold text-slate-950">
+                  媒体所在账号
+                </label>
+                <p className="mt-1 text-xs text-slate-500">
+                  多个账号都保存了这部媒体，请选择本次字幕的上传位置。
+                </p>
+                <SelectControl
+                  id="subtitle-target"
+                  value={selectedTargetId}
+                  wrapperClassName="mt-3"
+                  disabled={uploadStatus === 'submitting'}
+                  onChange={(event) => {
+                    if (locationRequestControllerRef.current) return
+                    setSelectedTargetId(event.target.value)
+                    setUploadErrorMessage(null)
+                  }}
+                >
+                  <option value="">请选择账号</option>
+                  {subtitleLocations.map((location) => (
+                    <option key={location.target_id} value={location.target_id}>
+                      {location.target_name}
+                    </option>
+                  ))}
+                </SelectControl>
               </section>
             ) : null}
 

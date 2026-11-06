@@ -29,6 +29,9 @@ export type MagnetIngestNodeStatus = {
   used_bytes: number | null
   total_bytes: number | null
   free_bytes: number | null
+  target_id?: string | null
+  target_name?: string | null
+  category?: 'MOVIE' | 'TV' | 'ANIME' | 'ADULT' | null
 }
 
 export type CreateAnimeMagnetIngestTaskPayload = {

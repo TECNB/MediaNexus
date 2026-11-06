@@ -760,8 +760,12 @@ function MagnetIngestContent() {
 
   useEffect(() => {
     let active = true
+    const controller = new AbortController()
+    setNodeStatus(null)
+    setNodeStatusState('loading')
+    const category = mode === 'series' ? 'TV' : mode.toUpperCase() as 'MOVIE' | 'ANIME' | 'ADULT'
 
-    void getMagnetIngestNodeStatus()
+    void getMagnetIngestNodeStatus(category, controller.signal)
       .then((data) => {
         if (active) {
           setNodeStatus(data)
@@ -776,8 +780,9 @@ function MagnetIngestContent() {
 
     return () => {
       active = false
+      controller.abort()
     }
-  }, [])
+  }, [mode])
 
   const loadMovieTasks = useCallback(
     async (options: { showLoading?: boolean } = {}) => {

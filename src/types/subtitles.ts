@@ -66,4 +66,15 @@ export type SubtitleUploadAssociationPayload = {
   originalTitle?: string | null
   year?: number | null
   seasonNumber?: number | null
+  targetId?: string | null
 }
+
+export type SubtitleLocation = {
+  target_id: string
+  target_name: string
+}
+
+export type SubtitleLocationQuery = Omit<
+  SubtitleUploadAssociationPayload,
+  'file' | 'overwrite' | 'targetId'
+>

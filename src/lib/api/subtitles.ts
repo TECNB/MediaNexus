@@ -5,6 +5,8 @@ import type {
   SubtitleUploadLog,
   SubtitleUploadLogListData,
   SubtitleUploadResponse,
+  SubtitleLocation,
+  SubtitleLocationQuery,
 } from '@/types/subtitles'
 
 type JavaApiResponse<TData> = {
@@ -24,7 +26,8 @@ export async function uploadSubtitleByAssociation({
   originalTitle,
   year,
   seasonNumber,
-}: SubtitleUploadAssociationPayload): Promise<SubtitleUploadResponse> {
+  targetId,
+}: SubtitleUploadAssociationPayload, signal?: AbortSignal): Promise<SubtitleUploadResponse> {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('overwrite', String(overwrite))
@@ -40,12 +43,16 @@ export async function uploadSubtitleByAssociation({
   if (typeof seasonNumber === 'number') {
     formData.append('season_number', String(seasonNumber))
   }
+  if (targetId) {
+    formData.append('target_id', targetId)
+  }
 
   try {
     const response = await javaApiClient.post<
       JavaApiResponse<SubtitleUploadResponse>
     >('/api/v1/subtitles/uploads', formData, {
       timeout: SUBTITLE_UPLOAD_TIMEOUT_MS,
+      signal,
     })
 
     if (response.data.code !== 200 || !response.data.data) {
@@ -56,6 +63,28 @@ export async function uploadSubtitleByAssociation({
   } catch (error) {
     throw new Error(getJavaErrorMessage(error) || SUBTITLE_UPLOAD_ERROR_MESSAGE)
   }
+}
+
+export async function listSubtitleLocations(
+  query: SubtitleLocationQuery,
+  signal?: AbortSignal,
+): Promise<SubtitleLocation[]> {
+  const response = await javaApiClient.get<
+    JavaApiResponse<{ items: SubtitleLocation[] }>
+  >('/api/v1/subtitles/locations', {
+    signal,
+    params: {
+      media_type: query.mediaType,
+      title: query.title,
+      original_title: query.originalTitle,
+      year: query.year,
+      season_number: query.seasonNumber,
+    },
+  })
+  if (response.data.code !== 200 || !Array.isArray(response.data.data?.items)) {
+    throw new Error(response.data.message || '无法确认媒体所在账号，请重试。')
+  }
+  return response.data.data.items
 }
 
 export async function listSubtitleUploads(): Promise<SubtitleUploadResponse[]> {
