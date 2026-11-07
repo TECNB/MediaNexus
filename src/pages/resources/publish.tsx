@@ -13,6 +13,7 @@ import {
   Users,
 } from 'lucide-react'
 
+import { supplyBgmOperation } from '@/lib/api/bgm-wishlist'
 import { PageContainer } from '@/components/layout/page-container'
 import { QuarkReleasePanel } from '@/components/resources/quark-release-panel'
 import { Button } from '@/components/ui/button'
@@ -638,7 +639,13 @@ export function ResourcePublishPage() {
       dynamic_range_tags: release.dynamic_range_tags,
     }
 
-    const request = retryContextState.context
+    const bgm = pageState?.bgmOperation
+    const request = bgm
+      ? supplyBgmOperation(bgm.operationId, bgm.subjectId, {
+          mediaType: activeMediaType === 'movie' ? 'MOVIE' : 'SERIES', tmdbId: item!.tmdb_id!,
+          seasonNumber: activeMediaType === 'series' ? seasonNumber : null,
+        }, release).then((operation) => `/automation/bgm-wishlist?operation=${encodeURIComponent(operation.id)}`)
+      : retryContextState.context
       ? retryOpenListWithSelectedRelease(
           retryContextState.context.task_type,
           retryContextState.context.task_id,

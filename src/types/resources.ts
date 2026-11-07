@@ -111,6 +111,7 @@ export type ResourcePublishMediaType = 'movie' | 'series'
 export type ResourceReleaseSource = 'prowlarr' | 'quark'
 
 export type ResourcePublishPageState = {
+  bgmOperation?: { operationId: string; subjectId: number }
   mediaType: ResourcePublishMediaType
   item: SearchableResourceItem
   submittedTerm: string

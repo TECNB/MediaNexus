@@ -12,3 +12,10 @@ export type BgmItemOutcome = { item: BgmItem; outcome: 'CREATED' | 'FAILED' | 'S
 export type BgmPreview = { id: string; source: BgmSource; createdAt: string; action: BgmAction; items: BgmItem[]; skipped: BgmItemOutcome[]; quota: BgmQuota; estimatedCreations: number }
 export type BgmRun = { id: string; sourceId: string; source: BgmSource; action: BgmAction; triggerType: 'MANUAL' | 'SCHEDULED'; actorUserId: number | null; ownerUserId: number; startedAt: string; finishedAt: string | null; status: string; created: BgmItemOutcome[]; failed: BgmItemOutcome[]; skipped: BgmItemOutcome[]; quotaBefore: BgmQuota | null; quotaAfter: BgmQuota | null; reason: { code: string; message: string } | null }
 export type BgmRuns = { items: BgmRun[]; total: number; page: number; pageSize: number }
+
+export type BgmCandidate = { key: string; release: import('./resources').ProwlarrRelease }
+export type BgmSearchProgress = { query: string; source: string; status: 'RUNNING' | 'SUCCEEDED' | 'FAILED'; elapsedMs: number; resultCount: number | null }
+export type BgmOperationTask = BgmTaskLink & { stage: string | null; error: string | null; notification: string | null }
+export type BgmOperationEntry = { item: BgmItem; status: string; startedAt: string; searches: BgmSearchProgress[]; candidates: BgmCandidate[]; selected: BgmCandidate | null; task: BgmOperationTask | null; reason: { code: string; message: string } | null; notification: string | null }
+export type BgmOperation = { id: string; source: BgmSource; action: BgmAction; triggerType: 'MANUAL' | 'SCHEDULED'; actorUserId: number | null; startedAt: string; updatedAt: string; status: string; requestedIds: number[]; entries: BgmOperationEntry[]; reason: { code: string; message: string } | null }
+export type BgmOperations = { items: BgmOperation[]; total: number; page: number; pageSize: number }

@@ -21,3 +21,26 @@ export async function previewBgmItems(id: string, subjectIds: number[]) { return
 export async function previewBgmLatest(id: string) { return unwrap((await javaApiClient.post<Response<BgmPreview>>(`${base}/sources/${encodeURIComponent(id)}/preview-latest`)).data) }
 export async function executeBgmPreview(id: string, previewId: string) { return unwrap((await javaApiClient.post<Response<BgmRun>>(`${base}/sources/${encodeURIComponent(id)}/execute`, { previewId })).data) }
 export async function listBgmRuns(id: string, page: number, signal?: AbortSignal) { return unwrap((await javaApiClient.get<Response<BgmRuns>>(`${base}/runs`, { params: { sourceId: id, page, pageSize: 20 }, signal })).data) }
+
+export async function submitBgmOperation(id: string, subjectIds?: number[]) {
+  const path = `${base}/sources/${encodeURIComponent(id)}/operations${subjectIds ? '' : '/latest'}`
+  return unwrap((await javaApiClient.post<Response<import('@/types/bgm-wishlist').BgmOperation>>(path, subjectIds ? { subjectIds } : undefined)).data)
+}
+export async function listBgmOperations(id: string, page: number, signal?: AbortSignal) {
+  return unwrap((await javaApiClient.get<Response<import('@/types/bgm-wishlist').BgmOperations>>(`${base}/sources/${encodeURIComponent(id)}/operations`, { params: { page, pageSize: 20 }, signal })).data)
+}
+export async function getBgmOperation(id: string, signal?: AbortSignal) {
+  return unwrap((await javaApiClient.get<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${base}/operations/${encodeURIComponent(id)}`, { signal })).data)
+}
+export async function confirmBgmCandidate(id: string, subjectId: number, candidateKey: string) {
+  return unwrap((await javaApiClient.post<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${base}/operations/${encodeURIComponent(id)}/confirm`, { subjectId, candidateKey })).data)
+}
+export async function searchBgmOperation(id: string, subjectId: number) {
+  return unwrap((await javaApiClient.post<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${base}/operations/${encodeURIComponent(id)}/search`, { subjectId })).data)
+}
+export async function deferBgmOperation(id: string, subjectId: number) {
+  return unwrap((await javaApiClient.post<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${base}/operations/${encodeURIComponent(id)}/defer`, { subjectId })).data)
+}
+export async function supplyBgmOperation(id: string, subjectId: number, identity: { mediaType: 'MOVIE' | 'SERIES'; tmdbId: number; seasonNumber: number | null }, release: import('@/types/resources').ProwlarrRelease) {
+  return unwrap((await javaApiClient.post<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${base}/operations/${encodeURIComponent(id)}/supply`, { subjectId, identity, release })).data)
+}
