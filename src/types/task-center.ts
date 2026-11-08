@@ -22,12 +22,14 @@ export type OpenListTaskCenterProductFilter =
 export type OpenListTaskCenterSourceType =
   | 'MANUAL_MAGNET'
   | 'PROWLARR_RELEASE'
+  | 'PANSOU'
   | string
 
 export type OpenListTaskCenterSourceFilter =
   | 'ALL'
   | 'MANUAL_MAGNET'
   | 'PROWLARR_RELEASE'
+  | 'PANSOU'
   | 'JAVDB_AUTOMATION'
 
 export type OpenListTaskCenterItem = {

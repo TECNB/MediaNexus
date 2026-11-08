@@ -11,8 +11,8 @@ const sourceOptions: Array<{
   label: string
   value: ResourceReleaseSource
 }> = [
-  { label: 'Prowlarr', value: 'prowlarr' },
-  { label: 'Quark 分享', value: 'quark' },
+  { label: '磁力', value: 'prowlarr' },
+  { label: '夸克分享', value: 'quark' },
 ]
 
 export function ReleaseSourceSwitch({
@@ -23,7 +23,7 @@ export function ReleaseSourceSwitch({
   return (
     <div
       role="tablist"
-      aria-label="资源来源"
+      aria-label="资源类型"
       className={cn(
         'grid w-full max-w-[520px] grid-cols-2 gap-1 rounded-[20px] border border-slate-200/80 bg-slate-100/90 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]',
         className,

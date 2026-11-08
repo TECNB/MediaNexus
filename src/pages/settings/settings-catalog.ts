@@ -7,9 +7,10 @@ export const connectionSections = [
     { id: 'emby', label: 'Emby', description: '媒体库连接、权限模板、缓存与媒体维护参数。' },
   ] },
   { label: '搜索与整理', groups: [
+    { id: 'magnet-search', label: '默认磁力搜索引擎', description: '盘搜（PanSou，未配置时默认）或 Prowlarr；用于后续手动搜索和 BGM 想看自动入库，不影响已选候选、在途任务或夸克分享。' },
     { id: 'tmdb', label: 'TMDB', description: '元数据 API、图片地址、读取 Token、语言与超时。' },
     { id: 'prowlarr', label: 'Prowlarr', description: '发布搜索连接与缓存；不改写上游索引器。' },
-    { id: 'pansou', label: 'PanSou', description: '网盘搜索地址、用户名与密码、链接检查限制。' },
+    { id: 'pansou', label: 'PanSou', description: '磁力与网盘搜索地址、用户名与密码、链接检查限制。' },
     { id: 'qas', label: '夸克 / QAS', description: '分别管理夸克 Cookie 与 QAS Token，以及分享目录缓存和分类根目录。' },
     { id: 'smartstrm', label: 'SmartSTRM', description: '整理完成回调；含认证的回调地址按敏感值管理。' },
   ] },

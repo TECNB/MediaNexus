@@ -91,7 +91,7 @@ function getSeasonLabel(seasonNumber: number) {
 
 function formatSize(value: number | null) {
   if (typeof value !== 'number' || value < 0) {
-    return '—'
+    return '未知大小'
   }
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   let size = value
@@ -104,7 +104,7 @@ function formatSize(value: number | null) {
 }
 
 function formatMetric(value: number | null) {
-  return typeof value === 'number' ? String(value) : '—'
+  return typeof value === 'number' ? String(value) : '未知'
 }
 
 function matchesResolution(
@@ -432,7 +432,7 @@ export function ResourcePublishPage() {
     loadState.status === 'loading' && typeof loadState.startedAt === 'number',
   )
   const loadMessage = formatElapsedMessage(
-    '正在加载 Prowlarr 发布资源…',
+    '正在加载磁力发布资源…',
     loadState.startedAt,
     loadElapsedNow,
   )
@@ -689,7 +689,7 @@ export function ResourcePublishPage() {
           ? '选择匹配当前季度的发布资源，随后创建动漫整季入库任务。'
           : releaseSource === 'quark'
             ? '从 PanSou 返回结果中检查一个 Quark 分享，确认后创建并立即执行 QAS 任务。'
-            : '从 Prowlarr 返回结果中选择一个具体发布，随后创建 OpenList 入库任务。'
+            : '从磁力搜索结果中选择一个具体发布，随后创建 OpenList 入库任务。'
       }
     >
       <section className="rounded-lg bg-white p-5">
@@ -930,13 +930,14 @@ export function ResourcePublishPage() {
                       </span>
                       <span>抓取 {formatMetric(release.grabs)}</span>
                       <span className="truncate">
-                        来源 {release.indexer || '—'}
+                        来源 {release.indexer || '未知'}
                       </span>
                       <span className="inline-flex items-center gap-1.5 truncate">
                         <CalendarDays className="h-3.5 w-3.5" />
-                        {release.publish_date || '—'}
+                        {release.publish_date || '未知'}
                       </span>
                     </div>
+                    {release.seeders === null && <p className="mt-3 text-xs text-amber-700">做种情况与可下载性未知，请核对标题和季集信息。</p>}
                   </div>
 
                   <Button

@@ -88,12 +88,14 @@ const sourceFilterOptions: Array<{
   { value: 'ALL', label: '全部来源' },
   { value: 'MANUAL_MAGNET', label: '起点为手动磁力' },
   { value: 'PROWLARR_RELEASE', label: '起点为发布资源' },
+  { value: 'PANSOU', label: '起点为盘搜磁力' },
   { value: 'JAVDB_AUTOMATION', label: 'JAVDB 自动化' },
 ]
 
 const sourceTypeCopy: Record<string, string> = {
   MANUAL_MAGNET: '手动磁力',
   PROWLARR_RELEASE: '发布资源',
+  PANSOU: '盘搜磁力',
   JAVDB_AUTOMATION: 'JAVDB 自动化',
 }
 

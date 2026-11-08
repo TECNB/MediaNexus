@@ -14,7 +14,7 @@ type SearchHistoryProps = {
 }
 
 function getContextLabel(entry: ResourceSearchHistoryEntry) {
-  const sourceLabel = entry.source === 'quark' ? 'Quark' : 'Prowlarr'
+  const sourceLabel = entry.source === 'quark' ? '夸克' : '磁力'
   let categoryLabel: string
 
   switch (entry.category) {

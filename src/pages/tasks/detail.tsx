@@ -80,6 +80,7 @@ const productTypeCopy: Record<OpenListTaskCenterProductType, string> = {
 const sourceTypeCopy: Record<string, string> = {
   MANUAL_MAGNET: '手动磁力',
   PROWLARR_RELEASE: '发布资源',
+  PANSOU: '盘搜磁力',
   JAVDB_AUTOMATION: 'JAVDB 自动化',
 }
 
@@ -325,13 +326,14 @@ function FailedAdultMagnetsCard({
 function canRetryManualMagnet(detail: OpenListTaskCenterDetail) {
   return (
     (detail.source_type === 'MANUAL_MAGNET' ||
-      detail.source_type === 'PROWLARR_RELEASE') &&
+      detail.source_type === 'PROWLARR_RELEASE' ||
+      detail.source_type === 'PANSOU') &&
     detail.task_type !== 'ADULT' &&
     recoverableStatuses.has(detail.status)
   )
 }
 
-function canSelectProwlarrRelease(detail: OpenListTaskCenterDetail) {
+function canSelectRelease(detail: OpenListTaskCenterDetail) {
   return (
     (detail.task_type === 'MOVIE' ||
       detail.task_type === 'SERIES' ||
@@ -825,7 +827,7 @@ export function TaskCenterDetailPage() {
   const activeStageIndex = getStageIndex(detail)
   const isPolling = !isTerminalStatus(detail.status)
   const showManualMagnetRetry = canRetryManualMagnet(detail)
-  const showReleaseSelection = canSelectProwlarrRelease(detail)
+  const showReleaseSelection = canSelectRelease(detail)
   const showAdultBatchRetry = canRetryAdultBatch(detail)
   const retrySubmitting = retrySubmitAction !== null
 

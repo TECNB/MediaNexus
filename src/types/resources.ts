@@ -150,7 +150,7 @@ export type ProwlarrRelease = {
   grabs: number | null
   indexer: string | null
   publish_date: string | null
-  indexer_id: number
+  indexer_id: number | null
   download_ref: string
   resolution_tags: OpenListQualityTag[]
   dynamic_range_tags: string[]
@@ -282,7 +282,7 @@ type SelectedReleasePayload = {
   release_title: string
   indexer: string | null
   size: number | null
-  indexer_id: number
+  indexer_id: number | null
   download_ref: string
   resolution_tags: OpenListQualityTag[]
   dynamic_range_tags: string[]

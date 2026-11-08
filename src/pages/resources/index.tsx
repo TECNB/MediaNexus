@@ -409,7 +409,7 @@ function releaseTendencyLabel(
   if (tendency === 'original') {
     return '原文标题候选'
   }
-  return 'ID 命中候选'
+  return '其他标题候选'
 }
 
 function releaseSortFocus(indexInTendency: number) {
@@ -435,9 +435,9 @@ function buildReleaseCandidateReasons(selection: AutoReleaseConfirmation) {
     tendencyCounts[tendency] += 1
 
     const tendencyLabel = releaseTendencyLabel(tendency, selection.item)
-    const sortFocus = releaseSortFocus(indexInTendency)
+    const sortFocus = release.size === null || release.seeders === null ? '候选参考' : releaseSortFocus(indexInTendency)
     const size = formatReleaseSize(release.size)
-    const seeders = release.seeders ?? '—'
+    const seeders = release.seeders ?? '未知'
 
     return {
       tendencyLabel,
@@ -1132,7 +1132,7 @@ export function ResourceSearchPage() {
       ...currentStates,
       [itemKey]: {
         status: 'loading',
-        message: '正在匹配 Prowlarr 发布资源…',
+        message: '正在匹配磁力发布资源…',
         startedAt: Date.now(),
       },
     }))
@@ -2022,7 +2022,7 @@ export function ResourceSearchPage() {
 
           {hasQualityFallback ? (
             <div className="mt-5 rounded-xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-700">
-              未找到符合条件且有做种的 {selection.qualityTag} 资源，已在本次搜索结果中自动回退至 {selection.selectedQualityTag}。请确认后再入库。
+              未找到符合条件的 {selection.qualityTag} 资源，已在本次搜索结果中自动回退至 {selection.selectedQualityTag}。请确认后再入库。
             </div>
           ) : null}
 
@@ -2076,7 +2076,10 @@ export function ResourceSearchPage() {
                       {formatReleaseSize(candidate.size)}
                     </span>
                     <span className="rounded-md bg-slate-200 px-2 py-1 text-slate-700">
-                      做种 {candidate.seeders ?? '—'}
+                      做种 {candidate.seeders ?? '未知'}
+                    </span>
+                    <span className="rounded-md bg-slate-200 px-2 py-1 text-slate-700">
+                      来源 {candidate.indexer || '未知'}
                     </span>
                     <span className="rounded-md bg-slate-200 px-2 py-1 text-slate-700">
                       {formatDynamicRange(candidate.dynamic_range_tags)}
@@ -2097,11 +2100,12 @@ export function ResourceSearchPage() {
                 {formatDynamicRange(release.dynamic_range_tags)}
               </span>
               <span>体积：{formatReleaseSize(release.size)}</span>
-              <span>做种：{release.seeders ?? '—'}</span>
-              <span>下载：{release.leechers ?? '—'}</span>
-              <span>抓取：{release.grabs ?? '—'}</span>
-              <span>来源：{release.indexer || '—'}</span>
+              <span>做种：{release.seeders ?? '未知'}</span>
+              <span>下载：{release.leechers ?? '未知'}</span>
+              <span>抓取：{release.grabs ?? '未知'}</span>
+              <span>来源：{release.indexer || '未知'}</span>
             </div>
+            {release.seeders === null && <p className="mt-3 text-xs text-amber-700">做种情况与可下载性未知，请核对发布标题和季集信息后再入库。</p>}
           </div>
 
           <div className="mt-6 flex items-center gap-3">
@@ -2293,7 +2297,7 @@ export function ResourceSearchPage() {
   return (
     <PageContainer
       title="资源搜索"
-      description="选择 Prowlarr 或 Quark 分享来源，搜索电影、电视剧、综艺或动漫并创建对应入库任务。"
+      description="选择磁力或夸克分享，搜索电影、电视剧、综艺或动漫并创建对应入库任务。"
     >
       <div className="space-y-8">
         <div className="flex justify-end">

@@ -338,7 +338,7 @@ export function ResourceIngestLogPage() {
   return (
     <PageContainer
       title="入库任务日志"
-      description="跟踪资源卡片触发的 Prowlarr → OpenList 入库任务。"
+      description="跟踪资源卡片触发的磁力 → OpenList 入库任务。"
     >
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
