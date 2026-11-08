@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 
 import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
-import { confirmBgmCandidate, deferBgmOperation, getBgmOperation, getBgmWishlist, listBgmOperations, listBgmSources, refreshBgmWishlist, saveBgmSource, searchBgmOperation, submitBgmOperation, updateBgmIdentity } from '@/lib/api/bgm-wishlist'
+import { confirmBgmCandidate, deferBgmOperation, getBgmOperation, getBgmWishlist, listBgmOperations, listBgmSources, refreshBgmWishlist, saveBgmSource, searchBgmOperation, submitBgmOperation, supplyBgmOperation, updateBgmIdentity } from '@/lib/api/bgm-wishlist'
 import { getJavaErrorMessage, isJavaRequestCanceledError } from '@/lib/java-api'
 import type { BgmItem, BgmOperation, BgmOperations, BgmSource, BgmWishlist } from '@/types/bgm-wishlist'
 import { AutomationNavigation } from './navigation'
@@ -155,6 +155,17 @@ export function BgmWishlistPage() {
     catch (caught) { setError(getJavaErrorMessage(caught) || '操作失败，请查看当前记录。'); setHistoryVersion((value) => value + 1) }
     finally { setWorking(false) }
   }
+  async function saveCandidate(request: Promise<BgmOperation>) {
+    setWorking(true); setError(null)
+    try {
+      const operation = await request
+      setHistory((current) => current ? { ...current, items: current.items.map((entry) => entry.id === operation.id ? operation : entry) } : current)
+      setHistoryVersion((value) => value + 1)
+    } catch (caught) {
+      setHistoryVersion((value) => value + 1)
+      throw caught
+    } finally { setWorking(false) }
+  }
   return <PageContainer title="自动化" description="管理 BGM 想看来源与入库任务。">
     <div className="space-y-6">
       <AutomationNavigation active="bgm" />
@@ -169,7 +180,7 @@ export function BgmWishlistPage() {
       {wishlist && <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[['想看作品', wishlist.items.length], ['符合初步条件', wishlist.items.filter((item) => item.eligible).length], ['已在库', wishlist.items.filter((item) => item.libraryStatus === 'PRESENT').length], ['待匹配／检查', wishlist.items.filter((item) => !item.identity || item.libraryStatus === 'UNKNOWN').length]].map(([label, count]) => <div key={label} className="rounded-xl bg-white px-4 py-3 ring-1 ring-slate-200"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-xl font-semibold text-slate-950">{count}</p></div>)}</div>}
       {configOpen && <BgmConfig value={form} onChange={setForm} onSave={() => void save()} saving={working} isNew={adding} chooseFirstScope={adding || !source?.baselineInitialized} />}
       {matchItem && <div ref={matchRef} tabIndex={-1}><BgmDirectoryPicker key={matchItem.subjectId} title={matchItem.title} saving={working} onClose={() => setMatchItem(null)} onChoose={(choice) => void saveMatch(choice)} /></div>}
-      {historyOpen && source && <section ref={recordsRef} tabIndex={-1} aria-label="操作记录" className="min-w-0 scroll-mt-24 space-y-3 rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200"><h2 className="font-semibold">操作记录</h2>{historyError && <p role="alert" className="text-sm text-amber-700">{historyError}</p>}{!history ? <p className="text-sm text-slate-500">正在读取记录…</p> : <><BgmOperationRecords operations={history.items} focusedId={focusedId} working={working} onConfirm={(id, subjectId, key) => void updateOperation(confirmBgmCandidate(id, subjectId, key))} onSearch={(id, subjectId) => void updateOperation(searchBgmOperation(id, subjectId))} onDefer={(id, subjectId) => void updateOperation(deferBgmOperation(id, subjectId))} /><div className="flex items-center gap-3 text-sm"><Button size="sm" variant="outline" disabled={historyPage <= 1} onClick={() => setHistoryPage(historyPage - 1)}>上一页</Button><span>第 {history.page} 页 · 共 {history.total} 条</span><Button size="sm" variant="outline" disabled={history.page * history.pageSize >= history.total} onClick={() => setHistoryPage(historyPage + 1)}>下一页</Button></div></>}</section>}
+      {historyOpen && source && <section ref={recordsRef} tabIndex={-1} aria-label="操作记录" className="min-w-0 scroll-mt-24 space-y-3 rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200"><h2 className="font-semibold">操作记录</h2>{historyError && <p role="alert" className="text-sm text-amber-700">{historyError}</p>}{!history ? <p className="text-sm text-slate-500">正在读取记录…</p> : <><BgmOperationRecords key={sourceId} operations={history.items} focusedId={focusedId} working={working} onConfirm={(id, subjectId, key) => saveCandidate(confirmBgmCandidate(id, subjectId, key))} onSupply={(id, subjectId, identity, release) => saveCandidate(supplyBgmOperation(id, subjectId, identity, release))} onSearch={(id, subjectId) => void updateOperation(searchBgmOperation(id, subjectId))} onDefer={(id, subjectId) => void updateOperation(deferBgmOperation(id, subjectId))} /><div className="flex items-center gap-3 text-sm"><Button size="sm" variant="outline" disabled={historyPage <= 1 || working} onClick={() => setHistoryPage(historyPage - 1)}>上一页</Button><span>第 {history.page} 页 · 共 {history.total} 条</span><Button size="sm" variant="outline" disabled={history.page * history.pageSize >= history.total || working} onClick={() => setHistoryPage(historyPage + 1)}>下一页</Button></div></>}</section>}
 
       {loading && <p className="text-sm text-slate-500">正在读取想看清单…</p>}
       {wishlist?.refreshStatus === 'FAILED' && <p role="alert" className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800">上次刷新失败：{wishlist.refreshError || '读取未完成'}。显示上次有效清单；本次不能据此执行入库。</p>}
