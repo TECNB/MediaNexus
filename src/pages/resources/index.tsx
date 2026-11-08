@@ -1,3 +1,4 @@
+import { formatReleaseSize } from '@/lib/release-size'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, Clock3, RefreshCw } from 'lucide-react'
@@ -436,7 +437,7 @@ function buildReleaseCandidateReasons(selection: AutoReleaseConfirmation) {
 
     const tendencyLabel = releaseTendencyLabel(tendency, selection.item)
     const sortFocus = release.size === null || release.seeders === null ? '候选参考' : releaseSortFocus(indexInTendency)
-    const size = formatReleaseSize(release.size)
+    const size = formatReleaseSize(release)
     const seeders = release.seeders ?? '未知'
 
     return {
@@ -462,19 +463,7 @@ function formatDynamicRange(tags: string[]) {
     : '未标注'
 }
 
-function formatReleaseSize(value: number | null) {
-  if (typeof value !== 'number' || value < 0) {
-    return '未知大小'
-  }
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let size = value
-  let unitIndex = 0
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex += 1
-  }
-  return `${size.toFixed(unitIndex > 2 ? 2 : 0)} ${units[unitIndex]}`
-}
+
 
 function createInitialSearchState(): ResourceSearchState {
   return {
@@ -2073,7 +2062,7 @@ export function ResourceSearchPage() {
                         ))
                       : null}
                     <span className="rounded-md bg-slate-200 px-2 py-1 text-slate-700">
-                      {formatReleaseSize(candidate.size)}
+                      {formatReleaseSize(candidate)}
                     </span>
                     <span className="rounded-md bg-slate-200 px-2 py-1 text-slate-700">
                       做种 {candidate.seeders ?? '未知'}
@@ -2099,7 +2088,7 @@ export function ResourceSearchPage() {
                 {selection.selectedQualityTag} /{' '}
                 {formatDynamicRange(release.dynamic_range_tags)}
               </span>
-              <span>体积：{formatReleaseSize(release.size)}</span>
+              <span>体积：{formatReleaseSize(release)}</span>
               <span>做种：{release.seeders ?? '未知'}</span>
               <span>下载：{release.leechers ?? '未知'}</span>
               <span>抓取：{release.grabs ?? '未知'}</span>

@@ -240,6 +240,7 @@ export type MovieReleaseSearchPayload = {
   original_title: string | null
   year: number
   quality: OpenListQualityTag
+  bangumi_title?: string | null
 }
 
 export type SeriesReleaseRecommendationPayload = {
@@ -260,6 +261,7 @@ export type SeriesReleaseSearchPayload = {
   original_title: string | null
   season_number: number
   quality: OpenListQualityTag
+  bangumi_title?: string | null
 }
 
 export type ProwlarrReleaseRecommendationData = {

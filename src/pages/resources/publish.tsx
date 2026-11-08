@@ -1,3 +1,4 @@
+import { formatReleaseSize, formatSizeBytes } from '@/lib/release-size'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
@@ -89,19 +90,7 @@ function getSeasonLabel(seasonNumber: number) {
   return `S${String(seasonNumber).padStart(2, '0')}`
 }
 
-function formatSize(value: number | null) {
-  if (typeof value !== 'number' || value < 0) {
-    return '未知大小'
-  }
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let size = value
-  let unitIndex = 0
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex += 1
-  }
-  return `${size.toFixed(unitIndex > 2 ? 2 : 0)} ${units[unitIndex]}`
-}
+
 
 function formatMetric(value: number | null) {
   return typeof value === 'number' ? String(value) : '未知'
@@ -782,7 +771,7 @@ export function ResourcePublishPage() {
           </p>
           <p className="mt-1 text-xs text-amber-700">
             {retryContextState.context.release_indexer || '索引器未知'} ·{' '}
-            {formatSize(retryContextState.context.release_size)} · 偏好{' '}
+            {formatSizeBytes(retryContextState.context.release_size)} · 偏好{' '}
             {retryContextState.context.quality_tag || '未记录'}
           </p>
           <p className="mt-3 text-xs leading-5 text-amber-800">
@@ -918,7 +907,7 @@ export function ResourcePublishPage() {
                     <div className="mt-4 grid gap-3 text-xs text-slate-500 sm:grid-cols-3 xl:grid-cols-6">
                       <span className="inline-flex items-center gap-1.5">
                         <HardDrive className="h-3.5 w-3.5" />
-                        {formatSize(release.size)}
+                        {formatReleaseSize(release)}
                       </span>
                       <span className="inline-flex items-center gap-1.5">
                         <Users className="h-3.5 w-3.5" />

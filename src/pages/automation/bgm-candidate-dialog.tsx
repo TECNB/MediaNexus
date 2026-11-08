@@ -1,3 +1,4 @@
+import { formatReleaseSize } from '@/lib/release-size'
 import { useEffect, useId, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -54,7 +55,7 @@ export function BgmCandidateDialog({ operation, entry, working, onConfirm, onSup
     searchRef.current = controller
     setLoading(true); setError(null)
     try {
-      const common = { tmdb_id: identity.tmdbId, imdb_id: null, title: identity.title, original_title: identity.originalTitle, quality: operation.source.quality }
+      const common = { tmdb_id: identity.tmdbId, imdb_id: null, title: identity.title, original_title: identity.originalTitle, quality: operation.source.quality, bangumi_title: entry.item.title }
       const data = identity.mediaType === 'MOVIE'
         ? await searchMovieReleases({ ...common, year: identity.year! }, controller.signal)
         : await searchSeriesReleases({ ...common, tvdb_id: null, season_number: identity.seasonNumber! }, controller.signal)
@@ -118,7 +119,7 @@ export function BgmCandidateDialog({ operation, entry, working, onConfirm, onSup
         const checked = selectedKey === candidate.key
         return <label key={candidate.key} className={cn('flex cursor-pointer items-start gap-3 rounded-xl border p-4 focus-within:ring-2 focus-within:ring-slate-600', checked ? 'border-slate-950 bg-slate-50' : 'border-slate-200')}>
           <input type="radio" aria-label={`选择候选 ${index + 1}：${release.title}`} name={titleId} value={candidate.key} checked={checked} onChange={() => { setSelectedKey(candidate.key); setError(null) }} className="mt-1 h-4 w-4 shrink-0 accent-slate-950" />
-          <span className="min-w-0 space-y-2 text-sm"><span className="block break-words [overflow-wrap:anywhere] font-semibold">{release.title}</span><span className="block text-slate-600">{checked ? '已选中' : `候选 ${index + 1}`} · 来源：{release.indexer ?? '未知'} · 画质：{release.resolution_tags.join(' / ') || '未知'} · 季度：{release.season_tags.join(' / ') || '未知，需人工核对'}</span><span className="block text-slate-600">做种：{release.seeders ?? '未知'} · 体积：{release.size === null ? '未知' : `${(release.size / 1024 ** 3).toFixed(2)} GiB`}{release.dynamic_range_tags.length ? ` · ${release.dynamic_range_tags.join(' / ')}` : ''}</span><span className="block break-words text-amber-800">{release.match_source ? `匹配依据：${release.match_source}${release.match_query ? ` · ${release.match_query}` : ''}。` : '匹配依据未知。'}字幕及可下载性未经验证。</span></span>
+          <span className="min-w-0 space-y-2 text-sm"><span className="block break-words [overflow-wrap:anywhere] font-semibold">{release.title}</span><span className="block text-slate-600">{checked ? '已选中' : `候选 ${index + 1}`} · 来源：{release.indexer ?? '未知'} · 画质：{release.resolution_tags.join(' / ') || '未知'} · 季度：{release.season_tags.join(' / ') || '未知，需人工核对'}</span><span className="block text-slate-600">做种：{release.seeders ?? '未知'} · 体积：{formatReleaseSize(release)}{release.dynamic_range_tags.length ? ` · ${release.dynamic_range_tags.join(' / ')}` : ''}</span><span className="block break-words text-amber-800">{release.match_source ? `匹配依据：${release.match_source}${release.match_query ? ` · ${release.match_query}` : ''}。` : '匹配依据未知。'}字幕及可下载性未经验证。</span></span>
         </label>
       })}
     </fieldset>
