@@ -8,7 +8,7 @@ export type MediaLibraryId =
 
 export type MediaCapacity = {
   storage_bytes: number | null
-  capacity_status: 'complete' | 'pending' | 'unknown' | null
+  capacity_status: 'complete' | 'pending' | 'partial' | 'unknown' | null
 }
 
 export type AdultStorageItem = MediaCapacity & {

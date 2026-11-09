@@ -822,8 +822,8 @@ function MediaLibraryPageContent() {
             </div>
 
             <p className="text-xs text-slate-600">
-              {byCapacity ? '已知容量从大到小，未知或未统计完的条目排在末尾。' : '默认按最近入库排序。'}
-              容量为源文件大小合计，统计完成后可点「刷新容量」。
+              {byCapacity ? '已知容量从大到小，未知或不完整的条目排在末尾。' : '默认按最近入库排序。'}
+              容量来自 Emby。剧集与合集按收录的媒体汇总。
             </p>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {data.items.map((item) => (
