@@ -76,7 +76,8 @@ export function Sidebar() {
       ? [...adminPrimaryItems, ...primaryItems]
       : primaryItems
   const visibleSecondaryItems =
-    user?.role === 'ADMIN' ? [...adminItems, ...secondaryItems] : secondaryItems
+    user?.role === 'ADMIN' ? [...adminItems, ...secondaryItems]
+      : [{ icon: Bot, label: '微信自动化', to: '/automation/wecom' }, ...secondaryItems]
 
   return (
     <aside className="border-b border-slate-200 bg-slate-50 md:sticky md:top-0 md:h-screen md:border-b-0 md:border-r">

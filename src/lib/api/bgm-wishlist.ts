@@ -53,6 +53,20 @@ export async function supplyBgmOperation(id: string, subjectId: number, identity
   return unwrap((await javaApiClient.post<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${base}/operations/${encodeURIComponent(id)}/supply`, { subjectId, identity, release })).data)
 }
 
+const wecom = '/api/v1/wecom-ingest/operations'
 export async function listWeComOperations(page: number, signal?: AbortSignal) {
-  return unwrap((await javaApiClient.get<Response<import('@/types/bgm-wishlist').BgmOperations>>('/api/v1/admin/wecom-ingest/operations', { params: { page, pageSize: 20 }, signal })).data)
+  return unwrap((await javaApiClient.get<Response<import('@/types/bgm-wishlist').BgmOperations>>(wecom, { params: { page, pageSize: 20 }, signal })).data)
 }
+export async function getWeComOperation(id: string, signal?: AbortSignal) {
+  return unwrap((await javaApiClient.get<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${wecom}/${encodeURIComponent(id)}`, { signal })).data)
+}
+async function updateWeComOperation(id: string, action: string, body: object) {
+  return unwrap((await javaApiClient.post<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${wecom}/${encodeURIComponent(id)}/${action}`, body)).data)
+}
+export const confirmWeComCandidate = (id: string, subjectId: number, candidateKey: string) =>
+  updateWeComOperation(id, 'confirm', { subjectId, candidateKey })
+export const searchWeComOperation = (id: string, subjectId: number) => updateWeComOperation(id, 'search', { subjectId })
+export const deferWeComOperation = (id: string, subjectId: number) => updateWeComOperation(id, 'defer', { subjectId })
+export const supplyWeComOperation = (id: string, subjectId: number,
+  identity: Pick<BgmIdentity, 'mediaType' | 'tmdbId' | 'seasonNumber'>, release: import('@/types/resources').ProwlarrRelease) =>
+  updateWeComOperation(id, 'supply', { subjectId, identity, release })

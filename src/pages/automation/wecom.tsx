@@ -2,14 +2,16 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
-import { confirmBgmCandidate, deferBgmOperation, getBgmOperation, listWeComOperations, searchBgmOperation, supplyBgmOperation } from '@/lib/api/bgm-wishlist'
+import { confirmWeComCandidate, deferWeComOperation, getWeComOperation, listWeComOperations, searchWeComOperation, supplyWeComOperation } from '@/lib/api/bgm-wishlist'
 import { getJavaErrorMessage } from '@/lib/java-api'
+import { useAuth } from '@/lib/use-auth'
 import type { BgmOperation, BgmOperations } from '@/types/bgm-wishlist'
 import { BgmOperationRecords } from './bgm-operation-records'
 import { AutomationNavigation } from './navigation'
 
 export function WeComAutomationPage() {
   const [params] = useSearchParams()
+  const { user } = useAuth()
   const focusedId = params.get('operation')
   const [page, setPage] = useState(1)
   const [records, setRecords] = useState<BgmOperations | null>(null)
@@ -32,7 +34,7 @@ export function WeComAutomationPage() {
           setError('')
           if (focusedId) {
             try {
-              const operation = values.items.find((item) => item.id === focusedId) ?? await getBgmOperation(focusedId, controller.signal)
+              const operation = values.items.find((item) => item.id === focusedId) ?? await getWeComOperation(focusedId, controller.signal)
               if (controller.signal.aborted) return
               setFocused(operation.triggerType === 'WECOM' ? operation : null)
               setFocusError(operation.triggerType === 'WECOM' ? '' : '这条记录不是微信操作。')
@@ -73,7 +75,7 @@ export function WeComAutomationPage() {
 
   return (
     <div className="space-y-4">
-      <AutomationNavigation active="wecom" />
+      {user?.role === 'ADMIN' && <AutomationNavigation active="wecom" />}
       <section aria-labelledby="wecom-operations" className="min-w-0 space-y-4 rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -85,11 +87,11 @@ export function WeComAutomationPage() {
         {[error, focusError, actionError].filter(Boolean).map((message, index) => <p key={index} role="alert" className="break-words text-sm text-amber-800">{message}</p>)}
         {!records ? !error && <p role="status" className="text-sm text-slate-600">正在读取记录…</p> : visible.length ? (
           <BgmOperationRecords operations={visible} focusedId={focusedId} working={working}
-            onConfirm={(id, subjectId, key) => update(() => confirmBgmCandidate(id, subjectId, key))}
-            onSupply={(id, subjectId, identity, release) => update(() => supplyBgmOperation(id, subjectId, identity, release))}
-            onSearch={(id, subjectId) => run(() => searchBgmOperation(id, subjectId))}
-            onDefer={(id, subjectId) => run(() => deferBgmOperation(id, subjectId))} />
-        ) : <p className="py-5 text-sm text-slate-600">暂无微信请求。用已绑定的管理员企微账号发送一部片名开始。</p>}
+            onConfirm={(id, subjectId, key) => update(() => confirmWeComCandidate(id, subjectId, key))}
+            onSupply={(id, subjectId, identity, release) => update(() => supplyWeComOperation(id, subjectId, identity, release))}
+            onSearch={(id, subjectId) => run(() => searchWeComOperation(id, subjectId))}
+            onDefer={(id, subjectId) => run(() => deferWeComOperation(id, subjectId))} />
+        ) : <p className="py-5 text-sm text-slate-600">暂无微信请求。用与你的站内账号绑定的企微账号发送一部片名开始。</p>}
         {records && records.total > records.pageSize && (
           <nav aria-label="微信操作记录分页" className="flex flex-wrap items-center gap-3 text-sm">
             <Button size="sm" variant="outline" disabled={page <= 1 || records.page !== page} onClick={() => setPage(page - 1)}>上一页</Button>

@@ -106,11 +106,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'automation/wecom',
-        element: (
-          <ProtectedRoute requiredRole="ADMIN">
-            <WeComAutomationPage />
-          </ProtectedRoute>
-        ),
+        element: <WeComAutomationPage />,
       },
       { path: '*', element: <Navigate to="/resources" replace /> },
     ],
