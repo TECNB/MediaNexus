@@ -16,6 +16,7 @@ import { NavLink } from 'react-router-dom'
 
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { useAutomationAccess } from '@/lib/automation-access'
 import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
 
@@ -71,13 +72,16 @@ function SidebarLink({ icon: Icon, label, to }: NavigationItem) {
 
 export function Sidebar() {
   const { user } = useAuth()
+  const { visible } = useAutomationAccess()
+  const memberAutomation = visible('bgm') ? '/automation/bgm-wishlist'
+    : visible('douban') ? '/automation/douban-wishlist' : visible('wecom') ? '/automation/wecom' : null
   const visiblePrimaryItems =
     user?.role === 'ADMIN'
       ? [...adminPrimaryItems, ...primaryItems]
       : primaryItems
   const visibleSecondaryItems =
     user?.role === 'ADMIN' ? [...adminItems, ...secondaryItems]
-      : [{ icon: Bot, label: '微信自动化', to: '/automation/wecom' }, ...secondaryItems]
+      : [...(memberAutomation ? [{ icon: Bot, label: '自动化', to: memberAutomation }] : []), ...secondaryItems]
 
   return (
     <aside className="border-b border-slate-200 bg-slate-50 md:sticky md:top-0 md:h-screen md:border-b-0 md:border-r">

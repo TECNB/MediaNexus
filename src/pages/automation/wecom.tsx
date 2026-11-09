@@ -13,8 +13,12 @@ export function WeComAutomationPage() {
   const [params] = useSearchParams()
   const { user } = useAuth()
   const focusedId = params.get('operation')
+  const [all, setAll] = useState(false)
+  const showAll = user?.role === 'ADMIN' && all
   const [page, setPage] = useState(1)
-  const [records, setRecords] = useState<BgmOperations | null>(null)
+  const scope = `${user?.id}:${showAll}:${page}`
+  const [loaded, setLoaded] = useState<{ scope: string; records: BgmOperations } | null>(null)
+  const records = loaded?.scope === scope ? loaded.records : null
   const [focused, setFocused] = useState<BgmOperation | null>(null)
   const [error, setError] = useState('')
   const [focusError, setFocusError] = useState('')
@@ -28,13 +32,13 @@ export function WeComAutomationPage() {
     async function load() {
       if (document.visibilityState === 'visible') {
         try {
-          const values = await listWeComOperations(page, controller.signal)
+          const values = await listWeComOperations(page, showAll, controller.signal)
           if (controller.signal.aborted) return
-          setRecords(values)
+          setLoaded({ scope, records: values })
           setError('')
           if (focusedId) {
             try {
-              const operation = values.items.find((item) => item.id === focusedId) ?? await getWeComOperation(focusedId, controller.signal)
+              const operation = values.items.find((item) => item.id === focusedId) ?? await getWeComOperation(focusedId, showAll, controller.signal)
               if (controller.signal.aborted) return
               setFocused(operation.triggerType === 'WECOM' ? operation : null)
               setFocusError(operation.triggerType === 'WECOM' ? '' : '这条记录不是微信操作。')
@@ -53,7 +57,7 @@ export function WeComAutomationPage() {
     }
     void load()
     return () => { controller.abort(); window.clearTimeout(timer) }
-  }, [page, focusedId, refresh])
+  }, [page, focusedId, refresh, showAll, scope])
 
   async function update(action: () => Promise<BgmOperation>) {
     setWorking(true)
@@ -75,18 +79,27 @@ export function WeComAutomationPage() {
 
   return (
     <div className="space-y-4">
-      {user?.role === 'ADMIN' && <AutomationNavigation active="wecom" />}
+      <AutomationNavigation active="wecom" />
       <section aria-labelledby="wecom-operations" className="min-w-0 space-y-4 rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 id="wecom-operations" className="text-xl font-semibold text-slate-950">微信操作记录</h1>
             <p className="mt-1 text-sm text-slate-600">在微信发片名即可开始，想指定季度可加「第 3 季」或「S3」。</p>
           </div>
-          <Button type="button" variant="outline" onClick={() => setRefresh((value) => value + 1)}>刷新记录</Button>
+          <div className="flex flex-wrap items-center gap-3">
+            {user?.role === 'ADMIN' && <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={showAll} onChange={(event) => {
+                setLoaded(null); setFocused(null); setFocusError(''); setError(''); setPage(1); setAll(event.target.checked)
+              }} />
+              查看所有人的记录
+            </label>}
+            <Button type="button" variant="outline" onClick={() => setRefresh((value) => value + 1)}>刷新记录</Button>
+          </div>
         </div>
         {[error, focusError, actionError].filter(Boolean).map((message, index) => <p key={index} role="alert" className="break-words text-sm text-amber-800">{message}</p>)}
         {!records ? !error && <p role="status" className="text-sm text-slate-600">正在读取记录…</p> : visible.length ? (
           <BgmOperationRecords operations={visible} focusedId={focusedId} working={working}
+            showOwner={showAll} canManage={(operation) => operation.actorUserId === user?.id}
             onConfirm={(id, subjectId, key) => update(() => confirmWeComCandidate(id, subjectId, key))}
             onSupply={(id, subjectId, identity, release) => update(() => supplyWeComOperation(id, subjectId, identity, release))}
             onSearch={(id, subjectId) => run(() => searchWeComOperation(id, subjectId))}

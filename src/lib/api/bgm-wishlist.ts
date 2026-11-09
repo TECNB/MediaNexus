@@ -54,11 +54,11 @@ export async function supplyBgmOperation(id: string, subjectId: number, identity
 }
 
 const wecom = '/api/v1/wecom-ingest/operations'
-export async function listWeComOperations(page: number, signal?: AbortSignal) {
-  return unwrap((await javaApiClient.get<Response<import('@/types/bgm-wishlist').BgmOperations>>(wecom, { params: { page, pageSize: 20 }, signal })).data)
+export async function listWeComOperations(page: number, all: boolean, signal?: AbortSignal) {
+  return unwrap((await javaApiClient.get<Response<import('@/types/bgm-wishlist').BgmOperations>>(wecom, { params: { page, pageSize: 20, all }, signal })).data)
 }
-export async function getWeComOperation(id: string, signal?: AbortSignal) {
-  return unwrap((await javaApiClient.get<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${wecom}/${encodeURIComponent(id)}`, { signal })).data)
+export async function getWeComOperation(id: string, all: boolean, signal?: AbortSignal) {
+  return unwrap((await javaApiClient.get<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${wecom}/${encodeURIComponent(id)}`, { params: { all }, signal })).data)
 }
 async function updateWeComOperation(id: string, action: string, body: object) {
   return unwrap((await javaApiClient.post<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${wecom}/${encodeURIComponent(id)}/${action}`, body)).data)

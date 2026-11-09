@@ -1,6 +1,10 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 
 import { ProtectedRoute } from '@/components/auth/protected-route'
+import { AutomationAccessGate } from '@/lib/automation-access'
+import { useAuth } from '@/lib/use-auth'
+import { MemberWishlistPage } from '@/pages/automation/member-wishlist'
+import type { WishlistProvider } from '@/types/bgm-wishlist'
 import { AdminLayout } from '@/layouts/admin-layout'
 import { LoginPage, RegisterPage } from '@/pages/auth'
 import { DashboardPage } from '@/pages/dashboard'
@@ -21,6 +25,14 @@ import { TaskCenterPage } from '@/pages/tasks'
 import { TaskCenterDetailPage } from '@/pages/tasks/detail'
 import { QuarkTaskCenterDetailPage } from '@/pages/tasks/quark-detail'
 import { UserManagementPage } from '@/pages/users'
+
+function WishlistAutomationRoute({ provider }: { provider: WishlistProvider }) {
+  const { user } = useAuth()
+  return <AutomationAccessGate tab={provider === 'DOUBAN' ? 'douban' : 'bgm'}>
+    {user?.role === 'ADMIN' ? <BgmWishlistPage key={provider} provider={provider} />
+      : <MemberWishlistPage key={provider} provider={provider} />}
+  </AutomationAccessGate>
+}
 
 export const router = createBrowserRouter([
   { path: '/help', element: <DocsPage /> },
@@ -91,22 +103,18 @@ export const router = createBrowserRouter([
       {
         path: 'automation/bgm-wishlist',
         element: (
-          <ProtectedRoute requiredRole="ADMIN">
-            <BgmWishlistPage />
-          </ProtectedRoute>
+          <WishlistAutomationRoute provider="BGM" />
         ),
       },
       {
         path: 'automation/douban-wishlist',
         element: (
-          <ProtectedRoute requiredRole="ADMIN">
-            <BgmWishlistPage key="douban" provider="DOUBAN" />
-          </ProtectedRoute>
+          <WishlistAutomationRoute provider="DOUBAN" />
         ),
       },
       {
         path: 'automation/wecom',
-        element: <WeComAutomationPage />,
+        element: <AutomationAccessGate tab="wecom"><WeComAutomationPage /></AutomationAccessGate>,
       },
       { path: '*', element: <Navigate to="/resources" replace /> },
     ],
