@@ -292,6 +292,7 @@ export function BgmWishlistPage({ provider = 'BGM' }: { provider?: WishlistProvi
               <p className="mt-2 text-xs text-slate-600">{target(item, douban ? '剧集库' : '动漫库')}</p>
               {!deleting && <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${item.libraryStatus === 'PRESENT' ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>{library(item)}</span>}
               {(recovery || processing || task?.status === 'UNKNOWN') && <p className="mt-1 text-xs text-slate-600">{recovery || (processing ? '入库处理中' : '任务状态待确认')}</p>}
+              {item.availability === 'THEATRICAL' && <p className="mt-1 text-xs text-slate-600">TMDB 暂未确认非院线版本已发行，仅供参考。</p>}
               {item.reasons.filter((reason) => !inlineReasons.has(reason.code)).map((reason) => <p key={reason.code} className="mt-1 text-xs text-amber-700">{reason.message}</p>)}
               {deletion && (deleting || deletionFailed) && <div className="mt-2"><DeletionProgress task={deletion} /></div>}
               <div className="mt-3 flex flex-wrap gap-2">
