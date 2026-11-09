@@ -1,22 +1,19 @@
-import { formatReleaseSize, formatSizeBytes } from '@/lib/release-size'
+import { formatSizeBytes } from '@/lib/release-size'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
   ArrowLeft,
-  CalendarDays,
   CloudUpload,
   Database,
-  Download,
-  HardDrive,
   Loader2,
   RefreshCw,
-  Users,
 } from 'lucide-react'
 
 import { supplyBgmOperation } from '@/lib/api/bgm-wishlist'
 import { PageContainer } from '@/components/layout/page-container'
 import { QuarkReleasePanel } from '@/components/resources/quark-release-panel'
+import { ReleaseReviewBadges, ReleaseReviewDetails } from '@/components/resources/release-review'
 import { Button } from '@/components/ui/button'
 import { SelectControl } from '@/components/ui/form-control'
 import {
@@ -67,14 +64,6 @@ const DYNAMIC_FILTERS: Array<{ value: DynamicFilter; label: string }> = [
   { value: 'unmarked', label: '未标注' },
 ]
 
-const dynamicTagCopy: Record<string, string> = {
-  dolby_vision: 'Dolby Vision',
-  hdr10_plus: 'HDR10+',
-  hdr10: 'HDR10',
-  hdr: 'HDR',
-  hlg: 'HLG',
-  sdr: 'SDR',
-}
 
 function isSeriesSearchItem(
   item: SearchableResourceItem,
@@ -92,9 +81,6 @@ function getSeasonLabel(seasonNumber: number) {
 
 
 
-function formatMetric(value: number | null) {
-  return typeof value === 'number' ? String(value) : '未知'
-}
 
 function matchesResolution(
   release: ProwlarrRelease,
@@ -128,15 +114,6 @@ function releaseKey(release: ProwlarrRelease, index: number) {
   return `${index}:${release.indexer_id}:${release.download_ref}`
 }
 
-function releaseMatchLabel(release: ProwlarrRelease) {
-  const source = release.match_source?.trim()
-  const query = release.match_query?.trim()
-
-  if (source && query) {
-    return `${source}：${query}`
-  }
-  return source || query || null
-}
 
 function retryContextPageState(
   context: OpenListReleaseRetryContext,
@@ -870,14 +847,6 @@ export function ResourcePublishPage() {
           {filteredItems.map((release) => {
             const key = releaseKey(release, loadState.items.indexOf(release))
             const isSubmitting = submitState.keys.includes(key)
-            const matchLabel = releaseMatchLabel(release)
-            const tags = [
-              ...(pageState.mediaType === 'series' ? release.season_tags : []),
-              ...release.resolution_tags,
-              ...release.dynamic_range_tags.map(
-                (tag) => dynamicTagCopy[tag] ?? tag,
-              ),
-            ]
 
             return (
               <article key={key} className="rounded-lg bg-white p-5">
@@ -886,47 +855,10 @@ export function ResourcePublishPage() {
                     <h3 className="break-words text-sm font-semibold leading-6 text-slate-950">
                       {release.title}
                     </h3>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {matchLabel ? (
-                        <span className="rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">
-                          命中 {matchLabel}
-                        </span>
-                      ) : null}
-                      {tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                      {tags.length === 0 ? (
-                        <span className="text-xs text-slate-400">未解析标签</span>
-                      ) : null}
-                    </div>
-                    <div className="mt-4 grid gap-3 text-xs text-slate-500 sm:grid-cols-3 xl:grid-cols-6">
-                      <span className="inline-flex items-center gap-1.5">
-                        <HardDrive className="h-3.5 w-3.5" />
-                        {formatReleaseSize(release)}
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <Users className="h-3.5 w-3.5" />
-                        做种 {formatMetric(release.seeders)}
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <Download className="h-3.5 w-3.5" />
-                        下载 {formatMetric(release.leechers)}
-                      </span>
-                      <span>抓取 {formatMetric(release.grabs)}</span>
-                      <span className="truncate">
-                        来源 {release.indexer || '未知'}
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 truncate">
-                        <CalendarDays className="h-3.5 w-3.5" />
-                        {release.publish_date || '未知'}
-                      </span>
-                    </div>
-                    {release.seeders === null && <p className="mt-3 text-xs text-amber-700">做种情况与可下载性未知，请核对标题和季集信息。</p>}
+                    <div className="mt-2"><ReleaseReviewBadges release={release} seasonNumber={pageState.seasonNumber} /></div>
+                    <ReleaseReviewDetails release={release} seasonNumber={pageState.seasonNumber}>
+                      <p>下载：{release.leechers ?? '未知'} · 抓取：{release.grabs ?? '未知'} · 发布：{release.publish_date || '未知'}</p>
+                    </ReleaseReviewDetails>
                   </div>
 
                   <Button

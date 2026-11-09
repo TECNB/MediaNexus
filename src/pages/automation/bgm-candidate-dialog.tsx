@@ -1,6 +1,6 @@
-import { formatReleaseSize } from '@/lib/release-size'
 import { useEffect, useId, useRef, useState } from 'react'
 
+import { ReleaseReviewBadges, ReleaseReviewDetails } from '@/components/resources/release-review'
 import { Button } from '@/components/ui/button'
 import { searchMovieReleases, searchSeriesReleases } from '@/lib/api/resources'
 import { getJavaErrorMessage } from '@/lib/java-api'
@@ -98,7 +98,7 @@ export function BgmCandidateDialog({ operation, entry, working, onConfirm, onSup
 
   return <dialog ref={dialogRef} aria-labelledby={titleId} aria-describedby={descriptionId} onKeyDown={(event) => {
     if (event.key !== 'Tab') return
-    const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)'))
+    const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), summary'))
     const first = controls[0]
     const last = controls[controls.length - 1]
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
@@ -107,7 +107,6 @@ export function BgmCandidateDialog({ operation, entry, working, onConfirm, onSup
     <div className="flex items-start justify-between gap-4"><h2 id={titleId} className="min-w-0 break-words text-lg font-semibold">选择发布 · {entry.item.title}</h2><Button type="button" variant="outline" className="min-h-11 shrink-0" disabled={pending} onClick={onClose}>关闭</Button></div>
     <p id={descriptionId} className="mt-3 text-sm text-slate-600">选中候选不会下载。确认后按原操作创建入库任务；请核对标题、画质、季度与字幕。</p>
     <p className="mt-2 break-words text-sm text-slate-600">目标：{identity?.title ?? '目录待匹配'}{identity?.mediaType === 'SERIES' ? ` · 第 ${identity.seasonNumber ?? '待确认'} 季` : ''} · 画质 {operation.source.quality} · 归属 {operation.source.ownerUsername}</p>
-    {entry.reason && <p className="mt-2 text-sm text-amber-800">{entry.reason.message}</p>}
     <div className="my-4 flex flex-wrap items-center gap-3"><Button type="button" variant="outline" className="min-h-11" disabled={pending || loading || !canSearch || !actionable} onClick={() => void search()}>{loading ? '正在搜索当前作品…' : '搜索当前作品资源'}</Button><span className="text-sm text-slate-500">已有 {entry.candidates.length} 条候选{searched ? ` · 新找到 ${results.length} 条` : ''}</span></div>
     {!canSearch && <p className="mb-3 text-sm text-amber-800">{!identity ? '请先关闭弹窗，在当前作品上纠正目录匹配。' : '搜索需要完整的年份或目标季度，请先在当前作品上纠正匹配。已有候选仍可查看。'}</p>}
     {loading && <p role="status" className="mb-3 text-sm text-slate-600">正在查询发布资源，关闭弹窗可取消搜索。</p>}
@@ -117,10 +116,16 @@ export function BgmCandidateDialog({ operation, entry, working, onConfirm, onSup
       {candidates.map((candidate, index) => {
         const release = candidate.release
         const checked = selectedKey === candidate.key
-        return <label key={candidate.key} className={cn('flex cursor-pointer items-start gap-3 rounded-xl border p-4 focus-within:ring-2 focus-within:ring-slate-600', checked ? 'border-slate-950 bg-slate-50' : 'border-slate-200')}>
-          <input type="radio" aria-label={`选择候选 ${index + 1}：${release.title}`} name={titleId} value={candidate.key} checked={checked} onChange={() => { setSelectedKey(candidate.key); setError(null) }} className="mt-1 h-4 w-4 shrink-0 accent-slate-950" />
-          <span className="min-w-0 space-y-2 text-sm"><span className="block break-words [overflow-wrap:anywhere] font-semibold">{release.title}</span><span className="block text-slate-600">{checked ? '已选中' : `候选 ${index + 1}`} · 来源：{release.indexer ?? '未知'} · 画质：{release.resolution_tags.join(' / ') || '未知'} · 季度：{release.season_tags.join(' / ') || '未知，需人工核对'}</span><span className="block text-slate-600">做种：{release.seeders ?? '未知'} · 体积：{formatReleaseSize(release)}{release.dynamic_range_tags.length ? ` · ${release.dynamic_range_tags.join(' / ')}` : ''}</span><span className="block break-words text-amber-800">{release.match_source ? `匹配依据：${release.match_source}${release.match_query ? ` · ${release.match_query}` : ''}。` : '匹配依据未知。'}字幕及可下载性未经验证。</span></span>
-        </label>
+        return <div key={candidate.key} className={cn('rounded-xl border p-4 focus-within:ring-2 focus-within:ring-slate-600', checked ? 'border-slate-950 bg-slate-50' : 'border-slate-200')}>
+          <label className="flex cursor-pointer items-start gap-3">
+            <input type="radio" aria-label={`选择候选 ${index + 1}：${release.title}`} name={titleId} value={candidate.key} checked={checked} onChange={() => { setSelectedKey(candidate.key); setError(null) }} className="mt-1 h-4 w-4 shrink-0 accent-slate-950" />
+            <span className="min-w-0 space-y-2 text-sm">
+              <span className="block break-words [overflow-wrap:anywhere] font-semibold">{release.title}</span>
+              <ReleaseReviewBadges release={release} seasonNumber={identity?.seasonNumber} />
+            </span>
+          </label>
+          <div className="pl-7"><ReleaseReviewDetails release={release} seasonNumber={identity?.seasonNumber} /></div>
+        </div>
       })}
     </fieldset>
     {!candidates.length && !loading && <p role="status" className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">{searched ? '本次未找到候选，可重试搜索，或关闭后重新搜索操作记录。' : '此记录没有保留候选，可搜索当前作品资源后选择。'}</p>}

@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, Clock3, RefreshCw } from 'lucide-react'
 
 import { PageContainer } from '@/components/layout/page-container'
+import { ReleaseReviewBadges, ReleaseReviewDetails } from '@/components/resources/release-review'
 import { Button } from '@/components/ui/button'
 import {
   AnimeCard,
@@ -269,14 +270,6 @@ const animeModeSearchHandlers: Record<
 
 const DEFAULT_ANIME_RESOURCE_MODE: AnimeResourceMode = 'season-ingest'
 
-const dynamicRangeCopy: Record<string, string> = {
-  dolby_vision: 'Dolby Vision',
-  hdr10_plus: 'HDR10+',
-  hdr10: 'HDR10',
-  hdr: 'HDR',
-  hlg: 'HLG',
-  sdr: 'SDR',
-}
 
 function isAnimeSearchItem(
   item: ResourceSearchResultItem,
@@ -341,16 +334,6 @@ function getSearchLanguage(term: string): SearchLanguage {
 
 function getItemSearchLanguage(item: SearchableResourceItem) {
   return getSearchLanguage(`${item.title} ${item.original_title ?? ''}`)
-}
-
-function releaseMatchLabel(release: ProwlarrRelease, fallbackQuery: string) {
-  const source = release.match_source?.trim()
-  const query = release.match_query?.trim() || fallbackQuery.trim()
-
-  if (source && query) {
-    return `${source}：${query}`
-  }
-  return query || source || '-'
 }
 
 function normalizeReleaseTitleText(value: string | null | undefined) {
@@ -457,11 +440,6 @@ function formatSeasonLabel(seasonNumber: number) {
   return `S${String(seasonNumber).padStart(2, '0')}`
 }
 
-function formatDynamicRange(tags: string[]) {
-  return tags.length > 0
-    ? tags.map((tag) => dynamicRangeCopy[tag] ?? tag).join(' / ')
-    : '未标注'
-}
 
 
 
@@ -1937,11 +1915,6 @@ export function ResourceSearchPage() {
     const selection = autoReleaseConfirmation
     const release = selection.release
     const candidateReasons = buildReleaseCandidateReasons(selection)
-    const selectedReleaseIndex = selection.releases.indexOf(release)
-    const selectedReason =
-      candidateReasons[selectedReleaseIndex >= 0 ? selectedReleaseIndex : 0]
-    const isNonChineseRelease = !hasChineseText(release.title)
-    const matchLabel = releaseMatchLabel(release, selection.query)
     const hasMultipleCandidates = selection.releases.length > 1
     const hasQualityFallback = selection.selectedQualityTag !== selection.qualityTag
     const selectedSeasonLabel =
@@ -1949,12 +1922,7 @@ export function ResourceSearchPage() {
       typeof selection.seasonNumber === 'number'
         ? formatSeasonLabel(selection.seasonNumber)
         : null
-    const languageCopy =
-      selection.searchLanguage === 'chinese'
-        ? '中文'
-        : selection.searchLanguage === 'english'
-          ? '英文'
-          : '未识别'
+
 
     return (
       <div className="fixed inset-0 z-40 flex items-center justify-center overflow-hidden bg-slate-950/40 px-3 py-3 backdrop-blur-sm sm:px-4 sm:py-8">
@@ -1971,12 +1939,7 @@ export function ResourceSearchPage() {
               <h2 className="mt-2 text-xl font-semibold text-slate-950">
                 {hasMultipleCandidates ? '选择推荐发布入库' : '确认使用该发布入库？'}
               </h2>
-              <p className="mt-2 text-sm text-slate-500">
-                命中：{matchLabel} · 搜索词语种：{languageCopy}
-              </p>
-              <p className="mt-1 text-sm leading-6 text-slate-500">
-                推荐按标题倾向分组：先列中文或展示标题候选，再列原文标题候选；每组优先给出容量更大的版本和做种更多的版本。
-              </p>
+
             </div>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
               {selection.mediaType === 'movie'
@@ -1992,12 +1955,6 @@ export function ResourceSearchPage() {
               {hasMultipleCandidates ? ` · ${selection.releases.length} 个推荐` : ''}
             </span>
           </div>
-
-          {isNonChineseRelease ? (
-            <div className="mt-5 rounded-xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-700">
-              当前自动选中的发布标题不含中文，可能没有内置中文字幕。确认后如有需要，可以继续使用字幕上传能力补充字幕。
-            </div>
-          ) : null}
 
           {selection.libraryPresence?.exists ? (
             <div className="mt-5 rounded-xl bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-700">
@@ -2019,82 +1976,37 @@ export function ResourceSearchPage() {
             {selection.releases.map((candidate, index) => {
               const isSelected = candidate === release
               const candidateReason = candidateReasons[index]
-              const candidateMatchLabel = releaseMatchLabel(
-                candidate,
-                selection.query,
-              )
               return (
-                <button
-                  key={releaseCandidateKey(candidate, index)}
-                  type="button"
-                  disabled={selection.isSubmitting}
-                  onClick={() => handleSelectAutoReleaseCandidate(candidate)}
-                  className={cn(
-                    'w-full rounded-xl border px-4 py-4 text-left transition',
-                    isSelected
-                      ? 'border-slate-950 bg-slate-100'
-                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50',
-                  )}
-                >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <p className="break-words text-sm font-semibold leading-6 text-slate-950">
-                      {candidate.title}
-                    </p>
-                    <span className="shrink-0 rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-slate-600">
-                      {candidateReason.badge}
-                    </span>
+                <div key={releaseCandidateKey(candidate, index)} className="min-w-0">
+                  <button
+                    type="button"
+                    disabled={selection.isSubmitting}
+                    aria-pressed={isSelected}
+                    onClick={() => handleSelectAutoReleaseCandidate(candidate)}
+                    className={cn(
+                      'w-full rounded-xl border px-4 py-4 text-left transition',
+                      isSelected
+                        ? 'border-slate-950 bg-slate-100'
+                        : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50',
+                    )}
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <p className="break-words text-sm font-semibold leading-6 text-slate-950">
+                        {candidate.title}
+                      </p>
+                    </div>
+                    <div className="mt-2"><ReleaseReviewBadges release={candidate} seasonNumber={selection.seasonNumber} /></div>
+                  </button>
+                  <div className="px-4">
+                    <ReleaseReviewDetails release={candidate} seasonNumber={selection.seasonNumber}>
+                      <p>推荐依据：{candidateReason.badge} · {candidateReason.detail}</p>
+                      {!candidate.match_query && selection.query && <p>搜索词：{selection.query}</p>}
+                      <p>入库后可通过字幕上传补充中文字幕。</p>
+                    </ReleaseReviewDetails>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
-                    <span className="rounded-md bg-indigo-50 px-2 py-1 text-indigo-700">
-                      {candidateReason.detail}
-                    </span>
-                    <span className="rounded-md bg-emerald-50 px-2 py-1 text-emerald-700">
-                      命中 {candidateMatchLabel}
-                    </span>
-                    {selection.mediaType === 'series'
-                      ? candidate.season_tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="rounded-md bg-sky-50 px-2 py-1 text-sky-700"
-                          >
-                            {tag}
-                          </span>
-                        ))
-                      : null}
-                    <span className="rounded-md bg-slate-200 px-2 py-1 text-slate-700">
-                      {formatReleaseSize(candidate)}
-                    </span>
-                    <span className="rounded-md bg-slate-200 px-2 py-1 text-slate-700">
-                      做种 {candidate.seeders ?? '未知'}
-                    </span>
-                    <span className="rounded-md bg-slate-200 px-2 py-1 text-slate-700">
-                      来源 {candidate.indexer || '未知'}
-                    </span>
-                    <span className="rounded-md bg-slate-200 px-2 py-1 text-slate-700">
-                      {formatDynamicRange(candidate.dynamic_range_tags)}
-                    </span>
-                  </div>
-                </button>
+                </div>
               )
             })}
-          </div>
-
-          <div className="mt-5 rounded-xl bg-slate-100 px-4 py-4">
-            <div className="grid gap-3 text-xs text-slate-500 sm:grid-cols-2">
-              <span>推荐依据：{selectedReason.detail}</span>
-              <span>
-                当前选择：
-                {selectedSeasonLabel ? `${selectedSeasonLabel} / ` : ''}
-                {selection.selectedQualityTag} /{' '}
-                {formatDynamicRange(release.dynamic_range_tags)}
-              </span>
-              <span>体积：{formatReleaseSize(release)}</span>
-              <span>做种：{release.seeders ?? '未知'}</span>
-              <span>下载：{release.leechers ?? '未知'}</span>
-              <span>抓取：{release.grabs ?? '未知'}</span>
-              <span>来源：{release.indexer || '未知'}</span>
-            </div>
-            {release.seeders === null && <p className="mt-3 text-xs text-amber-700">做种情况与可下载性未知，请核对发布标题和季集信息后再入库。</p>}
           </div>
 
           <div className="mt-6 flex items-center gap-3">

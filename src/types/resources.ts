@@ -157,6 +157,7 @@ export type ProwlarrRelease = {
   season_tags: string[]
   match_source: string | null
   match_query: string | null
+  review_flags?: string[] | null
 }
 
 export type ProwlarrReleaseSearchData = {
