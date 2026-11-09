@@ -611,7 +611,7 @@ export function ResourcePublishPage() {
       ? supplyBgmOperation(bgm.operationId, bgm.subjectId, {
           mediaType: activeMediaType === 'movie' ? 'MOVIE' : 'SERIES', tmdbId: item!.tmdb_id!,
           seasonNumber: activeMediaType === 'series' ? seasonNumber : null,
-        }, release).then((operation) => `/automation/bgm-wishlist?operation=${encodeURIComponent(operation.id)}`)
+        }, release).then((operation) => `/automation/${operation.source.provider === 'DOUBAN' ? 'douban' : 'bgm'}-wishlist?operation=${encodeURIComponent(operation.id)}`)
       : retryContextState.context
       ? retryOpenListWithSelectedRelease(
           retryContextState.context.task_type,

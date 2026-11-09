@@ -7,7 +7,8 @@ import type { BgmCatalogCandidate } from '@/types/bgm-wishlist'
 
 type DirectoryChoice = { kind: 'movie' | 'series'; tmdbId: number; season: number | null }
 
-export function BgmDirectoryPicker({ title, onClose, onChoose, saving }: {
+export function BgmDirectoryPicker({ seriesLabel = '剧集型动漫', title, onClose, onChoose, saving }: {
+  seriesLabel?: string
   title: string
   onClose: () => void
   onChoose: (choice: DirectoryChoice) => void
@@ -61,7 +62,7 @@ export function BgmDirectoryPicker({ title, onClose, onChoose, saving }: {
     <section className="rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200" aria-label={`纠正 ${title} 的目录匹配`}>
       <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">选择真实目录 · {title}</h3><Button type="button" size="sm" variant="outline" onClick={onClose}>关闭</Button></div>
       <div className="mt-4 flex flex-wrap gap-2">
-        <label className="text-sm">类型 <select className="rounded-lg border border-slate-200 p-2" value={kind} onChange={(e) => { searchController.current?.abort(); setLoading(false); setKind(e.target.value as 'movie' | 'series'); setItems([]); setSelected(null) }}><option value="series">剧集型动漫</option><option value="movie">电影</option></select></label>
+        <label className="text-sm">类型 <select className="rounded-lg border border-slate-200 p-2" value={kind} onChange={(e) => { searchController.current?.abort(); setLoading(false); setKind(e.target.value as 'movie' | 'series'); setItems([]); setSelected(null) }}><option value="series">{seriesLabel}</option><option value="movie">电影</option></select></label>
         <label className="text-sm">目录名称 <input className="rounded-lg border border-slate-200 p-2" value={query} onChange={(e) => { searchController.current?.abort(); setLoading(false); setItems([]); setSelected(null); setQuery(e.target.value) }} /></label>
         <Button type="button" variant="outline" disabled={!query.trim() || loading} onClick={() => void search()}>搜索目录</Button>
       </div>

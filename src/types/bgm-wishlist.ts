@@ -1,6 +1,7 @@
 import type { MediaDeletionTask } from './media-library'
 
-export type BgmSourceInput = { bgmUsername: string; ownerUserId: number; enabled: boolean; scheduleTime: string; targetCount: number; quality: '1080p' | '2160p'; initialScope: 'NEW_ONLY' | 'INCLUDE_EXISTING' }
+export type WishlistProvider = 'BGM' | 'DOUBAN'
+export type BgmSourceInput = { provider?: WishlistProvider; bgmUsername: string; ownerUserId: number; enabled: boolean; scheduleTime: string; targetCount: number; quality: '1080p' | '2160p'; initialScope: 'NEW_ONLY' | 'INCLUDE_EXISTING' }
 export type BgmSource = BgmSourceInput & { id: string; ownerUsername: string; timezone: string; baselineInitialized: boolean }
 export type BgmIdentity = { mediaType: 'MOVIE' | 'SERIES'; tmdbId: number; seasonNumber: number | null; title: string; originalTitle: string | null; year: number | null }
 export type BgmTaskLink = { taskType: string; taskId: string; status: string }

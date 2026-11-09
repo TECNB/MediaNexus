@@ -95,6 +95,14 @@ export const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+      {
+        path: 'automation/douban-wishlist',
+        element: (
+          <ProtectedRoute requiredRole="ADMIN">
+            <BgmWishlistPage key="douban" provider="DOUBAN" />
+          </ProtectedRoute>
+        ),
+      },
       { path: '*', element: <Navigate to="/resources" replace /> },
     ],
   },

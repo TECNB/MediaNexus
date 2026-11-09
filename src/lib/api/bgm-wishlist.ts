@@ -1,6 +1,6 @@
 import { javaApiClient } from '@/lib/java-api'
 import type { MediaDeletionTask } from '@/types/media-library'
-import type { BgmCatalogCandidate, BgmIdentity, BgmItem, BgmPreview, BgmRun, BgmRuns, BgmSeason, BgmSource, BgmSourceInput, BgmWishlist } from '@/types/bgm-wishlist'
+import type { BgmCatalogCandidate, BgmIdentity, BgmItem, BgmPreview, BgmRun, BgmRuns, BgmSeason, BgmSource, BgmSourceInput, BgmWishlist, WishlistProvider } from '@/types/bgm-wishlist'
 
 const base = '/api/v1/admin/bgm-wishlist'
 type Response<T> = { code: number; message: string; data: T | null }
@@ -8,7 +8,7 @@ function unwrap<T>(response: Response<T>): T {
   if (response.code !== 200 || response.data === null) throw new Error(response.message || '请求失败')
   return response.data
 }
-export async function listBgmSources(signal?: AbortSignal) { return unwrap((await javaApiClient.get<Response<BgmSource[]>>(`${base}/sources`, { signal })).data) }
+export async function listBgmSources(provider: WishlistProvider, signal?: AbortSignal) { return unwrap((await javaApiClient.get<Response<BgmSource[]>>(`${base}/sources`, { params: { provider }, signal })).data) }
 export async function saveBgmSource(input: BgmSourceInput, id?: string) {
   const response = id ? await javaApiClient.put<Response<BgmSource>>(`${base}/sources/${encodeURIComponent(id)}`, input) : await javaApiClient.post<Response<BgmSource>>(`${base}/sources`, input)
   return unwrap(response.data)

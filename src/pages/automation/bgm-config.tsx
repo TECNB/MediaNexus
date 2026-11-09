@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import type { WishlistProvider } from '@/types/bgm-wishlist'
 import { BgmMemberSelect } from './bgm-member-select'
 
 export type BgmConfigForm = {
@@ -11,7 +12,9 @@ export type BgmConfigForm = {
   firstScope: 'future' | 'all'
 }
 
-export function BgmConfig({ value, onChange, onSave, saving, isNew, chooseFirstScope }: {
+export function BgmConfig({ value, onChange, onSave, saving, isNew, chooseFirstScope, provider, label }: {
+  provider: WishlistProvider
+  label: string
   value: BgmConfigForm
   onChange: (value: BgmConfigForm) => void
   onSave: () => void
@@ -21,9 +24,10 @@ export function BgmConfig({ value, onChange, onSave, saving, isNew, chooseFirstS
 }) {
   const update = (patch: Partial<BgmConfigForm>) => onChange({ ...value, ...patch })
   return <form className="space-y-4 rounded-2xl bg-white p-5 shadow-shell ring-1 ring-slate-200" onSubmit={(event) => { event.preventDefault(); onSave() }}>
-    <div><h2 className="font-semibold text-slate-950">{isNew ? '添加 BGM 想看来源' : '自动入库配置'}</h2><p className="mt-1 text-sm text-slate-500">来源账号与本站任务归属成员分别配置；保存本身不会创建入库任务。</p></div>
+    <div><h2 className="font-semibold text-slate-950">{isNew ? `添加 ${label}来源` : '自动入库配置'}</h2><p className="mt-1 text-sm text-slate-500">来源账号与本站任务归属成员分别配置；保存本身不会创建入库任务。</p></div>
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <label className="block text-sm">BGM 用户名或 ID<input className="mt-1 block w-full rounded-lg border border-slate-200 p-2 disabled:bg-slate-50" value={value.account} required disabled={!isNew} onChange={(e) => update({ account: e.target.value })} /></label>
+      <label className="block text-sm">{provider === 'DOUBAN' ? '豆瓣 ID、个人主页或想看链接' : 'BGM 用户名或 ID'}<input className="mt-1 block w-full rounded-lg border border-slate-200 p-2 disabled:bg-slate-50" value={value.account} required maxLength={provider === 'DOUBAN' ? 256 : 64} disabled={!isNew} onChange={(e) => update({ account: e.target.value })} /></label>
+      {provider === 'DOUBAN' && <p className="text-sm text-slate-500 sm:col-span-full">仅读取公开的想看清单，私密条目不会同步。</p>}
       <BgmMemberSelect value={value.ownerId} onChange={(ownerId) => update({ ownerId })} />
       <label className="block text-sm">每次成功创建目标<input className="mt-1 block w-full rounded-lg border border-slate-200 p-2" type="number" min="1" step="1" required value={value.count} onChange={(e) => update({ count: Number(e.target.value) })} /></label>
       <label className="block text-sm">每日执行时间（北京时间）<input className="mt-1 block w-full rounded-lg border border-slate-200 p-2" type="time" required value={value.time} onChange={(e) => update({ time: e.target.value })} /></label>
