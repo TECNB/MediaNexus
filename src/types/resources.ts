@@ -160,6 +160,18 @@ export type ProwlarrRelease = {
   review_flags?: string[] | null
 }
 
+export type ReleaseEpisodeCoveragePayload = {
+  download_ref: string
+  tmdb_id: number
+  season_number: number
+}
+
+export type ReleaseEpisodeCoverageData = {
+  status: 'CHECKING' | 'VERIFIED' | 'UNVERIFIED'
+  matched: number | null
+  expected: number | null
+}
+
 export type ProwlarrReleaseSearchData = {
   query: string
   items: ProwlarrRelease[]

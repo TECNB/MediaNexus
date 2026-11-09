@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 
+import { ReleaseEpisodeCoverage } from '@/components/resources/release-episode-coverage'
 import { ReleaseReviewBadges, ReleaseReviewDetails } from '@/components/resources/release-review'
 import { Button } from '@/components/ui/button'
 import { searchMovieReleases, searchSeriesReleases } from '@/lib/api/resources'
@@ -121,7 +122,10 @@ export function BgmCandidateDialog({ operation, entry, working, onConfirm, onSup
             <input type="radio" aria-label={`选择候选 ${index + 1}：${release.title}`} name={titleId} value={candidate.key} checked={checked} onChange={() => { setSelectedKey(candidate.key); setError(null) }} className="mt-1 h-4 w-4 shrink-0 accent-slate-950" />
             <span className="min-w-0 space-y-2 text-sm">
               <span className="block break-words [overflow-wrap:anywhere] font-semibold">{release.title}</span>
-              <ReleaseReviewBadges release={release} seasonNumber={identity?.seasonNumber} />
+              <span className="flex flex-wrap items-center gap-2">
+                <ReleaseReviewBadges release={release} seasonNumber={identity?.seasonNumber} />
+                <ReleaseEpisodeCoverage release={release} tmdbId={identity?.tmdbId} seasonNumber={identity?.mediaType === 'SERIES' ? identity.seasonNumber : null} />
+              </span>
             </span>
           </label>
           <div className="pl-7"><ReleaseReviewDetails release={release} seasonNumber={identity?.seasonNumber} /></div>

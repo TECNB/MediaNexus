@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, Clock3, RefreshCw } from 'lucide-react'
 
 import { PageContainer } from '@/components/layout/page-container'
+import { ReleaseEpisodeCoverage } from '@/components/resources/release-episode-coverage'
 import { ReleaseReviewBadges, ReleaseReviewDetails } from '@/components/resources/release-review'
 import { Button } from '@/components/ui/button'
 import {
@@ -1917,6 +1918,7 @@ export function ResourceSearchPage() {
     const candidateReasons = buildReleaseCandidateReasons(selection)
     const hasMultipleCandidates = selection.releases.length > 1
     const hasQualityFallback = selection.selectedQualityTag !== selection.qualityTag
+    const hasQualityUpgrade = parseInt(selection.selectedQualityTag) > parseInt(selection.qualityTag)
     const selectedSeasonLabel =
       selection.mediaType === 'series' &&
       typeof selection.seasonNumber === 'number'
@@ -1968,7 +1970,9 @@ export function ResourceSearchPage() {
 
           {hasQualityFallback ? (
             <div className="mt-5 rounded-xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-700">
-              未找到符合条件的 {selection.qualityTag} 资源，已在本次搜索结果中自动回退至 {selection.selectedQualityTag}。请确认后再入库。
+              {hasQualityUpgrade
+                ? `已升至${selection.selectedQualityTag === '2160p' ? '4K' : '1080p'}`
+                : <>未找到符合条件的 {selection.qualityTag} 资源，已在本次搜索结果中自动回退至 {selection.selectedQualityTag}。请确认后再入库。</>}
             </div>
           ) : null}
 
@@ -1995,7 +1999,10 @@ export function ResourceSearchPage() {
                         {candidate.title}
                       </p>
                     </div>
-                    <div className="mt-2"><ReleaseReviewBadges release={candidate} seasonNumber={selection.seasonNumber} /></div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <ReleaseReviewBadges release={candidate} seasonNumber={selection.seasonNumber} />
+                      <ReleaseEpisodeCoverage release={candidate} tmdbId={selection.item.tmdb_id} seasonNumber={selection.mediaType === 'series' ? selection.seasonNumber : null} />
+                    </div>
                   </button>
                   <div className="px-4">
                     <ReleaseReviewDetails release={candidate} seasonNumber={selection.seasonNumber}>

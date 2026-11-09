@@ -26,6 +26,8 @@ import type {
   QuarkReleaseLinkCheckData,
   QuarkReleaseLinkCheckPayload,
   QuarkReleaseSearchPayload,
+  ReleaseEpisodeCoverageData,
+  ReleaseEpisodeCoveragePayload,
   SearchProwlarrReleasesParams,
   SeriesReleaseRecommendationPayload,
   SeriesReleaseSearchPayload,
@@ -41,6 +43,24 @@ type JavaApiResponse<TData> = {
 
 const PROWLARR_RELEASE_REQUEST_TIMEOUT_MS = 120_000
 const QUARK_RELEASE_REQUEST_TIMEOUT_MS = 30_000
+
+export async function getReleaseEpisodeCoverage(
+  payload: ReleaseEpisodeCoveragePayload,
+  signal?: AbortSignal,
+): Promise<ReleaseEpisodeCoverageData> {
+  const response = await javaApiClient.post<JavaApiResponse<ReleaseEpisodeCoverageData>>(
+    '/api/v1/resources/releases/episode-coverage', payload, { signal, timeout: 5000 },
+  )
+  const coverage = response.data.data
+  if (response.data.code !== 200 || !coverage ||
+      !['CHECKING', 'VERIFIED', 'UNVERIFIED'].includes(coverage.status) ||
+      (coverage.status === 'VERIFIED' &&
+        (!Number.isInteger(coverage.matched) || !Number.isInteger(coverage.expected) ||
+          coverage.matched! < 0 || coverage.expected! <= 0 || coverage.matched! > coverage.expected!))) {
+    throw new Error('集数覆盖暂时无法核验。')
+  }
+  return coverage
+}
 
 function getAxiosErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {

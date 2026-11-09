@@ -13,6 +13,7 @@ import {
 import { supplyBgmOperation } from '@/lib/api/bgm-wishlist'
 import { PageContainer } from '@/components/layout/page-container'
 import { QuarkReleasePanel } from '@/components/resources/quark-release-panel'
+import { ReleaseEpisodeCoverage } from '@/components/resources/release-episode-coverage'
 import { ReleaseReviewBadges, ReleaseReviewDetails } from '@/components/resources/release-review'
 import { Button } from '@/components/ui/button'
 import { SelectControl } from '@/components/ui/form-control'
@@ -855,7 +856,12 @@ export function ResourcePublishPage() {
                     <h3 className="break-words text-sm font-semibold leading-6 text-slate-950">
                       {release.title}
                     </h3>
-                    <div className="mt-2"><ReleaseReviewBadges release={release} seasonNumber={pageState.seasonNumber} /></div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <ReleaseReviewBadges release={release} seasonNumber={pageState.seasonNumber} />
+                      <ReleaseEpisodeCoverage release={release} tmdbId={item.tmdb_id} seasonNumber={mediaType === 'series' ? seasonNumber : null} />
+                      {release.resolution_tags.some((quality) => parseInt(quality) > parseInt(pageState.qualityTag)) &&
+                        <span className="text-xs text-slate-600">已升至{release.resolution_tags.includes('2160p') ? '4K' : '1080p'}</span>}
+                    </div>
                     <ReleaseReviewDetails release={release} seasonNumber={pageState.seasonNumber}>
                       <p>下载：{release.leechers ?? '未知'} · 抓取：{release.grabs ?? '未知'} · 发布：{release.publish_date || '未知'}</p>
                     </ReleaseReviewDetails>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Check, ChevronRight, Image, Loader2 } from 'lucide-react'
 
+import { ReleaseEpisodeCoverage } from '@/components/resources/release-episode-coverage'
 import { ReleaseReviewBadges, ReleaseReviewDetails } from '@/components/resources/release-review'
 import { Button } from '@/components/ui/button'
 import { listOpenListTaskCenterLogs } from '@/lib/api/task-center'
@@ -118,7 +119,14 @@ export function BgmOperationRecords({ operations, focusedId, working, onConfirm,
               {['FAILED', 'INTERRUPTED'].includes(entry.status) && !task && <div className="mt-2"><p className="text-sm text-amber-700">{entry.reason?.message}</p><Button className="mt-2" size="sm" variant="outline" disabled={working || busy} onClick={() => onSearch(operation.id, entry.item.subjectId)}>重新搜索</Button></div>}
             </Step>
             <Step number={2} title="选择发布" active={entry.status === 'WAITING_CONFIRMATION' || entry.status === 'CREATING'} done={!!entry.selected}>
-              {selected ? <div className="space-y-2"><p className="break-words text-sm text-slate-800">{selected.release.title}</p><ReleaseReviewBadges release={selected.release} seasonNumber={entry.item.identity?.seasonNumber} /><ReleaseReviewDetails release={selected.release} seasonNumber={entry.item.identity?.seasonNumber}>{entry.status === 'WAITING_CONFIRMATION' && entry.reason && <p>待确认原因：{entry.reason.message}</p>}</ReleaseReviewDetails></div> : <p className="text-xs text-slate-400">尚未选择发布。</p>}
+              {selected ? <div className="space-y-2"><p className="break-words text-sm text-slate-800">{selected.release.title}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <ReleaseReviewBadges release={selected.release} seasonNumber={entry.item.identity?.seasonNumber} />
+                  <ReleaseEpisodeCoverage release={selected.release} tmdbId={entry.item.identity?.tmdbId} seasonNumber={entry.item.identity?.mediaType === 'SERIES' ? entry.item.identity.seasonNumber : null} />
+                  {entry.selected && selected.release.resolution_tags.some((quality) => parseInt(quality) > parseInt(operation.source.quality)) &&
+                    <span className="text-xs text-slate-600">已升至{selected.release.resolution_tags.includes('2160p') ? '4K' : '1080p'}</span>}
+                </div>
+                <ReleaseReviewDetails release={selected.release} seasonNumber={entry.item.identity?.seasonNumber}>{entry.status === 'WAITING_CONFIRMATION' && entry.reason && <p>待确认原因：{entry.reason.message}</p>}</ReleaseReviewDetails></div> : <p className="text-xs text-slate-400">尚未选择发布。</p>}
               {entry.status === 'WAITING_CONFIRMATION' && <>{!selected && entry.reason && <p className="mt-2 text-sm text-amber-700">{entry.reason.message}</p>}<Notice value={entry.notification} /><div className="mt-3 flex flex-wrap gap-2"><Button size="sm" disabled={working || busy} onClick={() => setPicker({ operationId: operation.id, subjectId: entry.item.subjectId })}>查看候选并选择（{entry.candidates.length}）</Button><Button size="sm" variant="outline" disabled={working || busy} onClick={() => onDefer(operation.id, entry.item.subjectId)}>暂不处理</Button></div></>}
               {entry.status === 'DEFERRED' && <><p className="mt-2 text-xs text-slate-500">已暂不处理。</p><Button className="mt-2" size="sm" variant="outline" disabled={working || busy} onClick={() => onSearch(operation.id, entry.item.subjectId)}>重新搜索</Button></>}
               {entry.status === 'SKIPPED' && entry.reason && <p className="mt-2 text-sm text-amber-700">{entry.reason?.message}</p>}
