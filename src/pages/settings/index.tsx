@@ -8,6 +8,7 @@ import { getSettingsDirectory } from '@/lib/api/settings'
 import { isJavaRequestCanceledError } from '@/lib/java-api'
 import type { SettingsGroupSummary } from '@/types/settings'
 import { Button } from '@/components/ui/button'
+import { SettingsWeComBindings } from './settings-wecom-bindings'
 import { SettingsGroupEditor } from './settings-group-editor'
 import { SettingsDialog } from './settings-dialog'
 import { DownloadAccounts, SettingsAccountBindings } from './settings-download-accounts'
@@ -70,6 +71,7 @@ function SettingsGroups({ tab, onDirtyChange }: { tab: 'system' | 'connections';
     </nav>
     <div className="min-w-0 space-y-5">
       {error ? <section className="rounded-2xl border border-red-200 bg-white p-5"><p role="alert" className="text-sm text-red-700">{error}</p><Button type="button" variant="outline" className="mt-4 min-h-11" onClick={() => setRevision(value => value + 1)}>重新读取配置目录</Button></section> : !directory ? <p role="status" className="rounded-2xl border border-slate-200 bg-white p-6">正在读取配置目录…</p> : available && group ? <><p className="px-1 text-sm leading-6 text-slate-600">{group.description}</p><SettingsGroupEditor key={selectedId} id={selectedId} onDirtyChange={onDirtyChange} /></> : <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"><h2 className="text-lg font-semibold text-slate-950">{group?.label ?? '未识别的配置组'}</h2><p role="status" className="mt-3 text-sm text-slate-600">{group ? '服务尚未提供该配置组，未读取或修改任何配置。' : '该深链接不属于当前面板，请从分组导航选择配置。'}</p></section>}
+      {available && selectedId === 'wecom' && <SettingsWeComBindings />}
       {selectedId === 'autosymlink' && <SettingsAccountBindings />}
       {tab === 'system' && <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"><h3 className="font-medium text-slate-900">其他参数</h3><p className="mt-2 text-sm text-slate-600">每项配置仅在所属面板维护。</p><div className="mt-4 flex flex-wrap gap-2">{[{ id: 'openlist', label: '入库与下载' }, { id: 'tmdb', label: '元数据与搜索' }, { id: 'wecom', label: '消息通知' }].map(item => <Link key={item.id} to={`?tab=connections&group=${item.id}`} className="inline-flex min-h-11 items-center rounded-xl border border-slate-200 px-4 text-sm text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500">{item.label}</Link>)}</div></section>}
     </div>

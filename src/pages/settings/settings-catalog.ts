@@ -15,7 +15,7 @@ export const connectionSections = [
     { id: 'smartstrm', label: 'SmartSTRM', description: '整理完成回调；含认证的回调地址按敏感值管理。' },
   ] },
   { label: '通知与订阅', groups: [
-    { id: 'wecom', label: '企业微信', description: '应用身份、接收成员与通知跳转地址；连接检查不发送消息。' },
+    { id: 'wecom', label: '企业微信', description: '管理应用连接、通知跳转地址和用户绑定；连接检查不发送消息。' },
     { id: 'anirss', label: 'Ani-RSS', description: '只读查看连接和可读取的追更位置，不修改订阅。' },
     { id: 'telegram-worker', label: 'Telegram Worker', description: '只读查看连接，不修改 Bot 绑定、收件箱或转发行为。' },
   ] },

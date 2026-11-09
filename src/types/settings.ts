@@ -87,3 +87,10 @@ export type OnboardingExecution = {
   steps: OnboardingStep[]; defaultChanges: DefaultChange[]; defaultsCommitted: boolean; configurationVerified: boolean; playbackVerified: false; issue: AccountIssue | null; canContinue: boolean; createdAt: string; updatedAt: string; finishedAt: string | null
 }
 export type OnboardingExecutionList = { items: OnboardingExecution[]; total: number }
+
+export type WeComScope = { corpId: string; agentId: number | null }
+export type WeComDirectory = { scope: WeComScope; members: { id: string; name: string }[] }
+export type WeComAccounts = {
+  scope: WeComScope
+  accounts: { id: number; username: string; role: string; memberId: string | null }[]
+}

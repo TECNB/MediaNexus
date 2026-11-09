@@ -1,7 +1,7 @@
 import type { AxiosRequestConfig } from 'axios'
 
 import { getJavaErrorMessage, isJavaRequestCanceledError, javaApiClient } from '@/lib/java-api'
-import type { SettingsDirectory, SettingsGroup, SettingsProbe, SettingsUpdate } from '@/types/settings'
+import type { SettingsDirectory, SettingsGroup, SettingsProbe, SettingsUpdate, WeComAccounts, WeComDirectory, WeComScope } from '@/types/settings'
 
 const base = '/api/v1/admin/settings'
 const groupPath = (id: string) => `${base}/groups/${encodeURIComponent(id)}`
@@ -91,4 +91,18 @@ export function getOnboardingExecution(id: string, signal?: AbortSignal) {
 }
 export function continueOnboardingExecution(execution: OnboardingExecution, signal?: AbortSignal) {
   return request<OnboardingExecution>({ url: `${accountsBase}/onboarding-executions/${encodeURIComponent(execution.id)}/continue`, method: 'POST', data: { expectedExecutionVersion: execution.executionVersion }, signal })
+}
+
+const wecomBase = `${base}/wecom`
+export function getWeComAccounts(signal?: AbortSignal) {
+  return request<WeComAccounts>({ url: `${wecomBase}/bindings`, method: 'GET', signal })
+}
+export function getWeComMembers(signal?: AbortSignal) {
+  return request<WeComDirectory>({ url: `${wecomBase}/members`, method: 'GET', signal, timeout: 60_000 })
+}
+export function bindWeComMember(userId: number, scope: WeComScope, memberId: string) {
+  return request<boolean>({ url: `${wecomBase}/bindings/${userId}`, method: 'PUT', data: { scope, memberId } })
+}
+export function unbindWeComMember(userId: number, scope: WeComScope) {
+  return request<boolean>({ url: `${wecomBase}/bindings/${userId}`, method: 'DELETE', params: scope })
 }
