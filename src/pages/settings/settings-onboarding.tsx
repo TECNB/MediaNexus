@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
-import { continueOnboardingExecution, createOnboardingPlan, executeOnboardingPlan, getOnboardingExecution, getOnboardingPlan, SettingsApiError } from '@/lib/api/settings'
+import { authorizeNativeDav, continueOnboardingExecution, createOnboardingPlan, executeOnboardingPlan, getOnboardingExecution, getOnboardingPlan, SettingsApiError } from '@/lib/api/settings'
 import { isJavaRequestCanceledError } from '@/lib/java-api'
 import type { AccountPathOverrides, DownloadCategory, OnboardingExecution, OnboardingPlan, PikPakAuthorization } from '@/types/settings'
 import { AccountIssues, AccountPairs, accountCardClass, accountControlClass, accountTime, categories, categoryLabels, ConnectionVersions, DefaultChanges, executionLabels, stageLabels } from './settings-account-ui'
@@ -12,6 +12,10 @@ type Props = { registryVersion: number | null; planId: string | null; executionI
 export function SettingsOnboarding({ registryVersion, planId, executionId, onDirtyChange, onNavigate, onRefreshRegistry }: Props) {
   const [submitted, setSubmitted] = useState(false)
   const [name, setName] = useState('')
+  const [alias, setAlias] = useState('')
+  const [davEndpoint, setDavEndpoint] = useState('https://dav.pikpak.ai/')
+  const [davUsername, setDavUsername] = useState('')
+  const [davPassword, setDavPassword] = useState('')
   const [selected, setSelected] = useState<DownloadCategory[]>([])
   const [platform, setPlatform] = useState<PikPakAuthorization['platform']>('web')
   const [authMode, setAuthMode] = useState<'password' | 'token'>('password')
@@ -32,7 +36,7 @@ export function SettingsOnboarding({ registryVersion, planId, executionId, onDir
   const scope = useRef<AbortController | null>(null)
   const errorRef = useRef<HTMLDivElement>(null)
   const isForm = !planId && !executionId
-  const dirty = isForm && !submitted && !!(name || selected.length || username || password || refreshToken || captchaToken || deviceId || Object.values(paths).some(Boolean) || platform !== 'web' || authMode !== 'password')
+  const dirty = !!(davUsername || davPassword) || isForm && !submitted && !!(name || alias || selected.length || username || password || refreshToken || captchaToken || deviceId || Object.values(paths).some(Boolean) || platform !== 'web' || authMode !== 'password')
   useEffect(() => { onDirtyChange(dirty, busy); return () => onDirtyChange(false) }, [dirty, busy, onDirtyChange])
   useEffect(() => { if (error) errorRef.current?.focus() }, [error])
   useEffect(() => {
@@ -80,13 +84,27 @@ export function SettingsOnboarding({ registryVersion, planId, executionId, onDir
     }
     setBusy(true); setError('')
     try {
-      const result = await createOnboardingPlan({ expectedRegistryVersion: registryVersion, displayName: name.trim(), categories: selected, authorization, ...(Object.keys(pathOverrides).length ? { pathOverrides } : {}) }, scope.current?.signal)
+      const result = await createOnboardingPlan({ expectedRegistryVersion: registryVersion, displayName: name.trim(), ...(alias.trim() ? { accountAlias: alias.trim() } : {}), categories: selected, authorization, ...(Object.keys(pathOverrides).length ? { pathOverrides } : {}) }, scope.current?.signal)
       if (scope.current?.signal.aborted) return
-      setSubmitted(true); setPassword(''); setRefreshToken(''); setCaptchaToken(''); setDeviceId(''); setUsername(''); setName(''); setSelected([]); setPaths({})
+      setSubmitted(true); setPassword(''); setRefreshToken(''); setCaptchaToken(''); setDeviceId(''); setUsername(''); setName(''); setAlias(''); setSelected([]); setPaths({})
       onNavigate(`?tab=accounts&plan=${encodeURIComponent(result.id)}`)
     } catch (reason) { fail(reason) }
     finally { if (!scope.current?.signal.aborted) setBusy(false) }
   }
+  async function saveNativeDav(event: FormEvent) {
+    event.preventDefault()
+    if (busy || !plan) return
+    setBusy(true); setError('')
+    try {
+      const result = await authorizeNativeDav(plan, {
+        endpoint: davEndpoint.trim(), username: davUsername.trim(), password: davPassword,
+      }, scope.current?.signal)
+      if (scope.current?.signal.aborted) return
+      setPlan(result); setDavUsername(''); setDavPassword('')
+    } catch (reason) { fail(reason) }
+    finally { if (!scope.current?.signal.aborted) setBusy(false) }
+  }
+
   async function commit() {
     if (busy) return
     setBusy(true); setError('')
@@ -110,6 +128,8 @@ export function SettingsOnboarding({ registryVersion, planId, executionId, onDir
       <h2 className="text-lg font-semibold text-slate-950">添加 PikPak 账号</h2><p className="mt-2 text-xs text-slate-500">注册版本：{registryVersion ?? '尚未读取'}</p><p className="mt-2 text-sm leading-6 text-slate-600">先生成准确的接入计划，确认后才执行外部变更。仅为所选类别建立关联；全部核对通过后才可能切换所选类别的新任务默认。</p>
       <fieldset disabled={busy} className="mt-6 space-y-6"><legend className="sr-only">账号与授权</legend>
         <label className="block space-y-2 text-sm font-medium text-slate-900">显示名<input name="accountDisplayName" className={accountControlClass} value={name} onChange={event => setName(event.target.value)} required /></label>
+        <label className="block space-y-2 text-sm font-medium text-slate-900">路径别名（可选）<input name="accountAlias" className={accountControlClass} placeholder="media-b" maxLength={32} pattern="[a-z][a-z0-9-]*" value={alias} onChange={event => setAlias(event.target.value)} aria-describedby="pikpak-alias-help" /></label>
+        <p id="pikpak-alias-help" className="text-xs leading-5 text-slate-600">用于 CD2、AS 和 STRM。只填写不含个人信息的短名，例如 media-b；留空由系统分配，不使用邮箱。</p>
         <fieldset><legend className="mb-2 text-sm font-medium text-slate-900">媒体类别（至少选择一项）</legend><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{categories.map(category => <label key={category} className="flex min-h-11 items-center gap-3 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800"><input type="checkbox" className="h-5 w-5 accent-slate-900" checked={selected.includes(category)} onChange={event => setSelected(previous => event.target.checked ? [...previous, category] : previous.filter(value => value !== category))} />{categoryLabels[category]}</label>)}</div></fieldset>
         <div className="grid gap-5 sm:grid-cols-2"><label className="block space-y-2 text-sm font-medium text-slate-900">授权方式<select className={accountControlClass} value={authMode} onChange={event => { setAuthMode(event.target.value as typeof authMode); setPassword(''); setRefreshToken('') }}><option value="password">用户名和密码</option><option value="token">Refresh Token</option></select></label><label className="block space-y-2 text-sm font-medium text-slate-900">平台<select className={accountControlClass} value={platform} onChange={event => setPlatform(event.target.value as typeof platform)}><option value="web">Web</option><option value="android">Android</option><option value="pc">PC</option></select></label></div>
         {authMode === 'token' ? <label className="block space-y-2 text-sm font-medium text-slate-900">Refresh Token<input name="pikpakRefreshToken" type="password" autoComplete="new-password" className={accountControlClass} value={refreshToken} onChange={event => setRefreshToken(event.target.value)} required /></label> : <div className="grid gap-5 sm:grid-cols-2"><label className="block space-y-2 text-sm font-medium text-slate-900">用户名／邮箱<input name="pikpakUsername" autoComplete="off" className={accountControlClass} value={username} onChange={event => setUsername(event.target.value)} required /></label><label className="block space-y-2 text-sm font-medium text-slate-900">密码<input name="pikpakPassword" type="password" autoComplete="new-password" className={accountControlClass} value={password} onChange={event => setPassword(event.target.value)} required /></label></div>}
@@ -119,6 +139,17 @@ export function SettingsOnboarding({ registryVersion, planId, executionId, onDir
       </fieldset>
     </form> : loading && !plan && !execution ? <p role="status" className={accountCardClass}>正在读取接入记录…</p> : plan ? <section className={`${accountCardClass} space-y-6`} aria-label="接入计划预览">
       <div><h2 className="text-lg font-semibold text-slate-950">{plan.displayName} · 接入计划</h2><p className="mt-2 break-words text-xs text-slate-500">计划 {plan.id} · 版本 {plan.planVersion} · 注册版本 {plan.registryVersion} · {accountTime(plan.updatedAt)}</p></div>
+      {plan.authorizationConfigured && plan.resources.some(resource => resource.stage === 'CD2_PLAYBACK_CLOUD') && <form onSubmit={saveNativeDav} className="space-y-4 rounded-xl border border-slate-200 p-4" aria-label="官方 WebDAV 授权">
+        <h3 className="font-semibold text-slate-900">{plan.issues.some(issue => issue.code === 'NATIVE_DAV_REQUIRED') ? '等待开启 PikPak 官方 WebDAV' : '官方 WebDAV 授权已验证'}</h3>
+        <p className="text-sm leading-6 text-slate-600">在 PikPak「设置 → 访问和集成 → WebDAV」开启并创建专用凭据，再回到这里填写。保存只验证授权，不创建挂载。</p>
+        <fieldset disabled={busy || stale} className="grid gap-3 sm:grid-cols-3">
+          <legend className="sr-only">官方 WebDAV 凭据</legend>
+          <label className="block space-y-2 text-sm font-medium text-slate-900">接入地址<input required name="nativeDavEndpoint" className={accountControlClass} value={davEndpoint} onChange={event => setDavEndpoint(event.target.value)} /></label>
+          <label className="block space-y-2 text-sm font-medium text-slate-900">WebDAV 用户名<input required name="nativeDavUsername" autoComplete="off" className={accountControlClass} value={davUsername} onChange={event => setDavUsername(event.target.value)} /></label>
+          <label className="block space-y-2 text-sm font-medium text-slate-900">WebDAV 密码<input required type="password" name="nativeDavPassword" autoComplete="new-password" className={accountControlClass} value={davPassword} onChange={event => setDavPassword(event.target.value)} /></label>
+        </fieldset>
+        <Button type="submit" variant="outline" className="min-h-11" disabled={busy || stale}>验证并保存授权</Button>
+      </form>}
       <AccountIssues issues={plan.issues} /><ConnectionVersions versions={plan.connectionVersions} />
       <AccountPairs items={[[ '目标 ID', plan.targetId ], ['媒体类别', plan.categories.map(category => categoryLabels[category]).join('、')], ['OpenList 根路径', plan.ingestPrefix], ['CD2 映射根路径', plan.cloudDrivePrefix], ['媒体来源根路径', plan.mediaSourcePrefix], ['授权状态', plan.authorizationConfigured ? '已受保护保存（最长 24 小时）· 不回显' : '授权未配置或已清除，请重新提供授权并预览']]} />
       <div className="space-y-3"><h3 className="font-semibold text-slate-900">类别路径与媒体库</h3>{plan.bindings.map(binding => <div className="rounded-xl border border-slate-200 p-4" key={binding.category}><h4 className="mb-3 text-sm font-medium text-slate-900">{categoryLabels[binding.category]}</h4><AccountPairs items={[[ '入库目录', binding.rootPath ], ['媒体来源', binding.mediaSourceRoot], ['STRM 输出', binding.strmRootPath], ...(binding.embyLibraries?.length ? binding.embyLibraries.map(library => ['Emby 库目录', `${library.libraryName} · ${library.libraryId} → ${library.path}`] as [string, string]) : [['Emby 库', binding.embyLibraryId ?? '缺少既有媒体库关联'] as [string, string]]), ...(binding.animePathTemplate ? [['动漫模板', binding.animePathTemplate] as [string, string]] : [])]} /></div>)}</div>

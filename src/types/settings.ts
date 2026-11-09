@@ -40,7 +40,7 @@ export type SettingsProbe = {
 }
 
 export type DownloadCategory = 'MOVIE' | 'TV' | 'ANIME' | 'ADULT'
-export type AccountStage = 'OPENLIST_STORAGE' | 'MEDIA_DIRECTORIES' | 'CD2_CLOUD' | 'CD2_MOUNT' | 'MEDIA_READABLE' | 'AS_BINDINGS' | 'EMBY_PATHS' | 'READBACK' | 'LOCAL_COMMIT'
+export type AccountStage = 'OPENLIST_STORAGE' | 'MEDIA_DIRECTORIES' | 'CD2_CLOUD' | 'CD2_PLAYBACK_CLOUD' | 'CD2_MOUNT' | 'MEDIA_READABLE' | 'AS_BINDINGS' | 'EMBY_PATHS' | 'READBACK' | 'LOCAL_COMMIT'
 export type AccountIssue = { code: string; stage: AccountStage | null; field: string | null; message: string }
 export type AccountCheck = { stage: AccountStage; state: 'UNKNOWN' | 'PENDING' | 'HEALTHY' | 'FAILED' | 'NEEDS_ACTION'; checkedAt: string | null; message: string | null }
 export type AccountCapacity = { totalBytes: number | null; usedBytes: number | null; freeBytes: number | null; observedAt: string | null; state: 'AVAILABLE' | 'UNAVAILABLE'; message: string | null }
@@ -69,7 +69,7 @@ export type AdoptionPlan = {
 export type PikPakAuthorization = { platform: 'android' | 'web' | 'pc'; username?: string; password?: string; refreshToken?: string; captchaToken?: string; deviceId?: string }
 export type CategoryPathOverride = { rootPath?: string; animePathTemplate?: string; strmRootPath?: string }
 export type AccountPathOverrides = { ingestPrefix?: string; cloudDrivePrefix?: string; mediaSourcePrefix?: string; categories?: Partial<Record<DownloadCategory, CategoryPathOverride>> }
-export type OnboardingPlanRequest = { expectedRegistryVersion: number; displayName: string; categories: DownloadCategory[]; authorization: PikPakAuthorization; pathOverrides?: AccountPathOverrides }
+export type OnboardingPlanRequest = { expectedRegistryVersion: number; displayName: string; accountAlias?: string; categories: DownloadCategory[]; authorization: PikPakAuthorization; pathOverrides?: AccountPathOverrides }
 export type PlannedAccountBinding = { category: DownloadCategory; rootPath: string; animePathTemplate: string | null; mediaSourceRoot: string; strmRootPath: string; embyLibraryId: string | null; embyLibraries?: AccountLibraryPath[] }
 export type PlannedAccountResource = { stage: AccountStage; action: 'CREATE' | 'REUSE' | 'APPEND' | 'VERIFY'; resourceType: string; resourceId: string | null; path: string | null; summary: string }
 export type OnboardingPlan = {

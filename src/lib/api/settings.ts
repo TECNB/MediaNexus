@@ -77,6 +77,9 @@ export function createOnboardingPlan(data: OnboardingPlanRequest, signal?: Abort
 export function getOnboardingPlan(id: string, signal?: AbortSignal) {
   return request<OnboardingPlan>({ url: `${accountsBase}/onboarding-plans/${encodeURIComponent(id)}`, method: 'GET', signal })
 }
+export function authorizeNativeDav(plan: OnboardingPlan, credentials: { endpoint: string; username: string; password: string }, signal?: AbortSignal) {
+  return request<OnboardingPlan>({ url: `${accountsBase}/onboarding-plans/${encodeURIComponent(plan.id)}/native-webdav`, method: 'PUT', data: { expectedPlanVersion: plan.planVersion, ...credentials }, signal })
+}
 export function executeOnboardingPlan(plan: OnboardingPlan, signal?: AbortSignal) {
   return request<OnboardingExecution>({ url: `${accountsBase}/onboarding-plans/${encodeURIComponent(plan.id)}/execute`, method: 'POST', data: { expectedPlanVersion: plan.planVersion, expectedRegistryVersion: plan.registryVersion }, signal })
 }

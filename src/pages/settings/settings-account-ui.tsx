@@ -7,7 +7,7 @@ export const accountCardClass = 'min-w-0 rounded-2xl border border-slate-200 bg-
 export const accountControlClass = 'min-h-11 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200 disabled:bg-slate-100 disabled:text-slate-500'
 export const categoryLabels: Record<DownloadCategory, string> = { MOVIE: '电影', TV: '剧集', ANIME: '动漫整季', ADULT: 'Adult' }
 export const categories: DownloadCategory[] = ['MOVIE', 'TV', 'ANIME', 'ADULT']
-export const stageLabels: Record<AccountStage, string> = { OPENLIST_STORAGE: 'OpenList 存储', MEDIA_DIRECTORIES: '媒体目录', CD2_CLOUD: 'CD2 云盘', CD2_MOUNT: 'CD2 系统挂载', MEDIA_READABLE: '媒体路径可读', AS_BINDINGS: 'AutoSymlink 任务', EMBY_PATHS: 'Emby 库目录', READBACK: '关联读回核对', LOCAL_COMMIT: '登记目标与类别默认' }
+export const stageLabels: Record<AccountStage, string> = { OPENLIST_STORAGE: 'OpenList 存储', MEDIA_DIRECTORIES: '媒体目录', CD2_CLOUD: 'CD2 整理云盘', CD2_PLAYBACK_CLOUD: 'PikPak 官方播放云盘', CD2_MOUNT: 'CD2 系统挂载', MEDIA_READABLE: '媒体路径可读', AS_BINDINGS: 'AutoSymlink 任务', EMBY_PATHS: 'Emby 库目录', READBACK: '关联读回核对', LOCAL_COMMIT: '登记目标与类别默认' }
 export const executionLabels = { PENDING: '等待执行', RUNNING: '执行中', CONNECTED: '已接通', SUCCEEDED: '已完成', FAILED: '失败', NEEDS_ACTION: '需要处理', INTERRUPTED: '已中断' }
 export function accountTime(value: string | null) { return value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '尚未观测' }
 export function accountBytes(value: number | null) {
