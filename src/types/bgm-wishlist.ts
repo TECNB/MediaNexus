@@ -20,5 +20,5 @@ export type BgmCandidate = { key: string; release: import('./resources').Prowlar
 export type BgmSearchProgress = { query: string; source: string; status: 'RUNNING' | 'SUCCEEDED' | 'FAILED'; elapsedMs: number; resultCount: number | null }
 export type BgmOperationTask = BgmTaskLink & { stage: string | null; error: string | null; notification: string | null }
 export type BgmOperationEntry = { item: BgmItem; status: string; startedAt: string; searches: BgmSearchProgress[]; candidates: BgmCandidate[]; selected: BgmCandidate | null; task: BgmOperationTask | null; reason: { code: string; message: string } | null; notification: string | null }
-export type BgmOperation = { id: string; source: BgmSource; action: BgmAction; triggerType: 'MANUAL' | 'SCHEDULED'; actorUserId: number | null; startedAt: string; updatedAt: string; status: string; requestedIds: number[]; entries: BgmOperationEntry[]; reason: { code: string; message: string } | null }
+export type BgmOperation = { id: string; source: BgmSource; action: BgmAction; triggerType: 'MANUAL' | 'SCHEDULED' | 'WECOM'; actorUserId: number | null; startedAt: string; updatedAt: string; status: string; requestedIds: number[]; entries: BgmOperationEntry[]; reason: { code: string; message: string } | null }
 export type BgmOperations = { items: BgmOperation[]; total: number; page: number; pageSize: number }

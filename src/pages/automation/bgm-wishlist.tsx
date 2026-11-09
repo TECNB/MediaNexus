@@ -95,7 +95,7 @@ export function BgmWishlistPage({ provider = 'BGM' }: { provider?: WishlistProvi
     const controller = new AbortController()
     getBgmOperation(id, controller.signal).then((operation) => {
       if (controller.signal.aborted) return
-      if ((operation.source.provider ?? 'BGM') !== provider) {
+      if (operation.triggerType === 'WECOM' || (operation.source.provider ?? 'BGM') !== provider) {
         setHistoryError('该记录属于另一想看平台。')
         return
       }

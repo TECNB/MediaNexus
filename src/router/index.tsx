@@ -8,6 +8,7 @@ import { EmbyWatchRankingsPage } from '@/pages/emby-watch-rankings'
 import { DocsPage } from '@/pages/docs'
 import { AutomationPage } from '@/pages/automation'
 import { TelegramAutomationPage } from '@/pages/automation/telegram'
+import { WeComAutomationPage } from '@/pages/automation/wecom'
 import { BgmWishlistPage } from '@/pages/automation/bgm-wishlist'
 import { MagnetIngestPage } from '@/pages/magnet-ingest'
 import { MediaLibraryPage } from '@/pages/media-library'
@@ -100,6 +101,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requiredRole="ADMIN">
             <BgmWishlistPage key="douban" provider="DOUBAN" />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'automation/wecom',
+        element: (
+          <ProtectedRoute requiredRole="ADMIN">
+            <WeComAutomationPage />
           </ProtectedRoute>
         ),
       },

@@ -52,3 +52,7 @@ export async function deferBgmOperation(id: string, subjectId: number) {
 export async function supplyBgmOperation(id: string, subjectId: number, identity: { mediaType: 'MOVIE' | 'SERIES'; tmdbId: number; seasonNumber: number | null }, release: import('@/types/resources').ProwlarrRelease) {
   return unwrap((await javaApiClient.post<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${base}/operations/${encodeURIComponent(id)}/supply`, { subjectId, identity, release })).data)
 }
+
+export async function listWeComOperations(page: number, signal?: AbortSignal) {
+  return unwrap((await javaApiClient.get<Response<import('@/types/bgm-wishlist').BgmOperations>>('/api/v1/admin/wecom-ingest/operations', { params: { page, pageSize: 20 }, signal })).data)
+}
