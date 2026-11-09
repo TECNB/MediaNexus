@@ -1,4 +1,4 @@
-import { formatReleaseSize } from '@/lib/release-size'
+import { formatReleaseSize, releaseTitleSize } from '@/lib/release-size'
 import type { ProwlarrRelease } from '@/types/resources'
 
 const subtitleMarker = /简繁|簡繁|简体|簡體|繁体|繁體|中文字幕|中字|\b(?:chs|cht|sc|tc)\b/i
@@ -36,13 +36,16 @@ export function ReleaseReviewBadges({ release, seasonNumber }: Props) {
 export function ReleaseReviewDetails({ release, seasonNumber, children }: Props & { children?: React.ReactNode }) {
   const [primary, ...otherFlags] = reviewFlags(release, seasonNumber)
   const size = formatReleaseSize(release)
+  const matchSource = releaseTitleSize(release)
+    ? release.match_source?.replace('；体积未知', '')
+    : release.match_source
   return <details className="mt-2 min-w-0 text-xs text-slate-600">
     <summary className="w-fit cursor-pointer rounded-sm py-1 font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">查看详情</summary>
     <div className="space-y-1 break-words [overflow-wrap:anywhere]">
       {otherFlags.length > 0 && <p>{otherFlags.map((flag) => reviewLabels[flag]).join(' · ')}</p>}
       <p>来源：{release.indexer || '未知'} · 季度：{release.season_tags.join(' / ') || '未标明'}</p>
       <p>体积：{size} · 做种：{release.seeders ?? '未知'}{release.dynamic_range_tags.length > 0 && ` · ${release.dynamic_range_tags.join(' / ')}`}</p>
-      {release.match_source && <p>匹配依据：{release.match_source}</p>}
+      {matchSource && <p>匹配依据：{matchSource}</p>}
       {release.match_query && <p>搜索词：{release.match_query}</p>}
       {primary !== 'SUBTITLES_UNMARKED' && !otherFlags.includes('SUBTITLES_UNMARKED') && <p>标题标注了中文字幕，内容未经核验。</p>}
       {release.seeders == null && <p>可下载性未知。</p>}
