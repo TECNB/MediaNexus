@@ -1,5 +1,6 @@
 import { javaApiClient } from '@/lib/java-api'
-import type { BgmCatalogCandidate, BgmItem, BgmPreview, BgmRun, BgmRuns, BgmSeason, BgmSource, BgmSourceInput, BgmWishlist } from '@/types/bgm-wishlist'
+import type { MediaDeletionTask } from '@/types/media-library'
+import type { BgmCatalogCandidate, BgmIdentity, BgmItem, BgmPreview, BgmRun, BgmRuns, BgmSeason, BgmSource, BgmSourceInput, BgmWishlist } from '@/types/bgm-wishlist'
 
 const base = '/api/v1/admin/bgm-wishlist'
 type Response<T> = { code: number; message: string; data: T | null }
@@ -13,6 +14,13 @@ export async function saveBgmSource(input: BgmSourceInput, id?: string) {
   return unwrap(response.data)
 }
 export async function getBgmWishlist(id: string, signal?: AbortSignal) { return unwrap((await javaApiClient.get<Response<BgmWishlist>>(`${base}/sources/${encodeURIComponent(id)}/items`, { signal })).data) }
+export async function getBgmItem(id: string, subjectId: number, signal?: AbortSignal) {
+  return unwrap((await javaApiClient.get<Response<BgmItem>>(`${base}/sources/${encodeURIComponent(id)}/items/${subjectId}`, { signal })).data)
+}
+export async function deleteBgmMedia(id: string, subjectId: number, identity: BgmIdentity) {
+  const { mediaType, tmdbId, seasonNumber } = identity
+  return unwrap((await javaApiClient.post<Response<MediaDeletionTask>>(`${base}/sources/${encodeURIComponent(id)}/items/${subjectId}/deletions`, { mediaType, tmdbId, seasonNumber })).data)
+}
 export async function refreshBgmWishlist(id: string) { return unwrap((await javaApiClient.post<Response<BgmWishlist>>(`${base}/sources/${encodeURIComponent(id)}/refresh`)).data) }
 export async function searchBgmCatalog(query: string, signal?: AbortSignal) { return unwrap((await javaApiClient.get<Response<BgmCatalogCandidate[]>>(`${base}/catalog/search`, { params: { query }, signal })).data) }
 export async function getBgmSeasons(tmdbId: number, signal?: AbortSignal) { return unwrap((await javaApiClient.get<Response<BgmSeason[]>>(`${base}/catalog/SERIES/${tmdbId}/seasons`, { signal })).data) }

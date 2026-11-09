@@ -1,8 +1,10 @@
+import type { MediaDeletionTask } from './media-library'
+
 export type BgmSourceInput = { bgmUsername: string; ownerUserId: number; enabled: boolean; scheduleTime: string; targetCount: number; quality: '1080p' | '2160p'; initialScope: 'NEW_ONLY' | 'INCLUDE_EXISTING' }
 export type BgmSource = BgmSourceInput & { id: string; ownerUsername: string; timezone: string; baselineInitialized: boolean }
 export type BgmIdentity = { mediaType: 'MOVIE' | 'SERIES'; tmdbId: number; seasonNumber: number | null; title: string; originalTitle: string | null; year: number | null }
 export type BgmTaskLink = { taskType: string; taskId: string; status: string }
-export type BgmItem = { subjectId: number; title: string; originalTitle: string | null; coverUrl: string | null; year: number | null; updatedAt: string | null; identity: BgmIdentity | null; libraryStatus: 'UNKNOWN' | 'ABSENT' | 'PRESENT'; availability: string; eligible: boolean; reasons: { code: string; message: string }[]; activeTask: BgmTaskLink | null; associatedTask: BgmTaskLink | null; automaticCandidate: boolean; releaseStatus: string }
+export type BgmItem = { subjectId: number; title: string; originalTitle: string | null; coverUrl: string | null; year: number | null; updatedAt: string | null; identity: BgmIdentity | null; libraryStatus: 'UNKNOWN' | 'ABSENT' | 'PRESENT'; availability: string; eligible: boolean; reasons: { code: string; message: string }[]; activeTask: BgmTaskLink | null; associatedTask: BgmTaskLink | null; automaticCandidate: boolean; releaseStatus: string; deletionTask: MediaDeletionTask | null; canDelete: boolean }
 export type BgmWishlist = { source: BgmSource; items: BgmItem[]; refreshStatus: 'NEVER' | 'SUCCESS' | 'FAILED'; refreshError: string | null; lastAttemptAt: string | null; lastSuccessAt: string | null }
 export type BgmCatalogCandidate = { mediaType: 'MOVIE' | 'SERIES'; tmdbId: number; title: string; originalTitle: string | null; year: number | null; coverUrl: string | null }
 export type BgmSeason = { seasonNumber: number; name: string; episodeCount: number | null; airDate: string | null }
