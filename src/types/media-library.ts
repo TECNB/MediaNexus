@@ -6,7 +6,25 @@ export type MediaLibraryId =
   | 'adult-other'
   | 'adult-jav'
 
-export type MediaLibraryItem = {
+export type MediaCapacity = {
+  storage_bytes: number | null
+  capacity_status: 'complete' | 'pending' | 'unknown' | null
+}
+
+export type AdultStorageItem = MediaCapacity & {
+  path: string
+  directory: boolean
+  id: string
+  file_bytes: number | null
+}
+
+export type AdultStoragePage = {
+  roots: string[]
+  directory: string | null
+  items: AdultStorageItem[]
+}
+
+export type MediaLibraryItem = MediaCapacity & {
   item_id: string
   title: string
   file_name: string | null
@@ -79,6 +97,7 @@ export type MediaLibraryListParams = {
   page_size: 24
   search?: string
   missing_poster?: boolean
+  by_capacity?: boolean
 }
 
 export type MediaSeason = {

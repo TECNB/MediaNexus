@@ -47,6 +47,8 @@ import {
   MediaDeletionManager,
 } from './media-deletion'
 import { MediaManager } from './media-manager'
+import { AdultStorage } from './adult-storage'
+import { capacityText } from './capacity'
 
 type LoadStatus = 'idle' | 'loading' | 'success' | 'error'
 
@@ -232,6 +234,7 @@ function MediaCard({
           <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>入库于 {formatDateTime(item.date_created)}</span>
         </div>
+        <p className="text-xs font-medium tabular-nums text-slate-700">{capacityText(item)}</p>
         {deleting ? <DeletionProgress task={deletionTask} /> : (
           <>
             {!collection ? <MediaManager item={item} library={library} onChanged={onChanged} /> : null}
@@ -273,6 +276,11 @@ function MediaLibraryPageContent() {
   const [searchInput, setSearchInput] = useState('')
   const [keyword, setKeyword] = useState('')
   const [missingPoster, setMissingPoster] = useState(false)
+  const [byCapacity, setByCapacity] = useState(false)
+  const [storageView, setStorageView] = useState(false)
+  const [completedCount, setCompletedCount] = useState(0)
+  const adultLibrary = libraryId === 'adult-other' || libraryId === 'adult-jav'
+  const showStorage = adultLibrary && storageView
   const [page, setPage] = useState(1)
   const [data, setData] = useState<MediaLibraryPageData | null>(null)
   const [status, setStatus] = useState<LoadStatus>('idle')
@@ -307,13 +315,15 @@ function MediaLibraryPageContent() {
             page_size: PAGE_SIZE,
             search: keyword,
             missing_poster: missingPoster,
+            by_capacity: byCapacity,
           },
           signal,
         )
+        if (signal?.aborted) return
         setData(nextData)
         setStatus('success')
       } catch (error) {
-        if (isJavaRequestCanceledError(error)) {
+        if (signal?.aborted || isJavaRequestCanceledError(error)) {
           return
         }
         setStatus('error')
@@ -324,15 +334,15 @@ function MediaLibraryPageContent() {
         )
       }
     },
-    [keyword, libraryId, missingPoster, page],
+    [byCapacity, keyword, libraryId, missingPoster, page],
   )
 
   useEffect(() => {
+    if (showStorage) return
     const controller = new AbortController()
     void loadItems(controller.signal)
-
     return () => controller.abort()
-  }, [loadItems])
+  }, [loadItems, showStorage, completedCount])
 
   async function handleTargetSearch() {
     const query = targetQuery.trim()
@@ -363,11 +373,11 @@ function MediaLibraryPageContent() {
       })
       deletionTasksBaselineReady.current = true
       setDeletionTasks(tasks)
-      if (newlyCompleted) void loadItems()
+      if (newlyCompleted) setCompletedCount((count) => count + 1)
     } catch (error) {
       if (!isJavaRequestCanceledError(error)) console.warn('删除任务加载失败', error)
     }
-  }, [loadItems])
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -459,7 +469,7 @@ function MediaLibraryPageContent() {
           ...current,
           items: remainsVisible
             ? current.items.map((item) =>
-                item.item_id === updatedItem.item_id ? updatedItem : item,
+                item.item_id === updatedItem.item_id ? { ...updatedItem, storage_bytes: item.storage_bytes, capacity_status: item.capacity_status } : item,
               )
             : current.items.filter((item) => item.item_id !== updatedItem.item_id),
           total: remainsVisible ? current.total : Math.max(0, current.total - 1),
@@ -472,7 +482,7 @@ function MediaLibraryPageContent() {
   return (
     <PageContainer
       title="媒体库"
-      description="查看和管理 Emby 中已有的电影、电视剧、综艺、动漫与 Adult 媒体。内容按最近入库时间排序。"
+      description="管理 Emby 媒体、按容量查找大文件，以及浏览 Adult 网盘文件夹。"
     >
       <div className="space-y-5">
         <div className="rounded-2xl bg-white p-3 shadow-shell ring-1 ring-slate-200">
@@ -512,6 +522,18 @@ function MediaLibraryPageContent() {
               })}
             </div>
 
+            {adultLibrary ? (
+              <div aria-label="Adult 浏览方式" className="flex flex-wrap gap-2" role="group">
+                <Button aria-pressed={!showStorage} onClick={() => setStorageView(false)} size="sm" type="button" variant={showStorage ? 'outline' : 'default'}>
+                  按影片
+                </Button>
+                <Button aria-pressed={showStorage} onClick={() => setStorageView(true)} size="sm" type="button" variant={showStorage ? 'default' : 'outline'}>
+                  按文件夹
+                </Button>
+              </div>
+            ) : null}
+
+            {!showStorage ? (
             <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
@@ -623,6 +645,8 @@ function MediaLibraryPageContent() {
               ) : null}
             </div>
 
+            ) : null}
+
             <div className="flex w-full flex-col gap-2 sm:flex-row">
               <button
                 className="relative flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-300"
@@ -636,6 +660,21 @@ function MediaLibraryPageContent() {
                   </span>
                 ) : null}
               </button>
+              {!showStorage ? <>
+              <label className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm text-slate-700">
+                <span>排序</span>
+                <select
+                  className="min-w-0 bg-transparent"
+                  onChange={(event) => {
+                    setByCapacity(event.target.value === 'capacity')
+                    setPage(1)
+                  }}
+                  value={byCapacity ? 'capacity' : 'recent'}
+                >
+                  <option value="recent">最近入库</option>
+                  <option value="capacity">容量从大到小</option>
+                </select>
+              </label>
               <button
                 aria-pressed={missingPoster}
                 className={cn(
@@ -677,11 +716,15 @@ function MediaLibraryPageContent() {
                 </label>
                 <Button type="submit">搜索</Button>
               </form>
+              </> : null}
             </div>
           </div>
         </div>
 
 
+        {showStorage ? (
+          <AdultStorage completedCount={completedCount} key={libraryId} library={libraryId} onCreated={updateDeletionTask} tasks={deletionTasks} />
+        ) : <>
         {keyword && status !== 'loading' ? (
           <div className="flex items-center justify-between gap-3 text-sm text-slate-500">
             <p className="truncate">
@@ -772,11 +815,16 @@ function MediaLibraryPageContent() {
                 共 <span className="font-semibold text-slate-800">{total}</span>{' '}
                 项，当前显示 {pageStart}–{pageEnd}
               </p>
-              <p className="hidden text-xs text-slate-400 sm:block">
-                按 Emby 入库时间倒序
-              </p>
+              <Button onClick={() => void loadItems()} size="sm" type="button" variant="outline">
+                <RefreshCw aria-hidden="true" className="h-4 w-4" />
+                刷新容量
+              </Button>
             </div>
 
+            <p className="text-xs text-slate-600">
+              {byCapacity ? '已知容量从大到小，未知或未统计完的条目排在末尾。' : '默认按最近入库排序。'}
+              容量为源文件大小合计，统计完成后可点「刷新容量」。
+            </p>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {data.items.map((item) => (
                 <MediaCard
@@ -822,6 +870,7 @@ function MediaLibraryPageContent() {
             </div>
           </>
         ) : null}
+        </>}
       </div>
       <dialog
         aria-labelledby="deletion-tasks-title"

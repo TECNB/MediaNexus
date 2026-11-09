@@ -4,6 +4,8 @@ import {
   javaApiClient,
 } from '@/lib/java-api'
 import type {
+  AdultStorageItem,
+  AdultStoragePage,
   MediaLibraryListParams,
   MediaLibraryItem,
   MediaLibraryPageData,
@@ -39,6 +41,7 @@ export async function getMediaLibraryItems(
         page_size: params.page_size,
         search: params.search || undefined,
         missing_poster: params.missing_poster || undefined,
+        by_capacity: params.by_capacity || undefined,
       },
       signal,
     })
@@ -244,6 +247,28 @@ export async function retryMediaDeletion(taskId: string) {
   )
   if (response.data.code !== 200 || !response.data.data) {
     throw new Error(response.data.message || '删除任务重试失败')
+  }
+  return response.data.data
+}
+
+export async function browseAdultStorage(library: MediaLibraryId, directory: string | null, signal?: AbortSignal) {
+  const response = await javaApiClient.get<JavaApiResponse<AdultStoragePage>>(
+    '/api/v1/admin/media-library/adult-storage',
+    { params: { library, directory: directory ?? undefined }, signal },
+  )
+  if (response.data.code !== 200 || !response.data.data) {
+    throw new Error(response.data.message || '网盘目录加载失败')
+  }
+  return response.data.data
+}
+
+export async function deleteAdultStorage(library: MediaLibraryId, item: AdultStorageItem) {
+  const response = await javaApiClient.post<JavaApiResponse<MediaDeletionTask>>(
+    '/api/v1/admin/media-library/adult-storage/deletions',
+    { library, path: item.path, directory: item.directory, id: item.id, file_bytes: item.file_bytes },
+  )
+  if (response.data.code !== 200 || !response.data.data) {
+    throw new Error(response.data.message || '删除任务创建失败')
   }
   return response.data.data
 }
