@@ -78,3 +78,64 @@ export type SubtitleLocationQuery = Omit<
   SubtitleUploadAssociationPayload,
   'file' | 'overwrite' | 'targetId'
 >
+
+export type SubtitleLanguage = 'unknown' | 'chs' | 'cht'
+
+export type SubtitlePreparationPayload = Omit<SubtitleUploadAssociationPayload, 'overwrite'> & {
+  language?: SubtitleLanguage
+}
+
+export type SubtitlePreparedFile = {
+  id: string
+  original_path: string
+  original_name: string
+  extension: string
+  language: SubtitleLanguage
+  language_source: string
+  episode_number: number | null
+  video_name: string | null
+  final_name: string | null
+  size: number
+  sha256: string
+  status: 'READY' | 'CONFLICT' | 'UNMATCHED' | 'AMBIGUOUS'
+  conflict_reason: 'REMOTE_EXISTS' | 'DUPLICATE_CANDIDATE' | null
+  warnings: string[]
+}
+
+export type SubtitlePreparation = {
+  id: string
+  expires_at: string
+  target_id: string
+  target_path: string
+  files: SubtitlePreparedFile[]
+  skipped_entries: unknown[]
+  warnings: string[]
+}
+
+export type SubtitleCommitFile = {
+  id: string
+  language?: SubtitleLanguage
+  video_name?: string
+}
+
+export type SubtitleFileCheckStatus = 'COMPLETE' | 'PENDING' | 'UNAVAILABLE'
+
+export type SubtitleCheckedFile = {
+  name: string
+  expected_size: number | null
+  actual_size: number | null
+  present: boolean
+  matches_size: boolean
+}
+
+export type SubtitleFileCheckLocation = {
+  status: SubtitleFileCheckStatus
+  files: SubtitleCheckedFile[]
+  message: string | null
+}
+
+export type SubtitleUploadCheck = {
+  status: SubtitleFileCheckStatus
+  source: SubtitleFileCheckLocation
+  output: SubtitleFileCheckLocation
+}

@@ -7,7 +7,72 @@ import type {
   SubtitleUploadResponse,
   SubtitleLocation,
   SubtitleLocationQuery,
+  SubtitleCommitFile,
+  SubtitlePreparation,
+  SubtitlePreparationPayload,
+  SubtitleUploadCheck,
 } from '@/types/subtitles'
+
+export async function prepareSubtitleByAssociation({
+  file,
+  mediaType,
+  title,
+  originalTitle,
+  year,
+  seasonNumber,
+  targetId,
+  language = 'unknown',
+}: SubtitlePreparationPayload, signal?: AbortSignal): Promise<SubtitlePreparation> {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('media_type', mediaType)
+  formData.append('title', title)
+  formData.append('language', language)
+  if (originalTitle?.trim()) formData.append('original_title', originalTitle.trim())
+  if (typeof year === 'number') formData.append('year', String(year))
+  if (typeof seasonNumber === 'number') formData.append('season_number', String(seasonNumber))
+  if (targetId) formData.append('target_id', targetId)
+
+  const response = await javaApiClient.post<JavaApiResponse<SubtitlePreparation>>(
+    '/api/v1/subtitles/preparations',
+    formData,
+    { timeout: SUBTITLE_UPLOAD_TIMEOUT_MS, signal },
+  )
+  if (response.data.code !== 200 || !response.data.data) {
+    throw new Error(response.data.message || '字幕原包解析失败，请重试。')
+  }
+  return response.data.data
+}
+
+export async function commitSubtitlePreparation(
+  preparationId: string,
+  files: SubtitleCommitFile[],
+  signal?: AbortSignal,
+): Promise<SubtitleUploadResponse> {
+  const response = await javaApiClient.post<JavaApiResponse<SubtitleUploadResponse>>(
+    `/api/v1/subtitles/preparations/${encodeURIComponent(preparationId)}/commit`,
+    { files, overwrite: false },
+    { timeout: SUBTITLE_UPLOAD_TIMEOUT_MS, signal },
+  )
+  if (response.data.code !== 200 || !response.data.data) {
+    throw new Error(response.data.message || '字幕确认写入失败，请重新预览后重试。')
+  }
+  return response.data.data
+}
+
+export async function checkSubtitleUpload(
+  uploadId: string,
+  signal?: AbortSignal,
+): Promise<SubtitleUploadCheck> {
+  const response = await javaApiClient.get<JavaApiResponse<SubtitleUploadCheck>>(
+    `/api/v1/subtitles/uploads/${encodeURIComponent(uploadId)}/check`,
+    { signal },
+  )
+  if (response.data.code !== 200 || !response.data.data) {
+    throw new Error(response.data.message || '文件到位检查失败，请重试。')
+  }
+  return response.data.data
+}
 
 type JavaApiResponse<TData> = {
   code: number

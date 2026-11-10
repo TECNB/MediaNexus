@@ -1,3 +1,4 @@
+import { isAxiosError } from 'axios'
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, KeyboardEvent } from 'react'
 import {
@@ -31,7 +32,8 @@ import {
   listSubtitleLocations,
   listSubtitleUploadLogs,
   listSubtitleUploads,
-  uploadSubtitleByAssociation,
+  prepareSubtitleByAssociation,
+  commitSubtitlePreparation,
 } from '@/lib/api/subtitles'
 import { getJavaErrorMessage, isJavaRequestCanceledError } from '@/lib/java-api'
 import { cn } from '@/lib/utils'
@@ -41,7 +43,12 @@ import type {
   SubtitleUploadResponse,
   SubtitleUploadStatus,
   SubtitleLocation,
+  SubtitlePreparation,
+  SubtitleCommitFile,
 } from '@/types/subtitles'
+
+import { SubtitlePreparationPreview } from './preparation-preview'
+import { SubtitleUploadFileCheck } from './upload-file-check'
 
 type ProcessStatus = 'mounted' | 'uploaded' | 'matching' | 'failed'
 type AssociationStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
@@ -74,7 +81,7 @@ type LastUploadResult = {
 }
 
 const demoToastMessage = '演示模式：当前仅展示前端搜索与选择交互'
-const supportedSubtitleUploadExtensions = ['srt', 'ass', 'sup', 'zip']
+const supportedSubtitleUploadExtensions = ['srt', 'ass', 'sup', 'ssa', 'vtt', 'zip', 'rar', '7z']
 const subtitleLogPollIntervalMs = 2000
 const subtitleListPollIntervalMs = 5000
 const subtitleLogStageLabels: Record<string, string> = {
@@ -790,7 +797,7 @@ function UploadResultSummary({
           目标目录：{response.target_path}
         </p>
         <p className="mt-1 text-xs text-emerald-700/90">
-          已上传 {response.files.length} 个字幕文件，已触发 AS 刷新流程，当前等待迁移。
+          已上传 {response.files.length} 个字幕文件，尝试提交 AS 刷新，结果见日志。
         </p>
       </div>
     )
@@ -806,6 +813,7 @@ export function SubtitleManagePage() {
   const seasonLatestRequestIdRef = useRef(0)
   const locationRequestControllerRef = useRef<AbortController | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [preparation, setPreparation] = useState<SubtitlePreparation | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [uploadStatus, setUploadStatus] =
     useState<SubtitleUploadStatus>('idle')
@@ -859,6 +867,13 @@ export function SubtitleManagePage() {
       locationRequestControllerRef.current?.abort()
     }
   }, [selectedAssociationItem, selectedSeasonNumber])
+
+  useEffect(() => {
+    setPreparation(null)
+    setUploadErrorMessage(null)
+    setUploadStatus('idle')
+    setLastUploadResult(null)
+  }, [selectedAssociationItem, selectedSeasonNumber, selectedTargetId])
 
   useEffect(() => {
     if (!toastMessage) {
@@ -1147,6 +1162,10 @@ export function SubtitleManagePage() {
   function handleFileSelect(event: ChangeEvent<HTMLInputElement>) {
     if (locationRequestControllerRef.current) return
     const file = event.target.files?.[0] ?? null
+    setPreparation(null)
+    setLastUploadResult(null)
+    setUploadStatus('idle')
+    setUploadErrorMessage(null)
 
     if (!file) {
       setSelectedFile(null)
@@ -1157,8 +1176,8 @@ export function SubtitleManagePage() {
       event.target.value = ''
       setSelectedFile(null)
       setUploadStatus('error')
-      setUploadErrorMessage('当前仅支持 .srt、.ass、.sup、.zip 格式文件')
-      showToast('当前仅支持 .srt、.ass、.sup、.zip 格式文件')
+      setUploadErrorMessage('支持 .srt、.ass、.sup、.ssa、.vtt 及 ZIP、RAR、7z 原包')
+      showToast('支持 .srt、.ass、.sup、.ssa、.vtt 及 ZIP、RAR、7z 原包')
       return
     }
 
@@ -1327,7 +1346,7 @@ export function SubtitleManagePage() {
       })
   }
 
-  async function handleUploadSubmit() {
+  async function handlePreparationSubmit() {
     if (locationRequestControllerRef.current || uploadStatus === 'submitting') {
       return
     }
@@ -1382,6 +1401,8 @@ export function SubtitleManagePage() {
       return
     }
 
+    setPreparation(null)
+    setLastUploadResult(null)
     setUploadStatus('submitting')
     setUploadErrorMessage(null)
     const controller = new AbortController()
@@ -1408,13 +1429,13 @@ export function SubtitleManagePage() {
         : locations.find((item) => item.target_id === selectedTargetId)
       if (!location) {
         setSelectedTargetId('')
-        setUploadStatus('idle')
+        setUploadStatus('error')
         setUploadErrorMessage('该媒体位于多个账号，请选择字幕要上传的账号。')
         return
       }
-      const response = await uploadSubtitleByAssociation({
+      const response = await prepareSubtitleByAssociation({
         file: selectedFile,
-        overwrite: false,
+        language: 'unknown',
         mediaType: selectedAssociationItem.mediaType,
         title: selectedTitle,
         originalTitle: selectedAssociationItem.originalTitle,
@@ -1425,6 +1446,35 @@ export function SubtitleManagePage() {
             : null,
         targetId: location.target_id,
       }, controller.signal)
+      if (controller.signal.aborted) return
+      setPreparation(response)
+      setUploadStatus('idle')
+    } catch (error) {
+      if (controller.signal.aborted || isJavaRequestCanceledError(error)) return
+      setUploadStatus('error')
+      setUploadErrorMessage(getJavaErrorMessage(error) || '原包解析失败，请重试。')
+    } finally {
+      if (locationRequestControllerRef.current === controller) {
+        locationRequestControllerRef.current = null
+      }
+    }
+  }
+
+  async function handlePreparationCommit(files: SubtitleCommitFile[]) {
+    if (locationRequestControllerRef.current || !preparation || !selectedFile || !selectedAssociationItem) return
+    if (Date.now() >= new Date(preparation.expires_at).getTime()) {
+      setPreparation(null)
+      setUploadStatus('error')
+      setUploadErrorMessage('预览已过期，请重新解析预览。')
+      return
+    }
+    if (files.length === 0 || files.some((selected) => !preparation.files.some((file) => file.id === selected.id && (file.status === 'READY' || file.conflict_reason === 'DUPLICATE_CANDIDATE')))) return
+    const controller = new AbortController()
+    locationRequestControllerRef.current = controller
+    setUploadStatus('submitting')
+    setUploadErrorMessage(null)
+    try {
+      const response = await commitSubtitlePreparation(preparation.id, files, controller.signal)
       if (controller.signal.aborted) return
       const projectTitle = getAssociationProjectLabel(
         selectedAssociationItem,
@@ -1455,6 +1505,7 @@ export function SubtitleManagePage() {
       setSystemLogError(null)
       setSystemLogRecords([])
       setSystemLogStatus('loading')
+      setPreparation(null)
       setSelectedFile(null)
 
       if (fileInputRef.current) {
@@ -1464,10 +1515,9 @@ export function SubtitleManagePage() {
       showToast('文件已接收，正在后台处理')
     } catch (error) {
       if (controller.signal.aborted || isJavaRequestCanceledError(error)) return
-      const message =
-        getJavaErrorMessage(error) || '上传失败，请稍后重试'
-
-      console.error('subtitle upload failed', error)
+      const needsNewPreview = isAxiosError(error) && [404, 409, 410].includes(error.response?.status ?? 0)
+      const message = `${getJavaErrorMessage(error) || '确认写入失败，请重试。'}${needsNewPreview ? ' 请重新解析预览后再确认写入。' : ''}`
+      if (needsNewPreview) setPreparation(null)
 
       setUploadStatus('error')
       setUploadErrorMessage(message)
@@ -1487,7 +1537,7 @@ export function SubtitleManagePage() {
   return (
     <PageContainer
       title="字幕管理"
-      description="上传字幕到电影或剧集源目录，自动重命名并触发 AS 刷新。"
+      description="上传字幕原包，预览匹配和命名后确认写入电影或剧集源目录。"
     >
       <div className="min-w-0 space-y-5">
         <div className="flex items-center gap-2 text-xs text-slate-400">
@@ -1511,7 +1561,7 @@ export function SubtitleManagePage() {
                   ref={fileInputRef}
                   type="file"
                   disabled={uploadStatus === 'submitting'}
-                  accept=".zip,.srt,.ass,.sup"
+                  accept=".zip,.rar,.7z,.srt,.ass,.sup,.ssa,.vtt"
                   className="hidden"
                   onChange={handleFileSelect}
                 />
@@ -1521,10 +1571,10 @@ export function SubtitleManagePage() {
                 </div>
 
                 <h2 className="mt-4 text-sm font-semibold text-slate-950">
-                  拖拽或点击上传字幕压缩包
+                  点击选择字幕文件或原包
                 </h2>
                 <p className="mt-1.5 text-xs text-slate-500">
-                  字幕文件或 ZIP 压缩包 · 格式与大小按系统设置检查
+                  ASS / SRT / SUP / SSA / VTT · ZIP / RAR / 7z 原包
                 </p>
 
                 <span className="mt-4 inline-flex h-9 items-center justify-center rounded-2xl border border-slate-900 px-4 text-sm font-medium text-slate-950 transition-colors group-hover:bg-slate-950 group-hover:text-white">
@@ -1543,7 +1593,7 @@ export function SubtitleManagePage() {
                   </div>
                 ) : (
                   <p className="mx-auto mt-4 max-w-full text-xs leading-5 text-slate-400">
-                    请选择字幕文件后，再关联库中项目并提交上传。
+                    选择字幕文件后，关联库中项目并解析预览。
                   </p>
                 )}
               </div>
@@ -1654,27 +1704,56 @@ export function SubtitleManagePage() {
               </section>
             ) : null}
 
-            <Button
-              type="button"
-              disabled={
-                uploadStatus === 'submitting' ||
-                (selectedAssociationItem?.mediaType === 'series' &&
-                  seriesSeasonStatus === 'loading')
-              }
-              className="h-11 w-full rounded-[18px] bg-slate-950 text-sm font-medium text-white hover:bg-black disabled:bg-slate-200 disabled:text-slate-500"
-              onClick={() => {
-                void handleUploadSubmit()
-              }}
-            >
-              {uploadStatus === 'submitting' ? (
-                <>
-                  <RefreshCcw className="h-4 w-4 animate-spin" />
-                  上传中...
-                </>
-              ) : (
-                '上传并处理'
-              )}
-            </Button>
+            {preparation ? (
+              <SubtitlePreparationPreview
+                key={preparation.id}
+                preparation={preparation}
+                pending={uploadStatus === 'submitting'}
+                onCommit={(files) => void handlePreparationCommit(files)}
+                onCancel={() => {
+                  setPreparation(null)
+                  setUploadStatus('idle')
+                  setUploadErrorMessage(null)
+                }}
+              />
+            ) : null}
+
+            {!preparation ? (
+              <Button
+                type="button"
+                disabled={
+                  uploadStatus === 'submitting' ||
+                  (selectedAssociationItem?.mediaType === 'series' &&
+                    seriesSeasonStatus === 'loading')
+                }
+                className="h-11 w-full rounded-[18px] bg-slate-950 text-sm font-medium text-white hover:bg-black disabled:bg-slate-200 disabled:text-slate-500"
+                onClick={() => {
+                  void handlePreparationSubmit()
+                }}
+              >
+                {uploadStatus === 'submitting' ? (
+                  <>
+                    <RefreshCcw className="h-4 w-4 animate-spin" />
+                    正在解析原包…
+                  </>
+                ) : (
+                  '解析原包并预览'
+                )}
+              </Button>
+            ) : null}
+
+            {uploadStatus === 'submitting' && !preparation ? (
+              <div className="space-y-2">
+                <p role="status" className="text-xs text-slate-500">正在确认目标目录并解析原包，可能需要较长时间；此步骤不会写入远端文件。</p>
+                <Button type="button" variant="outline" onClick={() => {
+                  locationRequestControllerRef.current?.abort()
+                  locationRequestControllerRef.current = null
+                  setPreparation(null)
+                  setUploadStatus('idle')
+                  setUploadErrorMessage(null)
+                }}>取消解析</Button>
+              </div>
+            ) : null}
 
             <UploadResultSummary
               uploadStatus={uploadStatus}
@@ -1694,6 +1773,10 @@ export function SubtitleManagePage() {
           </div>
 
           <aside className="min-w-0 space-y-5">
+            {selectedLogUploadId ? (
+              <SubtitleUploadFileCheck key={selectedLogUploadId} uploadId={selectedLogUploadId} />
+            ) : null}
+
             <OperationalLogPanel
               title="字幕上传日志"
               monitorLabel="字幕监控"
