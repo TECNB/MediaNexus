@@ -100,8 +100,8 @@ export function WeComAutomationPage() {
         {!records ? !error && <p role="status" className="text-sm text-slate-600">正在读取记录…</p> : visible.length ? (
           <BgmOperationRecords operations={visible} focusedId={focusedId} working={working}
             showOwner={showAll} canManage={(operation) => operation.actorUserId === user?.id}
-            onConfirm={(id, subjectId, key) => update(() => confirmWeComCandidate(id, subjectId, key))}
-            onSupply={(id, subjectId, identity, release) => update(() => supplyWeComOperation(id, subjectId, identity, release))}
+            onConfirm={(id, subjectId, key, risk) => update(() => confirmWeComCandidate(id, subjectId, key, risk))}
+            onSupply={(id, subjectId, identity, release, risk) => update(() => supplyWeComOperation(id, subjectId, identity, release, risk))}
             onSearch={(id, subjectId) => run(() => searchWeComOperation(id, subjectId))}
             onDefer={(id, subjectId) => run(() => deferWeComOperation(id, subjectId))} />
         ) : <p className="py-5 text-sm text-slate-600">暂无微信请求。用与你的站内账号绑定的企微账号发送一部片名开始。</p>}

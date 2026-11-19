@@ -275,6 +275,7 @@ export async function retryOpenListWithSelectedRelease(
   taskType: string,
   taskId: string,
   release: OpenListReleaseRetryPayload,
+  acceptUnverifiedRisk = false,
 ): Promise<OpenListManualMagnetRetryResult> {
   try {
     const response = await javaApiClient.post<
@@ -284,6 +285,7 @@ export async function retryOpenListWithSelectedRelease(
         taskType.toLowerCase(),
       )}/${encodeURIComponent(taskId)}/release-retries`,
       {
+        ...(acceptUnverifiedRisk ? { accept_unverified_risk: true } : {}),
         release_title: release.title,
         indexer: release.indexer,
         size: release.size,

@@ -40,8 +40,8 @@ export async function listBgmOperations(id: string, page: number, signal?: Abort
 export async function getBgmOperation(id: string, signal?: AbortSignal) {
   return unwrap((await javaApiClient.get<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${base}/operations/${encodeURIComponent(id)}`, { signal })).data)
 }
-export async function confirmBgmCandidate(id: string, subjectId: number, candidateKey: string) {
-  return unwrap((await javaApiClient.post<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${base}/operations/${encodeURIComponent(id)}/confirm`, { subjectId, candidateKey })).data)
+export async function confirmBgmCandidate(id: string, subjectId: number, candidateKey: string, acceptUnverifiedRisk = false) {
+  return unwrap((await javaApiClient.post<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${base}/operations/${encodeURIComponent(id)}/confirm`, { subjectId, candidateKey, ...(acceptUnverifiedRisk ? { accept_unverified_risk: true } : {}) })).data)
 }
 export async function searchBgmOperation(id: string, subjectId: number) {
   return unwrap((await javaApiClient.post<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${base}/operations/${encodeURIComponent(id)}/search`, { subjectId })).data)
@@ -49,8 +49,8 @@ export async function searchBgmOperation(id: string, subjectId: number) {
 export async function deferBgmOperation(id: string, subjectId: number) {
   return unwrap((await javaApiClient.post<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${base}/operations/${encodeURIComponent(id)}/defer`, { subjectId })).data)
 }
-export async function supplyBgmOperation(id: string, subjectId: number, identity: { mediaType: 'MOVIE' | 'SERIES'; tmdbId: number; seasonNumber: number | null }, release: import('@/types/resources').ProwlarrRelease) {
-  return unwrap((await javaApiClient.post<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${base}/operations/${encodeURIComponent(id)}/supply`, { subjectId, identity, release })).data)
+export async function supplyBgmOperation(id: string, subjectId: number, identity: { mediaType: 'MOVIE' | 'SERIES'; tmdbId: number; seasonNumber: number | null }, release: import('@/types/resources').ProwlarrRelease, acceptUnverifiedRisk = false) {
+  return unwrap((await javaApiClient.post<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${base}/operations/${encodeURIComponent(id)}/supply`, { subjectId, identity, release, ...(acceptUnverifiedRisk ? { accept_unverified_risk: true } : {}) })).data)
 }
 
 const wecom = '/api/v1/wecom-ingest/operations'
@@ -63,10 +63,10 @@ export async function getWeComOperation(id: string, all: boolean, signal?: Abort
 async function updateWeComOperation(id: string, action: string, body: object) {
   return unwrap((await javaApiClient.post<Response<import('@/types/bgm-wishlist').BgmOperation>>(`${wecom}/${encodeURIComponent(id)}/${action}`, body)).data)
 }
-export const confirmWeComCandidate = (id: string, subjectId: number, candidateKey: string) =>
-  updateWeComOperation(id, 'confirm', { subjectId, candidateKey })
+export const confirmWeComCandidate = (id: string, subjectId: number, candidateKey: string, acceptUnverifiedRisk = false) =>
+  updateWeComOperation(id, 'confirm', { subjectId, candidateKey, ...(acceptUnverifiedRisk ? { accept_unverified_risk: true } : {}) })
 export const searchWeComOperation = (id: string, subjectId: number) => updateWeComOperation(id, 'search', { subjectId })
 export const deferWeComOperation = (id: string, subjectId: number) => updateWeComOperation(id, 'defer', { subjectId })
 export const supplyWeComOperation = (id: string, subjectId: number,
-  identity: Pick<BgmIdentity, 'mediaType' | 'tmdbId' | 'seasonNumber'>, release: import('@/types/resources').ProwlarrRelease) =>
-  updateWeComOperation(id, 'supply', { subjectId, identity, release })
+  identity: Pick<BgmIdentity, 'mediaType' | 'tmdbId' | 'seasonNumber'>, release: import('@/types/resources').ProwlarrRelease, acceptUnverifiedRisk = false) =>
+  updateWeComOperation(id, 'supply', { subjectId, identity, release, ...(acceptUnverifiedRisk ? { accept_unverified_risk: true } : {}) })

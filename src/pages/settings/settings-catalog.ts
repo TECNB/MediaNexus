@@ -11,6 +11,7 @@ export const connectionSections = [
     { id: 'tmdb', label: 'TMDB', description: '元数据 API、图片地址、读取 Token、语言与超时。' },
     { id: 'prowlarr', label: 'Prowlarr', description: '发布搜索连接与缓存；不改写上游索引器。' },
     { id: 'pansou', label: 'PanSou', description: '磁力与网盘搜索地址、用户名与密码、链接检查限制。' },
+    { id: 'guangya', label: '光鸭', description: '只读解析磁力文件表；通过敏感字段管理 access / refresh 凭证与稳定设备标识，不创建下载任务。' },
     { id: 'qas', label: '夸克 / QAS', description: '分别管理夸克 Cookie 与 QAS Token，以及分享目录缓存和分类根目录。' },
     { id: 'smartstrm', label: 'SmartSTRM', description: '整理完成回调；含认证的回调地址按敏感值管理。' },
   ] },

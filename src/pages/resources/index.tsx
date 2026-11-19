@@ -6,6 +6,8 @@ import { ArrowRight, Clock3, RefreshCw } from 'lucide-react'
 import { PageContainer } from '@/components/layout/page-container'
 import { ReleaseEpisodeCoverage } from '@/components/resources/release-episode-coverage'
 import { ReleaseReviewBadges, ReleaseReviewDetails } from '@/components/resources/release-review'
+import { ReleaseComparisonProgress } from '@/components/resources/release-comparison-progress'
+import { isReleaseSelectionDisabled, requiresUnverifiedRisk, unverifiedReleaseWarning } from '@/lib/release-selection'
 import { Button } from '@/components/ui/button'
 import {
   AnimeCard,
@@ -75,6 +77,7 @@ import type {
   OpenListQualityTag,
   MediaLibraryPresenceData,
   ProwlarrRelease,
+  ReleaseComparison,
   ResourcePublishPageState,
   ResourceReleaseSource,
   SearchableResourceItem,
@@ -148,7 +151,8 @@ type AutoReleaseConfirmation = {
   qualityTag: OpenListQualityTag
   selectedQualityTag: OpenListQualityTag
   seasonNumber: number | null
-  release: ProwlarrRelease
+  release: ProwlarrRelease | null
+  comparison?: ReleaseComparison | null
   releases: ProwlarrRelease[]
   query: string
   searchLanguage: SearchLanguage
@@ -625,6 +629,7 @@ export function ResourceSearchPage() {
   const recentIngestRequestIdRef = useRef(0)
   const historyRestoredContextRef = useRef<string | null>(null)
   const activeRequestControllerRef = useRef<AbortController | null>(null)
+  const recommendationControllersRef = useRef(new Map<string, AbortController>())
   const seriesSeasonsControllerRef = useRef<AbortController | null>(null)
   const activeMediaIngestKeysRef = useRef<Set<string>>(new Set())
   const activeAnimeSubscribeKeysRef = useRef<Set<string>>(new Set())
@@ -633,6 +638,8 @@ export function ResourceSearchPage() {
 
   const resetSearchSession = useCallback(() => {
     latestRequestIdRef.current += 1
+    recommendationControllersRef.current.forEach(controller => controller.abort())
+    recommendationControllersRef.current.clear()
     activeRequestControllerRef.current?.abort()
     activeRequestControllerRef.current = null
     seriesSeasonsControllerRef.current?.abort()
@@ -745,7 +752,9 @@ export function ResourceSearchPage() {
   }, [isAutoReleaseConfirmationOpen])
 
   useEffect(() => {
+    const recommendationControllers = recommendationControllersRef.current
     return () => {
+      recommendationControllers.forEach(controller => controller.abort())
       activeRequestControllerRef.current?.abort()
       seriesSeasonsControllerRef.current?.abort()
       animeCardsControllerRef.current?.abort()
@@ -823,6 +832,8 @@ export function ResourceSearchPage() {
     const keyword = searchValue.trim()
     latestRequestIdRef.current += 1
     const requestId = latestRequestIdRef.current
+    recommendationControllersRef.current.forEach(controller => controller.abort())
+    recommendationControllersRef.current.clear()
 
     activeRequestControllerRef.current?.abort()
     activeRequestControllerRef.current = null
@@ -1034,6 +1045,12 @@ export function ResourceSearchPage() {
     item: SeriesSearchItem,
     seasonNumber: number,
   ) {
+    const itemKey = getMediaIngestKey(item)
+    recommendationControllersRef.current.get(itemKey)?.abort()
+    recommendationControllersRef.current.delete(itemKey)
+    activeMediaIngestKeysRef.current.delete(itemKey)
+    setAutoReleaseConfirmation(current => current?.itemKey === itemKey ? null : current)
+    setMediaIngestStates(current => { const next = { ...current }; delete next[itemKey]; return next })
     setSeriesSeasonSelections((currentSelections) => ({
       ...currentSelections,
       [getSeriesIngestKey(item)]: seasonNumber,
@@ -1096,6 +1113,9 @@ export function ResourceSearchPage() {
     const taskProductType =
       mediaType === 'series' && category === 'anime' ? 'ANIME' : 'SERIES'
     activeMediaIngestKeysRef.current.add(itemKey)
+    recommendationControllersRef.current.get(itemKey)?.abort()
+    const controller = new AbortController()
+    recommendationControllersRef.current.set(itemKey, controller)
     setMediaIngestStates((currentStates) => ({
       ...currentStates,
       [itemKey]: {
@@ -1114,15 +1134,13 @@ export function ResourceSearchPage() {
             original_title: item.original_title,
             year: item.year as number,
             quality: qualityTag,
-          }).then((data) => {
-            const release = data.items[0]
-            if (!release) {
-              throw new Error('未找到匹配的电影发布资源。')
-            }
+          }, controller.signal).then((data) => {
+            const release = data.item
             return {
               release,
               releases: data.items,
               query: data.query,
+              comparison: data.comparison,
               selectedQualityTag: data.selected_quality ?? qualityTag,
               searchLanguage: getItemSearchLanguage(item),
             }
@@ -1136,19 +1154,13 @@ export function ResourceSearchPage() {
               original_title: seriesItem.original_title,
               season_number: seasonNumber ?? 1,
               quality: qualityTag,
-            }).then((data) => {
-              const release = data.items[0]
-              if (!release) {
-                throw new Error(
-                  isAnimeSeasonIngest
-                    ? '未找到匹配的动漫整季发布资源。'
-                    : '未找到匹配的剧集发布资源。',
-                )
-              }
+            }, controller.signal).then((data) => {
+              const release = data.item
               return {
                 release,
                 releases: data.items,
                 query: data.query,
+                comparison: data.comparison,
                 selectedQualityTag: data.selected_quality ?? qualityTag,
                 searchLanguage: getItemSearchLanguage(seriesItem),
               }
@@ -1168,8 +1180,8 @@ export function ResourceSearchPage() {
     }).catch(() => null)
 
     void Promise.all([releaseRequest, presenceRequest])
-      .then(([{ release, releases, query, selectedQualityTag, searchLanguage }, libraryPresence]) => {
-        if (latestRequestIdRef.current !== searchSessionId) {
+      .then(([{ release, releases, query, comparison, selectedQualityTag, searchLanguage }, libraryPresence]) => {
+        if (controller.signal.aborted || latestRequestIdRef.current !== searchSessionId) {
           return
         }
 
@@ -1191,13 +1203,14 @@ export function ResourceSearchPage() {
           release,
           releases,
           query,
+          comparison,
           searchLanguage,
           libraryPresence,
           isSubmitting: false,
         })
       })
       .catch((error) => {
-        if (latestRequestIdRef.current !== searchSessionId) {
+        if (controller.signal.aborted || latestRequestIdRef.current !== searchSessionId) {
           return
         }
 
@@ -1224,6 +1237,7 @@ export function ResourceSearchPage() {
     }
 
     const itemKey = autoReleaseConfirmation.itemKey
+    recommendationControllersRef.current.get(itemKey)?.abort()
     activeMediaIngestKeysRef.current.delete(itemKey)
     setMediaIngestStates((currentStates) => {
       const nextStates = { ...currentStates }
@@ -1240,6 +1254,9 @@ export function ResourceSearchPage() {
 
     const selection = autoReleaseConfirmation
     const searchSessionId = latestRequestIdRef.current
+    recommendationControllersRef.current.get(selection.itemKey)?.abort()
+    const controller = new AbortController()
+    recommendationControllersRef.current.set(selection.itemKey, controller)
     const seriesItem = isSeriesSearchItem(selection.item)
       ? selection.item
       : null
@@ -1263,7 +1280,7 @@ export function ResourceSearchPage() {
             original_title: selection.item.original_title,
             year: selection.item.year as number,
             quality: selection.qualityTag,
-          })
+          }, controller.signal)
         : seriesItem
           ? refreshSeriesReleaseRecommendation({
               tvdb_id: seriesItem.tvdb_id,
@@ -1273,19 +1290,16 @@ export function ResourceSearchPage() {
               original_title: seriesItem.original_title,
               season_number: selection.seasonNumber ?? 1,
               quality: selection.qualityTag,
-            })
+            }, controller.signal)
           : Promise.reject(new Error('缺少剧集资源信息。'))
 
     void refreshRequest
       .then((data) => {
-        if (latestRequestIdRef.current !== searchSessionId) {
+        if (controller.signal.aborted || latestRequestIdRef.current !== searchSessionId) {
           return
         }
 
-        const release = data.items[0]
-        if (!release) {
-          throw new Error('刷新后未找到匹配的发布资源。')
-        }
+        const release = data.item
 
         setMediaIngestStates((currentStates) => ({
           ...currentStates,
@@ -1299,13 +1313,14 @@ export function ResourceSearchPage() {
           release,
           releases: data.items,
           query: data.query,
+          comparison: data.comparison,
           selectedQualityTag:
             data.selected_quality ?? selection.qualityTag,
           isSubmitting: false,
         })
       })
       .catch((error) => {
-        if (latestRequestIdRef.current !== searchSessionId) {
+        if (controller.signal.aborted || latestRequestIdRef.current !== searchSessionId) {
           return
         }
 
@@ -1330,6 +1345,7 @@ export function ResourceSearchPage() {
     if (!autoReleaseConfirmation || autoReleaseConfirmation.isSubmitting) {
       return
     }
+    if (isReleaseSelectionDisabled(release)) return
 
     setAutoReleaseConfirmation({
       ...autoReleaseConfirmation,
@@ -1348,7 +1364,11 @@ export function ResourceSearchPage() {
 
     const selection = autoReleaseConfirmation
     const release = selection.release
+    if (!release || isReleaseSelectionDisabled(release)) return
+    const acceptUnverifiedRisk = requiresUnverifiedRisk(release, selection.comparison)
+    if (acceptUnverifiedRisk && !window.confirm(unverifiedReleaseWarning)) return
     const commonPayload = {
+      ...(acceptUnverifiedRisk ? { accept_unverified_risk: true } : {}),
       title: selection.item.title,
       original_title: selection.item.original_title,
       tmdb_id: selection.item.tmdb_id,
@@ -1954,10 +1974,16 @@ export function ResourceSearchPage() {
                 ? `${selection.qualityTag} → ${selection.selectedQualityTag}`
                 : selection.qualityTag}
               {selectedSeasonLabel ? ` · ${selectedSeasonLabel}` : ''}
-              {hasMultipleCandidates ? ` · ${selection.releases.length} 个推荐` : ''}
+              {hasMultipleCandidates ? ` · ${selection.releases.length} 个候选` : ''}
             </span>
           </div>
 
+          <ReleaseComparisonProgress key={selection.comparison?.id ?? selection.itemKey} comparison={selection.comparison} items={selection.releases} disabled={selection.isSubmitting} onUpdate={(data) => setAutoReleaseConfirmation(current => {
+            if (!current || current.comparison?.id !== data.comparison?.id) return current
+            const previousChoice = current.release && data.items.find(item => item.download_ref === current.release?.download_ref)
+            return { ...current, releases: data.items, comparison: data.comparison, query: data.query, release: previousChoice && !isReleaseSelectionDisabled(previousChoice) ? previousChoice : data.items.find(item => item.download_ref === data.comparison?.recommended_ref && !isReleaseSelectionDisabled(item)) ?? null }
+          })} />
+          {!release && <p role="status" className="mt-3 text-sm text-slate-600">当前没有选中的可用推荐；可等待比较、明确续查或手工选择候选。这不代表没有资源。</p>}
           {selection.libraryPresence?.exists ? (
             <div className="mt-5 rounded-xl bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-700">
               Emby 媒体库中已存在
@@ -1978,13 +2004,13 @@ export function ResourceSearchPage() {
 
           <div className="mt-5 space-y-3">
             {selection.releases.map((candidate, index) => {
-              const isSelected = candidate === release
+              const isSelected = candidate.download_ref === release?.download_ref
               const candidateReason = candidateReasons[index]
               return (
                 <div key={releaseCandidateKey(candidate, index)} className="min-w-0">
                   <button
                     type="button"
-                    disabled={selection.isSubmitting}
+                    disabled={selection.isSubmitting || isReleaseSelectionDisabled(candidate)}
                     aria-pressed={isSelected}
                     onClick={() => handleSelectAutoReleaseCandidate(candidate)}
                     className={cn(
@@ -2000,13 +2026,13 @@ export function ResourceSearchPage() {
                       </p>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <ReleaseReviewBadges release={candidate} seasonNumber={selection.seasonNumber} />
-                      <ReleaseEpisodeCoverage release={candidate} tmdbId={selection.item.tmdb_id} seasonNumber={selection.mediaType === 'series' ? selection.seasonNumber : null} />
+                      <ReleaseReviewBadges release={candidate} seasonNumber={selection.seasonNumber} hasComparison={!!selection.comparison} />
+                      {!selection.comparison && !candidate.evidence && <ReleaseEpisodeCoverage release={candidate} tmdbId={selection.item.tmdb_id} seasonNumber={selection.mediaType === 'series' ? selection.seasonNumber : null} />}
                     </div>
                   </button>
                   <div className="px-4">
-                    <ReleaseReviewDetails release={candidate} seasonNumber={selection.seasonNumber}>
-                      <p>推荐依据：{candidateReason.badge} · {candidateReason.detail}</p>
+                    <ReleaseReviewDetails release={candidate} seasonNumber={selection.seasonNumber} hasComparison={!!selection.comparison}>
+                      {!selection.comparison && <p>推荐依据：{candidateReason.badge} · {candidateReason.detail}</p>}
                       {!candidate.match_query && selection.query && <p>搜索词：{selection.query}</p>}
                       <p>入库后可通过字幕上传补充中文字幕。</p>
                     </ReleaseReviewDetails>
@@ -2040,7 +2066,7 @@ export function ResourceSearchPage() {
             <Button
               type="button"
               disabled={
-                selection.isSubmitting || Boolean(selection.libraryPresence?.exists)
+                selection.isSubmitting || !release || isReleaseSelectionDisabled(release) || Boolean(selection.libraryPresence?.exists)
               }
               onClick={handleConfirmAutoRelease}
               className="rounded-xl bg-slate-950 text-white shadow-none hover:bg-slate-800"

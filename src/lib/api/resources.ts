@@ -22,6 +22,7 @@ import type {
   MovieSearchItem,
   ProwlarrReleaseRecommendationData,
   ProwlarrReleaseSearchData,
+  ReleaseComparison,
   QuarkReleaseSearchData,
   QuarkReleaseLinkCheckData,
   QuarkReleaseLinkCheckPayload,
@@ -376,13 +377,55 @@ export async function checkQuarkReleaseLinks(
   }
 }
 
+/** Observe one running round; neither a pause nor a transport failure starts another round. */
+export function observeReleaseComparison(comparison: Pick<ReleaseComparison, 'id' | 'status'>, observer: {
+  signal: AbortSignal
+  onSnapshot: (snapshot: ProwlarrReleaseSearchData) => void
+  onError: () => void
+}) {
+  const { signal } = observer
+  if (comparison.status !== 'RUNNING' || signal.aborted) return
+  let timer: ReturnType<typeof setTimeout>
+  const poll = async () => {
+    try {
+      const snapshot = await getReleaseComparison(comparison.id, signal)
+      if (signal.aborted) return
+      observer.onSnapshot(snapshot)
+      if (snapshot.comparison?.status === 'RUNNING' && !signal.aborted) timer = setTimeout(poll, 1000)
+    } catch {
+      if (!signal.aborted) observer.onError()
+    }
+  }
+  timer = setTimeout(poll, 1000)
+  signal.addEventListener('abort', () => clearTimeout(timer), { once: true })
+}
+
+export async function getReleaseComparison(id: string, signal?: AbortSignal): Promise<ProwlarrReleaseSearchData> {
+  const response = await javaApiClient.get<JavaApiResponse<ProwlarrReleaseSearchData>>(
+    `/api/v1/resources/releases/comparisons/${encodeURIComponent(id)}`, { signal },
+  )
+  if (response.data.code !== 200 || !response.data.data) throw new Error(response.data.message || '比较进度读取失败。')
+  return response.data.data
+}
+
+export async function continueReleaseComparison(id: string, signal?: AbortSignal): Promise<ProwlarrReleaseSearchData> {
+  const response = await javaApiClient.post<JavaApiResponse<ProwlarrReleaseSearchData>>(
+    `/api/v1/resources/releases/comparisons/${encodeURIComponent(id)}/continue`, undefined,
+    { signal, timeout: PROWLARR_RELEASE_REQUEST_TIMEOUT_MS },
+  )
+  if (response.data.code !== 200 || !response.data.data) throw new Error(response.data.message || '继续比较失败。')
+  return response.data.data
+}
+
 export async function recommendMovieRelease(
   payload: MovieReleaseRecommendationPayload,
+  signal?: AbortSignal,
 ): Promise<ProwlarrReleaseRecommendationData> {
   try {
     const response = await javaApiClient.post<
       JavaApiResponse<ProwlarrReleaseRecommendationData>
     >('/api/v1/resources/movies/releases/recommendation', payload, {
+      signal,
       timeout: PROWLARR_RELEASE_REQUEST_TIMEOUT_MS,
     })
 
@@ -392,9 +435,9 @@ export async function recommendMovieRelease(
       : data?.item
         ? [data.item]
         : []
-    const item = data?.item ?? items[0]
+    const item = data?.comparison ? data.item : data?.item ?? items[0] ?? null
 
-    if (response.data.code !== 200 || !data || !item || items.length === 0) {
+    if (response.data.code !== 200 || !data || (!data.comparison && !item)) {
       throw new Error(
         response.data.message || 'movie release recommendation failed',
       )
@@ -406,6 +449,7 @@ export async function recommendMovieRelease(
       items,
     }
   } catch (error) {
+    if (isRequestCanceledError(error)) throw error
     throw new Error(
       getJavaErrorMessage(error) || '电影发布资源推荐失败，请稍后重试。',
     )
@@ -414,11 +458,13 @@ export async function recommendMovieRelease(
 
 export async function refreshMovieReleaseRecommendation(
   payload: MovieReleaseRecommendationPayload,
+  signal?: AbortSignal,
 ): Promise<ProwlarrReleaseRecommendationData> {
   try {
     const response = await javaApiClient.post<
       JavaApiResponse<ProwlarrReleaseRecommendationData>
     >('/api/v1/resources/movies/releases/recommendation/refresh', payload, {
+      signal,
       timeout: PROWLARR_RELEASE_REQUEST_TIMEOUT_MS,
     })
 
@@ -428,9 +474,9 @@ export async function refreshMovieReleaseRecommendation(
       : data?.item
         ? [data.item]
         : []
-    const item = data?.item ?? items[0]
+    const item = data?.comparison ? data.item : data?.item ?? items[0] ?? null
 
-    if (response.data.code !== 200 || !data || !item || items.length === 0) {
+    if (response.data.code !== 200 || !data || (!data.comparison && !item)) {
       throw new Error(
         response.data.message || 'movie release recommendation refresh failed',
       )
@@ -442,6 +488,7 @@ export async function refreshMovieReleaseRecommendation(
       items,
     }
   } catch (error) {
+    if (isRequestCanceledError(error)) throw error
     throw new Error(
       getJavaErrorMessage(error) || '电影发布资源刷新失败，请稍后重试。',
     )
@@ -514,11 +561,13 @@ export async function refreshMovieReleases(
 
 export async function recommendSeriesRelease(
   payload: SeriesReleaseRecommendationPayload,
+  signal?: AbortSignal,
 ): Promise<ProwlarrReleaseRecommendationData> {
   try {
     const response = await javaApiClient.post<
       JavaApiResponse<ProwlarrReleaseRecommendationData>
     >('/api/v1/resources/series/releases/recommendation', payload, {
+      signal,
       timeout: PROWLARR_RELEASE_REQUEST_TIMEOUT_MS,
     })
 
@@ -528,9 +577,9 @@ export async function recommendSeriesRelease(
       : data?.item
         ? [data.item]
         : []
-    const item = data?.item ?? items[0]
+    const item = data?.comparison ? data.item : data?.item ?? items[0] ?? null
 
-    if (response.data.code !== 200 || !data || !item || items.length === 0) {
+    if (response.data.code !== 200 || !data || (!data.comparison && !item)) {
       throw new Error(
         response.data.message || 'series release recommendation failed',
       )
@@ -542,6 +591,7 @@ export async function recommendSeriesRelease(
       items,
     }
   } catch (error) {
+    if (isRequestCanceledError(error)) throw error
     throw new Error(
       getJavaErrorMessage(error) || '剧集发布资源推荐失败，请稍后重试。',
     )
@@ -550,11 +600,13 @@ export async function recommendSeriesRelease(
 
 export async function refreshSeriesReleaseRecommendation(
   payload: SeriesReleaseRecommendationPayload,
+  signal?: AbortSignal,
 ): Promise<ProwlarrReleaseRecommendationData> {
   try {
     const response = await javaApiClient.post<
       JavaApiResponse<ProwlarrReleaseRecommendationData>
     >('/api/v1/resources/series/releases/recommendation/refresh', payload, {
+      signal,
       timeout: PROWLARR_RELEASE_REQUEST_TIMEOUT_MS,
     })
 
@@ -564,9 +616,9 @@ export async function refreshSeriesReleaseRecommendation(
       : data?.item
         ? [data.item]
         : []
-    const item = data?.item ?? items[0]
+    const item = data?.comparison ? data.item : data?.item ?? items[0] ?? null
 
-    if (response.data.code !== 200 || !data || !item || items.length === 0) {
+    if (response.data.code !== 200 || !data || (!data.comparison && !item)) {
       throw new Error(
         response.data.message || 'series release recommendation refresh failed',
       )
@@ -578,6 +630,7 @@ export async function refreshSeriesReleaseRecommendation(
       items,
     }
   } catch (error) {
+    if (isRequestCanceledError(error)) throw error
     throw new Error(
       getJavaErrorMessage(error) || '剧集发布资源刷新失败，请稍后重试。',
     )

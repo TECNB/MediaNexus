@@ -142,6 +142,28 @@ export type CreateSeriesOpenListIngestPayload = {
   tmdb_id: number | null
 }
 
+export type ReleaseEvidence = {
+  status: 'RECOMMENDABLE' | 'NEEDS_PROCESSING' | 'UNSUITABLE' | 'UNVERIFIED'
+  reason: string
+  total_bytes: number | null
+  target_bytes: number | null
+  target_files: number | null
+  preview: boolean
+  camera: boolean
+}
+
+export type ReleaseComparison = {
+  id: string
+  status: 'RUNNING' | 'COMPLETE' | 'PAUSED' | 'BLOCKED'
+  snapshot_at: string
+  checked: number
+  pending: number
+  resolve_requests: number
+  search_queries: number
+  message: string
+  recommended_ref: string | null
+}
+
 export type ProwlarrRelease = {
   title: string
   size: number | null
@@ -158,6 +180,7 @@ export type ProwlarrRelease = {
   match_source: string | null
   match_query: string | null
   review_flags?: string[] | null
+  evidence?: ReleaseEvidence | null
 }
 
 export type ReleaseEpisodeCoveragePayload = {
@@ -175,6 +198,7 @@ export type ReleaseEpisodeCoverageData = {
 export type ProwlarrReleaseSearchData = {
   query: string
   items: ProwlarrRelease[]
+  comparison?: ReleaseComparison | null
 }
 
 export type QuarkReleaseMediaType = 'MOVIE' | 'SERIES' | 'VARIETY'
@@ -280,9 +304,10 @@ export type SeriesReleaseSearchPayload = {
 export type ProwlarrReleaseRecommendationData = {
   query: string
   requested_quality: OpenListQualityTag
-  selected_quality: OpenListQualityTag
-  item: ProwlarrRelease
+  selected_quality: OpenListQualityTag | null
+  item: ProwlarrRelease | null
   items: ProwlarrRelease[]
+  comparison?: ReleaseComparison | null
 }
 
 export type SearchProwlarrReleasesParams = {
@@ -292,6 +317,7 @@ export type SearchProwlarrReleasesParams = {
 }
 
 type SelectedReleasePayload = {
+  accept_unverified_risk?: boolean
   title: string
   original_title: string | null
   release_title: string

@@ -15,6 +15,8 @@ import { PageContainer } from '@/components/layout/page-container'
 import { QuarkReleasePanel } from '@/components/resources/quark-release-panel'
 import { ReleaseEpisodeCoverage } from '@/components/resources/release-episode-coverage'
 import { ReleaseReviewBadges, ReleaseReviewDetails } from '@/components/resources/release-review'
+import { ReleaseComparisonProgress } from '@/components/resources/release-comparison-progress'
+import { isReleaseSelectionDisabled, requiresUnverifiedRisk, unverifiedReleaseWarning } from '@/lib/release-selection'
 import { Button } from '@/components/ui/button'
 import { SelectControl } from '@/components/ui/form-control'
 import {
@@ -36,6 +38,7 @@ import { cn } from '@/lib/utils'
 import type {
   OpenListQualityTag,
   ProwlarrRelease,
+  ReleaseComparison,
   ResourcePublishPageState,
   SearchableResourceItem,
   SeriesSearchItem,
@@ -231,6 +234,7 @@ export function ResourcePublishPage() {
     status: LoadStatus
     query: string
     items: ProwlarrRelease[]
+    comparison?: ReleaseComparison | null
     message: string | null
     startedAt: number | null
   }>({
@@ -301,13 +305,10 @@ export function ResourcePublishPage() {
     activeReleaseSearchControllerRef.current?.abort()
     const controller = new AbortController()
     activeReleaseSearchControllerRef.current = controller
-    setLoadState((current) => ({
-      status: 'loading',
-      query: current.query,
-      items: current.items,
-      message: null,
-      startedAt: Date.now(),
-    }))
+    setLoadState({
+      status: 'loading', query: '', items: [], comparison: null,
+      message: null, startedAt: Date.now(),
+    })
     setSubmitState({ keys: [], message: null })
 
     const seriesItem = isSeriesSearchItem(item) ? item : null
@@ -345,13 +346,14 @@ export function ResourcePublishPage() {
 
     void request
       .then((data) => {
-        if (releaseSearchRequestIdRef.current !== requestId) {
+        if (controller.signal.aborted || releaseSearchRequestIdRef.current !== requestId) {
           return
         }
         setLoadState({
           status: 'success',
           query: data.query,
           items: data.items,
+          comparison: data.comparison,
           message: null,
           startedAt: null,
         })
@@ -489,11 +491,8 @@ export function ResourcePublishPage() {
     const seriesItem = isSeriesSearchItem(item) ? item : null
 
     setLoadState((current) => ({
-      status: 'loading',
-      query: current.query,
-      items: current.items,
-      message: null,
-      startedAt: Date.now(),
+      ...current, status: 'loading', comparison: null,
+      message: null, startedAt: Date.now(),
     }))
     setSubmitState({ keys: [], message: null })
 
@@ -531,13 +530,14 @@ export function ResourcePublishPage() {
 
     void request
       .then((data) => {
-        if (releaseSearchRequestIdRef.current !== requestId) {
+        if (controller.signal.aborted || releaseSearchRequestIdRef.current !== requestId) {
           return
         }
         setLoadState({
           status: 'success',
           query: data.query,
           items: data.items,
+          comparison: data.comparison,
           message: null,
           startedAt: null,
         })
@@ -568,6 +568,12 @@ export function ResourcePublishPage() {
       return
     }
     const activeMediaType = mediaType
+    if (loadState.status !== 'success') return
+    const requestId = releaseSearchRequestIdRef.current
+    const signal = activeReleaseSearchControllerRef.current?.signal
+    if (isReleaseSelectionDisabled(release)) return
+    const acceptUnverifiedRisk = requiresUnverifiedRisk(release, loadState.comparison)
+    if (acceptUnverifiedRisk && !window.confirm(unverifiedReleaseWarning)) return
 
     setSubmitState((current) => ({
       keys: [...current.keys, key],
@@ -593,7 +599,10 @@ export function ResourcePublishPage() {
       }
     }
 
+    if (signal?.aborted || releaseSearchRequestIdRef.current !== requestId) return
+
     const commonPayload = {
+      ...(acceptUnverifiedRisk ? { accept_unverified_risk: true } : {}),
       title: item!.title,
       original_title: item!.original_title,
       tmdb_id: item!.tmdb_id,
@@ -611,12 +620,13 @@ export function ResourcePublishPage() {
       ? supplyBgmOperation(bgm.operationId, bgm.subjectId, {
           mediaType: activeMediaType === 'movie' ? 'MOVIE' : 'SERIES', tmdbId: item!.tmdb_id!,
           seasonNumber: activeMediaType === 'series' ? seasonNumber : null,
-        }, release).then((operation) => `/automation/${operation.source.provider === 'DOUBAN' ? 'douban' : 'bgm'}-wishlist?operation=${encodeURIComponent(operation.id)}`)
+        }, release, acceptUnverifiedRisk).then((operation) => `/automation/${operation.source.provider === 'DOUBAN' ? 'douban' : 'bgm'}-wishlist?operation=${encodeURIComponent(operation.id)}`)
       : retryContextState.context
       ? retryOpenListWithSelectedRelease(
           retryContextState.context.task_type,
           retryContextState.context.task_id,
           release,
+          acceptUnverifiedRisk,
         ).then((task) => task.detail_path)
       : activeMediaType === 'movie'
         ? createMovieReleaseOpenListIngest({
@@ -695,9 +705,12 @@ export function ResourcePublishPage() {
               <label>
                 <SelectControl
                   value={seasonNumber}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    activeReleaseSearchControllerRef.current?.abort()
+                    releaseSearchRequestIdRef.current += 1
+                    setLoadState({ status: 'loading', query: '', items: [], comparison: null, message: null, startedAt: Date.now() })
                     setSeasonNumber(Number(event.target.value))
-                  }
+                  }}
                   className="rounded-lg bg-slate-100 font-semibold text-slate-700 shadow-none hover:bg-slate-200"
                 >
                   {seasonOptions.map((season) => (
@@ -816,6 +829,8 @@ export function ResourcePublishPage() {
         </div>
       </section>
 
+      <ReleaseComparisonProgress key={`${seasonNumber}:${loadState.comparison?.id ?? ''}`} comparison={loadState.comparison} items={loadState.items} disabled={loadState.status === 'loading' || submitState.keys.length > 0} onUpdate={(data) => setLoadState(current => current.comparison?.id === data.comparison?.id ? { ...current, ...data } : current)} />
+
       {loadState.status === 'loading' ? (
         <div className="rounded-lg bg-white px-8 py-16 text-center">
           <Loader2 className="mx-auto h-7 w-7 animate-spin text-slate-400" />
@@ -834,12 +849,12 @@ export function ResourcePublishPage() {
           <Database className="mx-auto h-8 w-8 text-slate-300" />
           <p className="mt-4 font-semibold text-slate-950">
             {loadState.items.length === 0
-              ? '没有候选发布资源'
+              ? loadState.comparison && loadState.comparison.status !== 'COMPLETE' ? '候选仍在比较或等待续查' : '没有候选发布资源'
               : '当前筛选下没有发布资源'}
           </p>
           <p className="mt-2 text-sm text-slate-500">
-            {loadState.items.length === 0
-              ? '当前标题与季度没有搜索到候选；可以返回原任务改用手动 magnet。'
+            {loadState.comparison && loadState.comparison.status !== 'COMPLETE'
+              ? '请查看上方进度；暂停不代表没有资源，已查结果会保留。'
               : '可以重置筛选或刷新当前查询。'}
           </p>
         </div>
@@ -857,19 +872,19 @@ export function ResourcePublishPage() {
                       {release.title}
                     </h3>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <ReleaseReviewBadges release={release} seasonNumber={pageState.seasonNumber} />
-                      <ReleaseEpisodeCoverage release={release} tmdbId={item.tmdb_id} seasonNumber={mediaType === 'series' ? seasonNumber : null} />
+                      <ReleaseReviewBadges release={release} seasonNumber={mediaType === 'series' ? seasonNumber : null} hasComparison={!!loadState.comparison} />
+                      {!loadState.comparison && !release.evidence && <ReleaseEpisodeCoverage release={release} tmdbId={item.tmdb_id} seasonNumber={mediaType === 'series' ? seasonNumber : null} />}
                       {release.resolution_tags.some((quality) => parseInt(quality) > parseInt(pageState.qualityTag)) &&
                         <span className="text-xs text-slate-600">已升至{release.resolution_tags.includes('2160p') ? '4K' : '1080p'}</span>}
                     </div>
-                    <ReleaseReviewDetails release={release} seasonNumber={pageState.seasonNumber}>
+                    <ReleaseReviewDetails release={release} seasonNumber={mediaType === 'series' ? seasonNumber : null} hasComparison={!!loadState.comparison}>
                       <p>下载：{release.leechers ?? '未知'} · 抓取：{release.grabs ?? '未知'} · 发布：{release.publish_date || '未知'}</p>
                     </ReleaseReviewDetails>
                   </div>
 
                   <Button
                     type="button"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isReleaseSelectionDisabled(release) || loadState.status === 'loading'}
                     onClick={() => handleSubmit(release, key)}
                     className="h-10 shrink-0 rounded-lg bg-slate-950 px-4 text-xs font-semibold text-white shadow-none hover:bg-slate-800"
                   >
