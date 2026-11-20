@@ -1365,7 +1365,7 @@ export function ResourceSearchPage() {
     const selection = autoReleaseConfirmation
     const release = selection.release
     if (!release || isReleaseSelectionDisabled(release)) return
-    const acceptUnverifiedRisk = requiresUnverifiedRisk(release, selection.comparison)
+    const acceptUnverifiedRisk = requiresUnverifiedRisk(release)
     if (acceptUnverifiedRisk && !window.confirm(unverifiedReleaseWarning)) return
     const commonPayload = {
       ...(acceptUnverifiedRisk ? { accept_unverified_risk: true } : {}),

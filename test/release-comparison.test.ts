@@ -60,17 +60,17 @@ test('comparison API preserves nullable recommendations, exact routes, signals a
 
     const selection = await server.ssrLoadModule('/src/lib/release-selection.ts')
     assert.equal(selection.isReleaseSelectionDisabled(null), true)
-    assert.equal(selection.requiresUnverifiedRisk(release), false, 'legacy Prowlarr needs no new risk override')
-    assert.equal(selection.requiresUnverifiedRisk(release, snapshot.comparison), true)
+    assert.equal(selection.requiresUnverifiedRisk(release), true, 'missing evidence always needs explicit human acceptance')
+    assert.equal(selection.requiresUnverifiedRisk({ ...release, evidence: { status: 'RECOMMENDABLE' } }), false)
     for (const status of ['NEEDS_PROCESSING', 'UNSUITABLE']) assert.equal(selection.isReleaseSelectionDisabled({ ...release, evidence: { status } }), true)
     assert.equal(selection.requiresUnverifiedRisk({ ...release, evidence: { status: 'UNVERIFIED' } }), true)
     assert.equal(selection.isReleaseSelectionDisabled({ ...release, evidence: { status: 'RECOMMENDABLE' } }), false)
     const review = await server.ssrLoadModule('/src/components/resources/release-review.tsx')
     for (const [status, label] of Object.entries({ RECOMMENDABLE: '可推荐', NEEDS_PROCESSING: '包含目标待处理', UNSUITABLE: '不适合本次目标', UNVERIFIED: '未核验' })) {
-      const item = { ...release, evidence: { status, reason: '测试原因', total_bytes: 1024, target_bytes: null, target_files: null } }
+      const item = { ...release, evidence: { status, reason: '原始 torrent 文件表；回退原因：光鸭拒绝解析（353）', total_bytes: 1024, target_bytes: null, target_files: null } }
       assert.match(renderToStaticMarkup(React.createElement(review.ReleaseReviewBadges, { release: item })), new RegExp(label))
       const details = renderToStaticMarkup(React.createElement(review.ReleaseReviewDetails, { release: item }))
-      assert.match(details, /测试原因/)
+      assert.match(details, /原始 torrent 文件表；回退原因：光鸭拒绝解析（353）/)
       assert.match(details, /总包容量：1 KiB/)
       assert.match(details, /目标容量：未知大小/)
       assert.match(details, /目标文件：未知/)

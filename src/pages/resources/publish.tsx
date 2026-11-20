@@ -572,7 +572,7 @@ export function ResourcePublishPage() {
     const requestId = releaseSearchRequestIdRef.current
     const signal = activeReleaseSearchControllerRef.current?.signal
     if (isReleaseSelectionDisabled(release)) return
-    const acceptUnverifiedRisk = requiresUnverifiedRisk(release, loadState.comparison)
+    const acceptUnverifiedRisk = requiresUnverifiedRisk(release)
     if (acceptUnverifiedRisk && !window.confirm(unverifiedReleaseWarning)) return
 
     setSubmitState((current) => ({

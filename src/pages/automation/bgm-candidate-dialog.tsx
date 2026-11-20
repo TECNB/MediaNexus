@@ -81,7 +81,7 @@ export function BgmCandidateDialog({ operation, entry, working, onConfirm, onSup
   async function confirm() {
     if (!selected || pending || loading || !actionable || submittingRef.current) return
     if (isReleaseSelectionDisabled(selected.release)) return
-    const acceptUnverifiedRisk = requiresUnverifiedRisk(selected.release, comparison)
+    const acceptUnverifiedRisk = requiresUnverifiedRisk(selected.release)
     if (acceptUnverifiedRisk && !window.confirm(unverifiedReleaseWarning)) return
     submittingRef.current = true
     setSubmitting(true); setError(null)
