@@ -123,11 +123,12 @@ function ChartIdentityPicker({ candidate, saving, onSave, onClose }: { candidate
   </section>
 }
 
-function CandidateCard({ candidate, label, admin, working, onExclude, onCorrect }: { candidate: DoubanChartCandidate; label: string; admin: boolean; working: boolean; onExclude: () => void; onCorrect: (button: HTMLButtonElement) => void }) {
+function CandidateCard({ candidate, chartId, label, admin, working, onExclude, onCorrect }: { candidate: DoubanChartCandidate; chartId: DoubanChartId; label: string; admin: boolean; working: boolean; onExclude: () => void; onCorrect: (button: HTMLButtonElement) => void }) {
   const { subject, current, identity } = candidate
   const rank = current ? subject.rank : candidate.lastRank
+  const rankLabel = chartId === 'movie_hot_gaia' || chartId === 'tv_hot' ? '热门位置' : 'TOP'
   return <article className="min-w-0 rounded-xl border border-slate-200 bg-white p-2.5">
-    <div className="relative"><BgmPoster url={subject.coverUrl} title={subject.title} /><span className={cn('absolute left-2 top-2 rounded-lg px-2 py-1 text-xs font-semibold shadow-sm', current ? 'bg-slate-950/90 text-white' : 'bg-white/95 text-slate-700')} aria-label={`${label} · ${current ? '' : '末次'}榜位 ${rank ?? '未知'}`}>{current ? '' : '末次 '}{rank === null ? '榜位未知' : `TOP ${rank}`}</span></div>
+    <div className="relative"><BgmPoster url={subject.coverUrl} title={subject.title} /><span className={cn('absolute left-2 top-2 rounded-lg px-2 py-1 text-xs font-semibold shadow-sm', current ? 'bg-slate-950/90 text-white' : 'bg-white/95 text-slate-700')} aria-label={`${label} · ${current ? '' : '末次'}${rankLabel} ${rank ?? '未知'}`}>{current ? '' : '末次 '}{rank === null ? '榜位未知' : `${rankLabel} ${rank}`}</span></div>
     <h3 className="mt-3 break-words text-sm font-semibold leading-5 text-slate-950">{subject.title}</h3>
     <p className="mt-1 text-xs text-slate-500">{subject.year ?? '年份未知'} · {subject.mediaType === 'MOVIE' ? '电影' : '电视剧'}</p>
     <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"><span className="inline-flex items-center gap-1 font-semibold text-amber-800"><Star aria-hidden="true" className="h-3.5 w-3.5" />{subject.score?.toFixed(1) ?? '评分未知'}</span><span className="text-slate-600">{subject.votes === null ? '评分人数未知' : `${subject.votes.toLocaleString('zh-CN')} 人评分`}</span></div>
@@ -248,7 +249,7 @@ function ChartBoardPanel({ initial, admin, focusedId, onFocus }: { initial: Doub
       <div className="space-y-6">{[true, false].map((current) => {
         const candidates = visible.filter((candidate) => candidate.current === current).sort((a, b) => (current ? (a.subject.rank ?? Infinity) - (b.subject.rank ?? Infinity) : (a.lastRank ?? Infinity) - (b.lastRank ?? Infinity)) || b.lastSeenAt.localeCompare(a.lastSeenAt))
         return <section key={String(current)}><h2 className="mb-3 flex items-center gap-2 font-semibold">{current ? <Film aria-hidden="true" className="h-4 w-4 text-slate-500" /> : <History aria-hidden="true" className="h-4 w-4 text-slate-500" />}{current ? '当前在榜' : '掉榜历史候选'}<span className="text-xs font-normal text-slate-500">{candidates.length} 部</span></h2>
-          {candidates.length ? <div className="grid grid-cols-1 gap-3 min-[375px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">{candidates.map((candidate) => <CandidateCard key={candidate.subject.id} candidate={candidate} label={board.label} admin={admin} working={!!working} onCorrect={(button) => { matchButtonRef.current = button; setMatch(candidate) }} onExclude={() => void perform('exclusion', async (signal) => { const result = await setDoubanChartExclusion(board.id, candidate.subject.id, !candidate.excluded, signal); if (!signal.aborted) setBoard(result) })} />)}</div> : <p className="text-sm text-slate-500">{query ? '没有符合搜索条件的候选。' : current ? '暂无当前在榜候选。' : '暂无掉榜历史候选；后续成功刷新后会保留曾属本榜的作品。'}</p>}
+          {candidates.length ? <div className="grid grid-cols-1 gap-3 min-[375px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">{candidates.map((candidate) => <CandidateCard key={candidate.subject.id} candidate={candidate} chartId={board.id} label={board.label} admin={admin} working={!!working} onCorrect={(button) => { matchButtonRef.current = button; setMatch(candidate) }} onExclude={() => void perform('exclusion', async (signal) => { const result = await setDoubanChartExclusion(board.id, candidate.subject.id, !candidate.excluded, signal); if (!signal.aborted) setBoard(result) })} />)}</div> : <p className="text-sm text-slate-500">{query ? '没有符合搜索条件的候选。' : current ? '暂无当前在榜候选。' : '暂无掉榜历史候选；后续成功刷新后会保留曾属本榜的作品。'}</p>}
         </section>
       })}</div>
     </section>
