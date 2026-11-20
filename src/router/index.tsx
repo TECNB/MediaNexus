@@ -14,6 +14,7 @@ import { AutomationPage } from '@/pages/automation'
 import { TelegramAutomationPage } from '@/pages/automation/telegram'
 import { WeComAutomationPage } from '@/pages/automation/wecom'
 import { BgmWishlistPage } from '@/pages/automation/bgm-wishlist'
+import { DoubanChartsPage } from '@/pages/automation/douban-charts'
 import { MagnetIngestPage } from '@/pages/magnet-ingest'
 import { MediaLibraryPage } from '@/pages/media-library'
 import { LegacyResourceIngestRedirect } from '@/pages/resources/legacy-ingest-redirect'
@@ -112,6 +113,7 @@ export const router = createBrowserRouter([
           <WishlistAutomationRoute provider="DOUBAN" />
         ),
       },
+      { path: 'automation/douban-charts', element: <DoubanChartsPage /> },
       {
         path: 'automation/wecom',
         element: <AutomationAccessGate tab="wecom"><WeComAutomationPage /></AutomationAccessGate>,

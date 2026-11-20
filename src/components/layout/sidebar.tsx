@@ -74,7 +74,7 @@ export function Sidebar() {
   const { user } = useAuth()
   const { visible } = useAutomationAccess()
   const memberAutomation = visible('bgm') ? '/automation/bgm-wishlist'
-    : visible('douban') ? '/automation/douban-wishlist' : visible('wecom') ? '/automation/wecom' : null
+    : visible('douban') ? '/automation/douban-wishlist' : visible('wecom') ? '/automation/wecom' : visible('charts') ? '/automation/douban-charts' : null
   const visiblePrimaryItems =
     user?.role === 'ADMIN'
       ? [...adminPrimaryItems, ...primaryItems]

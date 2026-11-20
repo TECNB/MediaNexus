@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom'
 import { javaApiClient } from '@/lib/java-api'
 import { useAuth } from '@/lib/use-auth'
 
-type AutomationTab = 'javdb' | 'telegram' | 'bgm' | 'douban' | 'wecom'
+type AutomationTab = 'javdb' | 'telegram' | 'bgm' | 'douban' | 'wecom' | 'charts'
 type Access = Record<'bgm' | 'douban' | 'wecom', boolean>
 type Scope = { visible: (tab: AutomationTab) => boolean; loading: boolean; failed: boolean }
 const AutomationScope = createContext<Scope>({ visible: () => false, loading: true, failed: false })
@@ -31,7 +31,7 @@ export function AutomationAccessProvider({ children }: { children: ReactNode }) 
   const isAdmin = user?.role === 'ADMIN'
   const current = answer?.id === user?.id ? answer : null
   return <AutomationScope.Provider value={{
-    visible: (tab) => isAdmin || (tab !== 'javdb' && tab !== 'telegram' && current?.access?.[tab] === true),
+    visible: (tab) => isAdmin || (tab === 'charts' ? !!user : tab !== 'javdb' && tab !== 'telegram' && current?.access?.[tab] === true),
     loading: !isAdmin && !current,
     failed: !isAdmin && current?.access === null,
   }}>{children}</AutomationScope.Provider>
