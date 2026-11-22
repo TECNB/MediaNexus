@@ -13,6 +13,7 @@ import type { DoubanChartBoard, DoubanChartCandidate, DoubanChartId, DoubanChart
 import { BgmOperationRecords, hasActiveBgmOperation } from './bgm-operation-records'
 import { BgmPoster } from './bgm-poster'
 import { AutomationNavigation } from './navigation'
+import { DoubanChartProgress } from './douban-chart-progress'
 
 const panel = 'min-w-0 rounded-2xl bg-white p-4 shadow-shell ring-1 ring-slate-200 sm:p-5'
 const control = 'min-h-11 min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500'
@@ -117,7 +118,7 @@ function ChartIdentityPicker({ candidate, saving, onSave, onClose }: { candidate
     {loading && <p role="status" className="mt-3 text-sm text-slate-600">正在读取目录…</p>}{error && <p role="alert" className="mt-3 break-words text-sm text-rose-700">{error}</p>}
     {searched && !results.length && <p role="status" className="mt-3 text-sm text-slate-600">没有找到同类型目录，请修改名称后重试。</p>}
     <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">{results.map((item) => <button type="button" key={`${item.mediaType}:${item.tmdbId}`} disabled={saving} aria-pressed={selected?.tmdbId === item.tmdbId} className={cn(control, 'block w-full break-words text-left', selected?.tmdbId === item.tmdbId && 'border-slate-950 bg-slate-50')} onClick={() => { if (selected?.tmdbId === item.tmdbId) return; setSelected(item); setSeasons([]); setSeason(''); setError(null) }}>{item.title} · {item.year ?? '年份未知'}{item.originalTitle ? ` · ${item.originalTitle}` : ''} · TMDB {item.tmdbId}</button>)}</div>
-    {selected?.mediaType === 'SERIES' && <label className="mt-4 grid gap-1 text-sm">目标季（必须明确选择）<select className={cn(control, 'w-full')} value={season} disabled={loading || saving} onChange={(event) => setSeason(event.target.value)}><option value="">请选择真实目标季</option>{seasons.map((item) => <option key={item.seasonNumber} value={item.seasonNumber}>{item.name} · 第 {item.seasonNumber} 季 · {item.episodeCount ?? '未知'} 集</option>)}</select></label>}
+    {selected?.mediaType === 'SERIES' && <label className="mt-4 grid gap-1 text-sm">目标季（必须明确选择）<select className={cn(control, 'w-full')} value={season} disabled={loading || saving} onChange={(event) => setSeason(event.target.value)}><option value="">请选择真实目标季</option>{seasons.map((item) => <option key={item.seasonNumber} value={item.seasonNumber}>{item.name} · 第 {item.seasonNumber} 季 · {item.episodeCount ?? '未知'} 集 · 首播 {item.airDate || '日期未提供'}</option>)}</select></label>}
     {selected?.mediaType === 'SERIES' && !loading && !error && !seasons.length && <p role="status" className="mt-2 text-sm text-amber-800">此目录暂无可选正片季，不能保存。请搜索并选择其他真实目录。</p>}
     <Button className="mt-4 min-h-11" disabled={loading || saving || !selected || selected.mediaType === 'SERIES' && season === ''} onClick={() => { if (selected) onSave({ mediaType: selected.mediaType, tmdbId: selected.tmdbId, seasonNumber: selected.mediaType === 'SERIES' ? Number(season) : null }) }}>{saving ? '保存中…' : '保存目录匹配'}</Button>
   </section>
@@ -132,14 +133,14 @@ function CandidateCard({ candidate, chartId, label, admin, working, onExclude, o
     <h3 className="mt-3 break-words text-sm font-semibold leading-5 text-slate-950">{subject.title}</h3>
     <p className="mt-1 text-xs text-slate-500">{subject.year ?? '年份未知'} · {subject.mediaType === 'MOVIE' ? '电影' : '电视剧'}</p>
     <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"><span className="inline-flex items-center gap-1 font-semibold text-amber-800"><Star aria-hidden="true" className="h-3.5 w-3.5" />{subject.score?.toFixed(1) ?? '评分未知'}</span><span className="text-slate-600">{subject.votes === null ? '评分人数未知' : `${subject.votes.toLocaleString('zh-CN')} 人评分`}</span></div>
-    <p className="mt-3 break-words text-sm font-medium">{subject.progress || '进度未知'}</p>
+    <DoubanChartProgress candidate={candidate} />
     {candidate.excluded && <p className="mt-2 text-xs font-semibold text-slate-700">已人工排除</p>}
     {!current && <p className="mt-2 text-xs text-slate-600">最后在榜 {dateTime(candidate.lastSeenAt)}</p>}
     <p className="mt-2 break-words text-xs leading-5 text-slate-700">{candidate.reason?.message || (current ? '当前在榜候选，执行时核验资格与资源。' : '曾属本榜，保留后续检查资格；执行时重新核验。')}</p>
     <p className="mt-2 text-xs text-slate-500">检查于 {dateTime(subject.observedAt)}</p>
     <details className="mt-3"><summary className="min-h-11 cursor-pointer rounded py-3 text-xs text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500">检查详情</summary><div className="space-y-2 rounded-lg bg-slate-50 p-2 text-xs leading-5 text-slate-600">
       <p>首次在榜 {dateTime(candidate.firstSeenAt)}</p><p className="break-words">目录目标：{identity ? `${identity.title}${identity.mediaType === 'SERIES' ? ` · 第 ${identity.seasonNumber ?? '待确认'} 季` : ' · 电影'}` : '待匹配'}</p>
-      {candidate.observations.length ? candidate.observations.map((observation, index) => <p key={`${observation.checkedAt}:${index}`}>{dateTime(observation.checkedAt)} · {observation.progress || '进度未知'}</p>) : <p>暂无进度检查记录。</p>}
+      {subject.mediaType === 'SERIES' && (candidate.observations.length ? candidate.observations.map((observation, index) => <p key={`${observation.checkedAt}:${index}`}>{dateTime(observation.checkedAt)} · 豆瓣榜单：{observation.progress || '未提供更新进度'}</p>) : <p>暂无进度检查记录。</p>)}
     </div></details>
     {admin && <div className="mt-2 flex flex-wrap gap-2"><Button className="min-h-11 whitespace-normal text-left" size="sm" variant="outline" disabled={working} onClick={(event) => onCorrect(event.currentTarget)}>纠正匹配</Button><Button className="min-h-11" size="sm" variant="ghost" disabled={working} onClick={onExclude}>{candidate.excluded ? '解除排除' : '排除'}</Button></div>}
   </article>

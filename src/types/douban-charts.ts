@@ -15,6 +15,29 @@ export type DoubanChartSubject = {
   progress: string | null
   observedAt: string | null
 }
+export type DoubanChartCatalogProgress = {
+  status: 'SUCCEEDED' | 'FAILED' | 'IDENTITY_REQUIRED'
+  checkedAt: string | null
+  identity: BgmIdentity | null
+  seriesStatus: string | null
+  totalEpisodes: number | null
+  pastEpisodes: number | null
+  todayEpisodes: number | null
+  undatedEpisodes: number | null
+  nextEpisodeNumber: number | null
+  nextAirDate: string | null
+  seasonStatus: 'AIRING' | 'COMPLETE' | 'NOT_AIRED' | 'UNKNOWN' | 'CONFLICT'
+  message: string | null
+}
+export type DoubanChartProgressEvidence = {
+  sourceObservedAt: string | null
+  checkedAt: string | null
+  doubanStatus: 'PENDING' | 'SUPPLIED' | 'NOT_PROVIDED' | 'FAILED' | 'NOT_NEEDED'
+  doubanProgress: string | null
+  doubanCheckedAt: string | null
+  doubanMessage: string | null
+  catalog: DoubanChartCatalogProgress | null
+}
 export type DoubanChartCandidate = {
   subject: DoubanChartSubject
   current: boolean
@@ -25,6 +48,7 @@ export type DoubanChartCandidate = {
   observations: { checkedAt: string; progress: string | null }[]
   identity: BgmIdentity | null
   reason: DoubanChartReason | null
+  progressEvidence?: DoubanChartProgressEvidence | null
 }
 export type DoubanChartBoard = {
   id: DoubanChartId
