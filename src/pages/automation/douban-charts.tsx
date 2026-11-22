@@ -57,7 +57,7 @@ function ChartLimits({ initial, admin }: { initial: DoubanChartSettings; admin: 
     setSaving(true); setError(null); setMessage(null)
     try {
       const result = await saveDoubanChartLimits({ dailyCheckLimit: checks === '' ? null : Number(checks), dailyCreateLimit: creates === '' ? null : Number(creates) }, controller.signal)
-      if (!controller.signal.aborted) { setSettings(result); setMessage('已保存四榜共享业务上限。') }
+      if (!controller.signal.aborted) { setSettings(result); setMessage('已保存各榜单共享业务上限。') }
     } catch (caught) {
       if (!controller.signal.aborted) setError(errorMessage(caught))
     } finally {
@@ -74,7 +74,7 @@ function ChartLimits({ initial, admin }: { initial: DoubanChartSettings; admin: 
       <label className="grid min-w-0 gap-1 text-sm">每日创建上限<input className={cn(control, 'w-40 max-w-full')} type="number" min={1} step={1} value={creates} disabled={saving} placeholder="不限" onChange={(event) => setCreates(event.target.value)} /></label>
       <Button className="min-h-11" type="submit" disabled={saving}>{saving ? '保存中…' : '保存共享上限'}</Button>
     </form>}
-    <p className="mt-3 text-xs leading-5 text-slate-500">留空表示不限制，四榜共用统计；不是成员额度。管理员免额度规则、外部请求限速与安全检查始终保留。创建任务不等于已入库。</p>
+    <p className="mt-3 text-xs leading-5 text-slate-500">留空表示不限制，各榜单共用统计；不是成员额度。管理员免额度规则、外部请求限速与安全检查始终保留。创建任务不等于已入库。</p>
     {error && <p role="alert" className="mt-3 break-words text-sm text-rose-700">{error}</p>}{message && <p role="status" className="mt-3 text-sm text-emerald-800">{message}</p>}
   </section>
 }
@@ -284,7 +284,7 @@ export function DoubanChartsPage() {
   return <PageContainer title="榜单入库" description="从公共榜单发现电影与电视剧，持续保留当前及历史候选，安全执行单榜一轮。">
     <AutomationNavigation active="charts" />
     <div className="mt-5 space-y-5">
-      {loading && <p role="status" className="text-sm text-slate-600">正在加载四榜与配置…</p>}
+      {loading && <p role="status" className="text-sm text-slate-600">正在加载榜单与配置…</p>}
       {error && <div role="alert" className={panel}><p className="break-words text-sm text-rose-700">{error}</p><Button className="mt-3 min-h-11" variant="outline" disabled={loading} onClick={() => setVersion((value) => value + 1)}>重试读取</Button></div>}
       {overview && <><ChartLimits initial={overview.settings} admin={user?.role === 'ADMIN'} /><nav className="flex flex-wrap gap-2" aria-label="选择豆瓣榜单">{overview.boards.map((entry) => <Button className="min-h-11" key={entry.id} variant={board?.id === entry.id ? 'default' : 'outline'} aria-current={board?.id === entry.id ? 'page' : undefined} onClick={() => { setRecoveredChart(null); setParams({ chart: entry.id }) }}>{entry.label}</Button>)}</nav>{board ? <ChartBoardPanel key={board.id} initial={board} admin={user?.role === 'ADMIN'} focusedId={focusedId} onFocus={onFocus} /> : <p className={panel}>暂无可读取榜单。</p>}</>}
     </div>

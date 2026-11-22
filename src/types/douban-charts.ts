@@ -1,6 +1,6 @@
 import type { BgmIdentity, BgmOperationEntry } from './bgm-wishlist'
 
-export type DoubanChartId = 'movie_hot_gaia' | 'tv_hot' | 'movie_weekly_best' | 'movie_top250'
+export type DoubanChartId = 'movie_hot_gaia' | 'tv_hot' | 'movie_weekly_best' | 'movie_top250' | 'tv_chinese_best_weekly' | 'tv_global_best_weekly'
 export type DoubanChartReason = { code: string; message: string }
 export type DoubanChartSubject = {
   id: number

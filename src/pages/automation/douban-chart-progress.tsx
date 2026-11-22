@@ -23,9 +23,20 @@ export function DoubanChartProgress({ candidate }: { candidate: DoubanChartCandi
     ? `当前季：${seasonLabels[catalog.seasonStatus]}（目录证据）`
     : catalog?.status === 'IDENTITY_REQUIRED' ? '目录 / 目标季待确认'
       : catalog?.status === 'FAILED' ? '目录补查失败' : '目录证据待补查'
+  const blocked = candidate.reason && ['PROGRESS_UNKNOWN', 'AIRING', 'EPISODE_CONFLICT'].includes(candidate.reason.code)
+  const gate = !blocked ? null : catalog?.status === 'SUCCEEDED' && catalog.seasonStatus === 'CONFLICT'
+    ? '本轮未入库：两处进度或集数互相矛盾，需核实，不能任选一处放行。'
+    : catalog?.status === 'SUCCEEDED' && catalog.seasonStatus === 'AIRING'
+      ? '本轮未入库：目录仍有后续集安排，等待完整季；不创建单集追更任务。'
+      : catalog?.status === 'SUCCEEDED' && catalog.seasonStatus === 'COMPLETE'
+        ? douban && /^\s*[1-9][0-9]{0,3}\s*集全\s*$/.test(douban)
+          ? '本轮未入库：豆瓣详情已补充明确完结声明，但当轮资格快照尚未满足；下轮执行会重新核验。'
+          : `本轮未入库：目录已核实本季 ${catalog.totalEpisodes ?? '未知'} 集日期均已过去，但仍缺少豆瓣明确完结声明；目录完结不自动放行。`
+        : `本轮未入库：${candidate.reason?.message ?? '完结证据尚未核实'}。`
   return <section className="mt-3 min-w-0 space-y-2" aria-label={`${candidate.subject.title}的进度证据`}>
     <p className="break-words text-sm font-medium text-slate-900">{doubanLabel}</p>
     <p className={`break-words text-xs leading-5 ${catalog?.seasonStatus === 'CONFLICT' || catalog?.status === 'FAILED' ? 'text-amber-800' : 'text-slate-700'}`}>{catalogLabel}</p>
+    {gate && <p className="break-words rounded-lg bg-amber-50 p-2 text-xs leading-5 text-amber-900">{gate}</p>}
     <details>
       <summary className="min-h-11 cursor-pointer rounded py-3 text-xs text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500">进度来源与补查详情</summary>
       <div className="space-y-2 break-words rounded-lg bg-slate-50 p-2 text-xs leading-5 text-slate-700">

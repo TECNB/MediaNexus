@@ -75,3 +75,21 @@ test('does not claim a historical candidate is queued for current-board checks',
   assert.doesNotMatch(html, /排队补查中/)
   assert.doesNotMatch(html, /等待后台补查豆瓣详情/)
 })
+
+test('explains the remaining ingestion gate without converting catalogue evidence into permission', () => {
+  const blocked = { ...candidate, reason: { code: 'PROGRESS_UNKNOWN', message: '没有明确完结信息，等待核实' } }
+  const complete = render({ ...blocked, progressEvidence: { ...evidence, catalog: { ...evidence.catalog!, seasonStatus: 'COMPLETE', pastEpisodes: 12 } } })
+  assert.match(complete, /目录已核实本季 12 集日期均已过去/)
+  assert.match(complete, /仍缺少豆瓣明确完结声明/)
+  const airing = render({ ...blocked, progressEvidence: evidence })
+  assert.match(airing, /目录仍有后续集安排/)
+  const conflict = render({ ...blocked, progressEvidence: { ...evidence, catalog: { ...evidence.catalog!, seasonStatus: 'CONFLICT' } } })
+  assert.match(conflict, /两处进度或集数互相矛盾/)
+})
+
+test('does not call a fresh explicit detail completion missing evidence', () => {
+  const html = render({ ...candidate, reason: { code: 'PROGRESS_UNKNOWN', message: '历史快照缺进度' }, progressEvidence: { ...evidence, doubanStatus: 'SUPPLIED', doubanProgress: '12集全', catalog: { ...evidence.catalog!, seasonStatus: 'COMPLETE', pastEpisodes: 12 } } })
+  assert.match(html, /详情已补充明确完结声明/)
+  assert.match(html, /下轮执行会重新核验/)
+  assert.doesNotMatch(html, /仍缺少豆瓣明确完结声明/)
+})
