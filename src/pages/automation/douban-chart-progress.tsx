@@ -23,7 +23,7 @@ export function DoubanChartProgress({ candidate }: { candidate: DoubanChartCandi
     ? `当前季：${seasonLabels[catalog.seasonStatus]}（目录证据）`
     : catalog?.status === 'IDENTITY_REQUIRED' ? '目录 / 目标季待确认'
       : catalog?.status === 'FAILED' ? '目录补查失败' : '目录证据待补查'
-  const blocked = candidate.reason && ['PROGRESS_UNKNOWN', 'AIRING', 'EPISODE_CONFLICT'].includes(candidate.reason.code)
+  const blocked = candidate.reason && ['PROGRESS_UNKNOWN', 'AIRING', 'EPISODE_CONFLICT', 'PROGRESS_CONFLICT'].includes(candidate.reason.code)
   const gate = !blocked ? null : catalog?.status === 'SUCCEEDED' && catalog.seasonStatus === 'CONFLICT'
     ? '本轮未入库：两处进度或集数互相矛盾，需核实，不能任选一处放行。'
     : catalog?.status === 'SUCCEEDED' && catalog.seasonStatus === 'AIRING'
@@ -31,7 +31,7 @@ export function DoubanChartProgress({ candidate }: { candidate: DoubanChartCandi
       : catalog?.status === 'SUCCEEDED' && catalog.seasonStatus === 'COMPLETE'
         ? douban && /^\s*[1-9][0-9]{0,3}\s*集全\s*$/.test(douban)
           ? '本轮未入库：豆瓣详情已补充明确完结声明，但当轮资格快照尚未满足；下轮执行会重新核验。'
-          : `本轮未入库：目录已核实本季 ${catalog.totalEpisodes ?? '未知'} 集日期均已过去，但仍缺少豆瓣明确完结声明；目录完结不自动放行。`
+          : `本轮未入库：目录已核实本季 ${catalog.totalEpisodes ?? '未知'} 集日期均已过去；执行时会重新核验严格目录完结证据和完整季文件表，当前展示不等于已受理。`
         : `本轮未入库：${candidate.reason?.message ?? '完结证据尚未核实'}。`
   return <section className="mt-3 min-w-0 space-y-2" aria-label={`${candidate.subject.title}的进度证据`}>
     <p className="break-words text-sm font-medium text-slate-900">{doubanLabel}</p>
@@ -55,7 +55,7 @@ export function DoubanChartProgress({ candidate }: { candidate: DoubanChartCandi
           {catalog.message && <p>{catalog.message}</p>}
           <p>目录检查于 {checkedAt(catalog.checkedAt)}</p>
         </>}
-        <p>目录补证不替代豆瓣完结事实，也不表示已找到片源或已入库。</p>
+        <p>豆瓣未提供进度时可使用严格目录完结证据；明确连载、来源冲突、未来日期或缺集仍不放行。展示状态不表示已找到片源或已入库。</p>
       </div>
     </details>
   </section>

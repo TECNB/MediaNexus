@@ -80,7 +80,7 @@ test('explains the remaining ingestion gate without converting catalogue evidenc
   const blocked = { ...candidate, reason: { code: 'PROGRESS_UNKNOWN', message: '没有明确完结信息，等待核实' } }
   const complete = render({ ...blocked, progressEvidence: { ...evidence, catalog: { ...evidence.catalog!, seasonStatus: 'COMPLETE', pastEpisodes: 12 } } })
   assert.match(complete, /目录已核实本季 12 集日期均已过去/)
-  assert.match(complete, /仍缺少豆瓣明确完结声明/)
+  assert.match(complete, /重新核验严格目录完结证据和完整季文件表/)
   const airing = render({ ...blocked, progressEvidence: evidence })
   assert.match(airing, /目录仍有后续集安排/)
   const conflict = render({ ...blocked, progressEvidence: { ...evidence, catalog: { ...evidence.catalog!, seasonStatus: 'CONFLICT' } } })
