@@ -1,3 +1,4 @@
+import { doubanChartOperationBody } from '@/lib/douban-chart-ui'
 import { javaApiClient } from '@/lib/java-api'
 import type { BgmCatalogCandidate, BgmSeason } from '@/types/bgm-wishlist'
 import type { DoubanChartBoard, DoubanChartId, DoubanChartIdentityInput, DoubanChartLimitsInput, DoubanChartOperation, DoubanChartOperations, DoubanChartOverview, DoubanChartSettings } from '@/types/douban-charts'
@@ -35,8 +36,9 @@ export async function searchDoubanChartCatalog(query: string, mediaType: 'MOVIE'
 export async function getDoubanChartSeasons(tmdbId: number, signal?: AbortSignal) {
   return unwrap((await javaApiClient.get<Response<BgmSeason[]>>(`${base}/catalog/SERIES/${tmdbId}/seasons`, { signal })).data)
 }
-export async function submitDoubanChartOperation(id: DoubanChartId, signal?: AbortSignal) {
-  return unwrap((await javaApiClient.post<Response<DoubanChartOperation>>(`${base}/${id}/operations`, undefined, { signal })).data)
+export async function submitDoubanChartOperation(id: DoubanChartId, signal?: AbortSignal, candidateLimit = 20) {
+  const body = doubanChartOperationBody(id, candidateLimit)
+  return unwrap((await javaApiClient.post<Response<DoubanChartOperation>>(`${base}/${id}/operations`, body, { signal })).data)
 }
 export async function listDoubanChartOperations(id: DoubanChartId, page: number, signal?: AbortSignal) {
   return unwrap((await javaApiClient.get<Response<DoubanChartOperations>>(`${base}/${id}/operations`, { params: { page, pageSize: 10 }, signal })).data)

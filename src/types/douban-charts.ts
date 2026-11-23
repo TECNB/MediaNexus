@@ -79,6 +79,7 @@ export type DoubanChartOperation = {
   chartId: DoubanChartId
   chartLabel: string
   triggerType: string
+  candidateLimit: number | null
   actorUserId: number | null
   startedAt: string
   updatedAt: string

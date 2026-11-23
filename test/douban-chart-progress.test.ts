@@ -7,6 +7,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import ts from 'typescript'
 import type { DoubanChartCandidate, DoubanChartProgressEvidence } from '../src/types/douban-charts.ts'
+import { doubanChartOperationBody, paginateDoubanChartCandidates } from '../src/lib/douban-chart-ui.ts'
 
 const source = readFileSync(new URL('../src/pages/automation/douban-chart-progress.tsx', import.meta.url), 'utf8')
 const output = ts.transpileModule(source, {
@@ -92,4 +93,14 @@ test('does not call a fresh explicit detail completion missing evidence', () => 
   assert.match(html, /详情已补充明确完结声明/)
   assert.match(html, /下轮执行会重新核验/)
   assert.doesNotMatch(html, /仍缺少豆瓣明确完结声明/)
+})
+
+test('paginates candidates in pages of 20 and sends candidate limits only for hot charts', () => {
+  const candidates = Array.from({ length: 41 }, (_, index) => index + 1)
+  const page = paginateDoubanChartCandidates(candidates, 2)
+  assert.deepEqual(page.items, candidates.slice(20, 40))
+  assert.equal(page.totalPages, 3)
+  assert.deepEqual(doubanChartOperationBody('movie_hot_gaia', 80), { candidateLimit: 80 })
+  assert.deepEqual(doubanChartOperationBody('tv_hot', 100), { candidateLimit: 100 })
+  assert.equal(doubanChartOperationBody('movie_top250', 100), undefined)
 })

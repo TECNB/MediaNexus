@@ -6,6 +6,7 @@ import { PageContainer } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
 import { getDoubanChart, getDoubanChartOperation, getDoubanCharts, getDoubanChartSeasons, listDoubanChartOperations, refreshDoubanChart, saveDoubanChartLimits, searchDoubanChartCatalog, setDoubanChartAutomation, setDoubanChartExclusion, stopDoubanChartOperation, submitDoubanChartOperation, updateDoubanChartIdentity } from '@/lib/api/douban-charts'
 import { getJavaErrorMessage, isJavaRequestCanceledError } from '@/lib/java-api'
+import { paginateDoubanChartCandidates } from '@/lib/douban-chart-ui'
 import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
 import type { BgmCatalogCandidate, BgmSeason } from '@/types/bgm-wishlist'
@@ -127,11 +128,13 @@ function ChartIdentityPicker({ candidate, saving, onSave, onClose }: { candidate
 function CandidateCard({ candidate, chartId, label, admin, working, onExclude, onCorrect }: { candidate: DoubanChartCandidate; chartId: DoubanChartId; label: string; admin: boolean; working: boolean; onExclude: () => void; onCorrect: (button: HTMLButtonElement) => void }) {
   const { subject, current, identity } = candidate
   const rank = current ? subject.rank : candidate.lastRank
-  const rankLabel = chartId === 'movie_hot_gaia' || chartId === 'tv_hot' ? '热门位置' : 'TOP'
+  const hot = chartId === 'movie_hot_gaia' || chartId === 'tv_hot'
+  const rankLabel = hot ? '接口位置' : 'TOP'
   return <article className="min-w-0 rounded-xl border border-slate-200 bg-white p-2.5">
     <div className="relative"><BgmPoster url={subject.coverUrl} title={subject.title} /><span className={cn('absolute left-2 top-2 rounded-lg px-2 py-1 text-xs font-semibold shadow-sm', current ? 'bg-slate-950/90 text-white' : 'bg-white/95 text-slate-700')} aria-label={`${label} · ${current ? '' : '末次'}${rankLabel} ${rank ?? '未知'}`}>{current ? '' : '末次 '}{rank === null ? '榜位未知' : `${rankLabel} ${rank}`}</span></div>
     <h3 className="mt-3 break-words text-sm font-semibold leading-5 text-slate-950">{subject.title}</h3>
     <p className="mt-1 text-xs text-slate-500">{subject.year ?? '年份未知'} · {subject.mediaType === 'MOVIE' ? '电影' : '电视剧'}</p>
+    {hot && rank !== null && rank > 20 && <p className="mt-2 text-xs font-medium text-slate-600">扩展发现{current ? '' : '（末次在榜）'}</p>}
     <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"><span className="inline-flex items-center gap-1 font-semibold text-amber-800"><Star aria-hidden="true" className="h-3.5 w-3.5" />{subject.score?.toFixed(1) ?? '评分未知'}</span><span className="text-slate-600">{subject.votes === null ? '评分人数未知' : `${subject.votes.toLocaleString('zh-CN')} 人评分`}</span></div>
     <DoubanChartProgress candidate={candidate} />
     {candidate.excluded && <p className="mt-2 text-xs font-semibold text-slate-700">已人工排除</p>}
@@ -157,6 +160,8 @@ function ChartBoardPanel({ initial, admin, focusedId, onFocus }: { initial: Doub
   const [boardReadError, setBoardReadError] = useState<string | null>(null)
   const [recordsError, setRecordsError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [candidatePages, setCandidatePages] = useState({ current: 1, historical: 1 })
+  const [candidateLimit, setCandidateLimit] = useState(20)
   const [match, setMatch] = useState<DoubanChartCandidate | null>(null)
   const recordsRef = useRef<HTMLElement>(null)
   const returnMatchFocus = useRef(false)
@@ -213,7 +218,7 @@ function ChartBoardPanel({ initial, admin, focusedId, onFocus }: { initial: Doub
   async function run() {
     recordsRef.current?.focus(); recordsRef.current?.scrollIntoView({ block: 'start', behavior: 'auto' })
     await perform('run', async (signal) => {
-      const operation = await submitDoubanChartOperation(board.id, signal)
+      const operation = await submitDoubanChartOperation(board.id, signal, candidateLimit)
       if (signal.aborted) return
       setHistory((current) => ({ items: [operation, ...(current?.items.filter((entry) => entry.id !== operation.id) ?? [])], total: Math.max(current?.total ?? 0, 1), page: 1, pageSize: 10 }))
       setRecordsFocusVersion((value) => value + 1)
@@ -223,13 +228,19 @@ function ChartBoardPanel({ initial, admin, focusedId, onFocus }: { initial: Doub
   const operations = history?.items ?? []
   const visible = board.candidates.filter((candidate) => candidate.subject.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
   const busy = operations.some((operation) => running.includes(operation.status))
+  const hot = board.id === 'movie_hot_gaia' || board.id === 'tv_hot'
   return <div className="space-y-5">
     <section className={panel} aria-label={`${board.label}配置`}>
-      <div className="flex flex-wrap items-start justify-between gap-4"><div className="min-w-0"><h2 className="text-lg font-semibold">{board.label}</h2><p className="mt-1 text-sm text-slate-600">{board.id === 'movie_hot_gaia' || board.id === 'tv_hot' ? '前 20' : '全量'} · 单榜一轮包含当前在榜及掉榜历史候选，不受页面搜索影响。</p></div><span className={cn('rounded-full px-3 py-1 text-xs font-medium', board.autoEnabled ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-600')}>自动入库{board.autoEnabled ? '已开启' : '已关闭'}</span></div>
+      <div className="flex flex-wrap items-start justify-between gap-4"><div className="min-w-0"><h2 className="text-lg font-semibold">{board.label}</h2><p className="mt-1 text-sm text-slate-600">{hot ? '接口前100条 · 接口顺序不代表逐项官方排名；从第21条起扩展发现范围，实际不足100条时保留实际数量。100条候选不代表全部下载。' : '全量 · 单榜一轮包含当前在榜及掉榜历史候选，不受页面搜索或翻页影响。'}</p></div><span className={cn('rounded-full px-3 py-1 text-xs font-medium', board.autoEnabled ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-600')}>自动入库{board.autoEnabled ? '已开启' : '已关闭'}</span></div>
       <div className="mt-3 space-y-1 text-xs text-slate-600"><p>最近成功 {dateTime(board.lastSuccessAt)} · 最近尝试 {dateTime(board.lastAttemptAt)}（北京时间）</p><p>本榜下次调度 {dateTime(board.nextRunAt)}（北京时间）</p>{board.autoEnabled && <p>定时执行管理员 ID：{board.ownerUserId ?? '未绑定，等待管理员处理'}</p>}</div>
       {board.refreshStatus === 'NEVER' && <p role="status" className="mt-3 text-sm text-slate-600">尚未成功抓取榜单。</p>}
       {board.refreshStatus === 'REFRESHING' && <p role="status" className="mt-3 text-sm text-slate-600">榜单与历史进度正在后台更新，保留上次成功清单；结果会自动刷新。</p>}
       {(board.refreshStatus === 'FAILED' || board.refreshError) && <p role="alert" className="mt-3 break-words rounded-lg bg-amber-50 p-3 text-sm text-amber-900">榜单抓取失败：{board.refreshError || '来源暂不可用'}。保留最后成功清单；旧在榜仅供展示，不据此新增受理。历史候选须单独重新核验。</p>}
+      {hot && <div className="mt-4 space-y-2">
+        {admin && <label className="grid max-w-xs gap-1 text-sm font-medium">本轮检查范围<select className={control} value={candidateLimit} disabled={!!working || busy || loading || !!recordsError || board.refreshStatus === 'REFRESHING'} onChange={(event) => setCandidateLimit(Number(event.target.value))}>{[20, 40, 60, 80, 100].map((limit) => <option key={limit} value={limit}>接口前 {limit} 个位置</option>)}</select></label>}
+        <p className="text-xs leading-5 text-slate-600">手动范围仅包含本轮刷新后的接口前 N 个位置，不含掉榜历史，不受搜索或翻页影响；不足 N 条按实际数量检查。重复执行或选择较大范围仍复用已入库跳过、在途去重、预算及其他安全条件，不保证全部下载，也不会自动开启自动任务。</p>
+        {busy && <p role="status" className="text-xs leading-5 text-amber-800">已有本榜一轮进行中，执行按钮仅定位原操作；实际范围以操作记录的已保存范围为准，不采用当前选择。</p>}
+      </div>}
       {admin ? <div className="mt-4 flex flex-wrap gap-2"><Button className="min-h-11" disabled={!!working} onClick={() => void run()}><Play aria-hidden="true" className="mr-2 h-4 w-4" />{working === 'run' ? '正在定位操作…' : busy ? '查看进行中本榜一轮' : '执行本榜一轮'}</Button><Button className="min-h-11" variant="outline" disabled={!!working} onClick={() => void perform('refresh', async (signal) => { const result = await refreshDoubanChart(board.id, signal); if (!signal.aborted) setBoard(result) })}><RefreshCw aria-hidden="true" className="mr-2 h-4 w-4" />{working === 'refresh' ? '更新中…' : '刷新榜单'}</Button><Button className="min-h-11" variant="outline" aria-pressed={board.autoEnabled} disabled={!!working} onClick={() => void perform('automation', async (signal) => { const result = await setDoubanChartAutomation(board.id, !board.autoEnabled, signal); if (!signal.aborted) setBoard(result) })}>{board.autoEnabled ? '关闭本榜自动入库' : '开启本榜自动入库'}</Button></div> : <p className="mt-4 text-sm text-slate-600">只读模式：仅管理员可以配置、刷新、纠正、排除或执行。</p>}
       {working && <p role="status" className="mt-3 flex items-center gap-2 text-sm text-slate-600"><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" />正在处理，请稍候…</p>}
       {boardReadError && <p role="alert" className="mt-3 break-words text-sm text-rose-700">{boardReadError}</p>}
@@ -246,11 +257,19 @@ function ChartBoardPanel({ initial, admin, focusedId, onFocus }: { initial: Doub
     {admin && match && <ChartIdentityPicker key={match.subject.id} candidate={match} saving={working === 'identity'} onClose={closeMatch} onSave={(input) => void perform('identity', async (signal) => { const result = await updateDoubanChartIdentity(board.id, match.subject.id, input, signal); if (!signal.aborted) { setBoard(result); closeMatch() } })} />}
     {match && error && <p role="alert" className="break-words text-sm text-rose-700">{error}</p>}
     <section className={panel} aria-label="榜单候选">
-      <label className="mb-5 grid gap-2 text-sm font-medium">搜索本榜候选<input className={cn(control, 'w-full sm:max-w-sm')} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="按作品名称筛选（不影响执行范围）" /></label>
+      <label className="mb-5 grid gap-2 text-sm font-medium">搜索本榜候选<input className={cn(control, 'w-full sm:max-w-sm')} type="search" value={query} onChange={(event) => { setQuery(event.target.value); setCandidatePages({ current: 1, historical: 1 }) }} placeholder="按作品名称筛选（不影响执行范围）" /></label>
       <div className="space-y-6">{[true, false].map((current) => {
         const candidates = visible.filter((candidate) => candidate.current === current).sort((a, b) => (current ? (a.subject.rank ?? Infinity) - (b.subject.rank ?? Infinity) : (a.lastRank ?? Infinity) - (b.lastRank ?? Infinity)) || b.lastSeenAt.localeCompare(a.lastSeenAt))
-        return <section key={String(current)}><h2 className="mb-3 flex items-center gap-2 font-semibold">{current ? <Film aria-hidden="true" className="h-4 w-4 text-slate-500" /> : <History aria-hidden="true" className="h-4 w-4 text-slate-500" />}{current ? '当前在榜' : '掉榜历史候选'}<span className="text-xs font-normal text-slate-500">{candidates.length} 部</span></h2>
-          {candidates.length ? <div className="grid grid-cols-1 gap-3 min-[375px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">{candidates.map((candidate) => <CandidateCard key={candidate.subject.id} candidate={candidate} chartId={board.id} label={board.label} admin={admin} working={!!working} onCorrect={(button) => { matchButtonRef.current = button; setMatch(candidate) }} onExclude={() => void perform('exclusion', async (signal) => { const result = await setDoubanChartExclusion(board.id, candidate.subject.id, !candidate.excluded, signal); if (!signal.aborted) setBoard(result) })} />)}</div> : <p className="text-sm text-slate-500">{query ? '没有符合搜索条件的候选。' : current ? '暂无当前在榜候选。' : '暂无掉榜历史候选；后续成功刷新后会保留曾属本榜的作品。'}</p>}
+        const title = current ? '当前在榜' : '掉榜历史候选'
+        const pageKey = current ? 'current' : 'historical'
+        const { page: candidatePage, totalPages: pageCount, start } = paginateDoubanChartCandidates(candidates, candidatePages[pageKey])
+        return <section key={String(current)} aria-label={title}><h2 className="mb-3 flex items-center gap-2 font-semibold">{current ? <Film aria-hidden="true" className="h-4 w-4 text-slate-500" /> : <History aria-hidden="true" className="h-4 w-4 text-slate-500" />}{title}<span className="text-xs font-normal text-slate-500">{candidates.length} 部</span></h2>
+          {candidates.length ? <div className="grid grid-cols-1 gap-3 min-[375px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">{candidates.slice(start, start + 20).map((candidate) => <CandidateCard key={candidate.subject.id} candidate={candidate} chartId={board.id} label={board.label} admin={admin} working={!!working} onCorrect={(button) => { matchButtonRef.current = button; setMatch(candidate) }} onExclude={() => void perform('exclusion', async (signal) => { const result = await setDoubanChartExclusion(board.id, candidate.subject.id, !candidate.excluded, signal); if (!signal.aborted) setBoard(result) })} />)}</div> : <p className="text-sm text-slate-500">{query ? '没有符合搜索条件的候选。' : current ? '暂无当前在榜候选。' : '暂无掉榜历史候选；后续成功刷新后会保留曾属本榜的作品。'}</p>}
+          <nav className="mt-4 flex flex-wrap items-center gap-3" aria-label={`${title}分页`}>
+            <Button className="min-h-11" size="sm" variant="outline" aria-label={`${title}上一页`} disabled={candidatePage <= 1} onClick={() => setCandidatePages((value) => ({ ...value, [pageKey]: candidatePage - 1 }))}>上一页</Button>
+            <span role="status" className="text-sm text-slate-600">第 {candidatePage} / {pageCount} 页 · 显示 {candidates.length ? start + 1 : 0}–{Math.min(start + 20, candidates.length)} / 共 {candidates.length} 部 · 每页20条{query.trim() ? '（搜索结果）' : ''}</span>
+            <Button className="min-h-11" size="sm" variant="outline" aria-label={`${title}下一页`} disabled={candidatePage >= pageCount} onClick={() => setCandidatePages((value) => ({ ...value, [pageKey]: candidatePage + 1 }))}>下一页</Button>
+          </nav>
         </section>
       })}</div>
     </section>
