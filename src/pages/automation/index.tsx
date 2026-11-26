@@ -261,6 +261,8 @@ function RunItemCard({ item }: { item: JavdbAutomationRunItem }) {
               {item.code}
             </span>
             <ItemStatus item={item} />
+            {selected?.labels.includes('LTX') ? <span className="whitespace-nowrap rounded-md bg-violet-50 px-2 py-1 text-xs font-semibold text-violet-700 ring-1 ring-violet-200">LTX</span> : null}
+            {selected?.magnet.toLowerCase().startsWith('ed2k://') ? <span className="whitespace-nowrap rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">ED2K</span> : null}
             {selected?.is_cracked ? <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">破解</span> : null}
             {selected?.has_subtitle ? <span className="rounded-md bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-200">中文字幕</span> : null}
             {scoredAppearance?.rating !== null && scoredAppearance?.rating !== undefined ? (
@@ -310,13 +312,15 @@ function RunItemCard({ item }: { item: JavdbAutomationRunItem }) {
       {item.candidates.length > 0 ? (
         <details className="mt-3 rounded-lg bg-slate-50 px-3 py-2">
           <summary className="cursor-pointer text-xs font-semibold text-slate-700">
-            查看磁力候选（{item.candidates.length}）
+            查看资源候选（{item.candidates.length}）
           </summary>
           <div className="mt-3 space-y-2">
             {item.candidates.map((candidate, index) => (
               <div key={`${candidate.infohash ?? candidate.magnet}-${index}`} className="rounded-lg bg-white p-3 text-xs ring-1 ring-slate-200">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold text-slate-700">候选 {index + 1}</span>
+                  {candidate.labels.includes('LTX') ? <span className="whitespace-nowrap rounded bg-violet-50 px-1.5 py-0.5 text-violet-700">LTX</span> : null}
+                  {candidate.magnet.toLowerCase().startsWith('ed2k://') ? <span className="whitespace-nowrap rounded bg-slate-100 px-1.5 py-0.5 text-slate-700">ED2K</span> : null}
                   {candidate.is_cracked ? <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">破解</span> : null}
                   {candidate.has_subtitle ? <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700">中文字幕</span> : null}
                   {item.selected_infohash === candidate.infohash ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700">已选择</span> : null}
